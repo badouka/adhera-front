@@ -1,0 +1,40 @@
+/* Adhera — generated from tokens.json */
+:root, [data-theme="light"] {
+  --surface: #faf8f4;
+  --surface-raised: #ffffff;
+  --line: #d9d3c7;
+  --line-strong: #8c8577;
+  --ink: #16213a;
+  --ink-muted: #5b6275;
+  --sidebar-text: #b9c2d8;
+  --indigo: #233d91;
+  --indigo-soft: #e9edf8;
+  --on-indigo: #ffffff;
+  --ocre: #c27a1e;
+  --paid: #1e6b45;
+  --paid-soft: #e8f4ec;
+  --due: #8a4b00;
+  --due-soft: #fdf1dc;
+  --late: #a8261b;
+  --late-soft: #fcebe9;
+  --link: var(--indigo);
+  --focus: var(--indigo);
+}
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-pill: 999px;
+  --font-sans: "Public Sans", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+}
+.display { font-family: var(--font-sans); font-size: 32px; line-height: 38px; font-weight: 700; letter-spacing: -0.01em; }
+.title { font-family: var(--font-sans); font-size: 22px; line-height: 28px; font-weight: 700; }
+.heading { font-family: var(--font-sans); font-size: 17px; line-height: 24px; font-weight: 600; }
+.body { font-family: var(--font-sans); font-size: 16px; line-height: 24px; font-weight: 400; }
+.small { font-family: var(--font-sans); font-size: 14px; line-height: 20px; font-weight: 400; }
+.label { font-family: var(--font-sans); font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.06em; }
+.amount { font-family: var(--font-sans); font-size: 30px; line-height: 34px; font-weight: 700; letter-spacing: -0.01em; }

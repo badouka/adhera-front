@@ -1,0 +1,84 @@
+@import 'tailwindcss';
+@import '../styles/tokens.css';
+
+@source '../';
+
+/*
+  Les jetons de tokens.css deviennent le thème couleur de Tailwind.
+  `@theme inline` fait émettre `var(--surface)` et non une copie de la valeur :
+  tokens.css reste l'unique source, et aucun composant n'écrit d'hexadécimal.
+
+  On ne déclare ici QUE des couleurs. Les rayons (--radius-*), les espacements
+  (--space-*) et --font-sans sont déjà définis par tokens.css sur :root ; les
+  redéclarer dans @theme créerait une auto-référence. Les rayons s'utilisent
+  donc en `rounded-[var(--radius-md)]`, et l'échelle d'espacement par défaut de
+  Tailwind coïncide déjà avec --space-1/2/4/6/8 (4/8/16/24/32 px).
+*/
+@theme inline {
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-indigo: var(--indigo);
+  --color-indigo-soft: var(--indigo-soft);
+  --color-on-indigo: var(--on-indigo);
+  --color-ocre: var(--ocre);
+  --color-paid: var(--paid);
+  --color-paid-soft: var(--paid-soft);
+  --color-due: var(--due);
+  --color-due-soft: var(--due-soft);
+  --color-late: var(--late);
+  --color-late-soft: var(--late-soft);
+  --color-link: var(--link);
+  --color-focus: var(--focus);
+}
+
+/*
+  La police est téléchargée au build par next/font puis servie par l'app (R3 :
+  aucun appel à Google au runtime). On réécrit --font-sans pour pointer sur la
+  famille générée, sans toucher tokens.css qui est copié tel quel.
+*/
+:root {
+  --font-sans: var(--font-public-sans), system-ui, -apple-system, 'Segoe UI',
+    Arial, sans-serif;
+}
+
+html {
+  background: var(--surface);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 24px;
+  /* Rien ne doit déborder horizontalement à 360 px. */
+  overflow-x: hidden;
+}
+
+/* Les montants servis par l'API s'alignent en chiffres tabulaires. */
+.amount,
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+a {
+  color: var(--link);
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
+}

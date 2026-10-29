@@ -1,0 +1,17 @@
+node_modules/
+.next/
+out/
+build/
+.env*
+!.env.example
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+npm-debug.log*
+coverage/
+
+# Pièces jointes du brief : hors dépôt
+_handoff/
+
+# Réglages locaux de l'outillage
+.claude/
