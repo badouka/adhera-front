@@ -84,6 +84,12 @@ export function DeclarationForm({
     headingRef.current?.focus();
   }, []);
 
+  // Le message n'existe dans le DOM qu'une fois rendu : le focus le suit après
+  // coup, pas dans le gestionnaire qui l'a posé.
+  useEffect(() => {
+    if (formError) formErrorRef.current?.focus();
+  }, [formError]);
+
   const referenceRequired = METHODS_REQUIRING_REFERENCE.has(method);
 
   function focusFirstError(next: DeclarationErrors) {
@@ -102,7 +108,6 @@ export function DeclarationForm({
   function handleServerError(error: unknown) {
     if (!(error instanceof ApiError)) {
       setFormError(GENERIC);
-      formErrorRef.current?.focus();
       return;
     }
 
@@ -136,18 +141,15 @@ export function DeclarationForm({
       }
 
       setFormError(error.message || GENERIC);
-      formErrorRef.current?.focus();
       return;
     }
 
     if (error.status === 429) {
       setFormError('Trop de tentatives, réessayez dans une minute.');
-      formErrorRef.current?.focus();
       return;
     }
 
     setFormError(GENERIC);
-    formErrorRef.current?.focus();
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {

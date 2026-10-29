@@ -470,6 +470,19 @@ describe('accessibilité du formulaire', () => {
     await waitFor(() => expect(document.activeElement).toBe(success));
   });
 
+  it('déplace le focus sur le message d’erreur du serveur', async () => {
+    const user = await openForm();
+    fetchMock.mockResolvedValueOnce(fakeResponse(500, {}));
+
+    await user.type(screen.getByLabelText(/Référence/), 'TEST-F1');
+    await user.click(screen.getByRole('button', { name: 'Envoyer ma confirmation' }));
+
+    const error = await screen.findByText(
+      /Votre confirmation n’a pas pu être envoyée\./,
+    );
+    await waitFor(() => expect(document.activeElement).toBe(error));
+  });
+
   it('le formulaire prend le focus à l’ouverture, sans ouvrir le clavier', async () => {
     await openForm();
 
