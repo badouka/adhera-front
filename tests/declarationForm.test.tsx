@@ -317,20 +317,40 @@ describe('les réponses du serveur', () => {
     await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(3));
   });
 
-  it('422 avec errors.{champ} : l’erreur se range sous le champ', async () => {
+  it('422 avec errors.{champ} : l’erreur se range sous le champ, en français', async () => {
+    // Les messages de validation de Laravel sont en ANGLAIS (contrat §1) :
+    // `errors` désigne le champ, le libellé est le nôtre.
     await submitWith(
       fakeResponse(422, {
-        errors: { reference: ['Cette référence est déjà utilisée.'] },
+        message: 'The reference field must not be greater than 255 characters.',
+        errors: {
+          reference: ['The reference field must not be greater than 255 characters.'],
+        },
       }),
     );
 
-    expect(
-      await screen.findByText('Cette référence est déjà utilisée.'),
-    ).toBeInTheDocument();
+    const message = await screen.findByText(
+      'Vérifiez la référence de la transaction (255 caractères au plus).',
+    );
+    const input = screen.getByLabelText(/Référence de la transaction/);
+    expect(input.getAttribute('aria-describedby')).toContain(message.id);
+    expect(screen.queryByText(/The reference field/)).not.toBeInTheDocument();
     // Le formulaire reste ouvert : le membre corrige.
     expect(
       screen.getByRole('button', { name: 'Envoyer ma confirmation' }),
     ).toBeInTheDocument();
+  });
+
+  it('422 sans code ni champ connu : message générique, jamais le texte brut', async () => {
+    await submitWith(
+      fakeResponse(422, {
+        message: 'The given data was invalid.',
+        errors: { foo: ['The foo field is required.'] },
+      }),
+    );
+
+    await screen.findByText(/Votre confirmation n’a pas pu être envoyée\./);
+    expect(screen.queryByText(/given data|foo field/)).not.toBeInTheDocument();
   });
 
   it('422 amount_exceeds_balance : message sous le formulaire, puis rechargement', async () => {

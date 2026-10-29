@@ -28,6 +28,19 @@ const PROOF_CODES: Record<string, string> = {
     'Le justificatif n’a pas pu être lu. Réessayez avec une autre image.',
 };
 
+/**
+ * Les messages de validation de Laravel sont en ANGLAIS : `errors` ne sert qu'à
+ * désigner le champ fautif, le libellé affiché est le nôtre.
+ */
+const FIELD_MESSAGES: Record<keyof DeclarationErrors, string> = {
+  amount:
+    'Vérifiez le montant : un nombre entier, sans dépasser ce qui reste à payer.',
+  method: 'Choisissez le moyen de paiement utilisé.',
+  reference: 'Vérifiez la référence de la transaction (255 caractères au plus).',
+  proof:
+    'Le justificatif n’a pas été accepté : envoyez un JPG, un PNG, un WebP ou un PDF de 10 Mo au plus.',
+};
+
 const RELOAD_CODES: Record<string, string> = {
   amount_exceeds_balance:
     'Le montant dépasse ce qui reste à payer. Votre page vient d’être actualisée.',
@@ -131,8 +144,7 @@ export function DeclarationForm({
 
       const fields: DeclarationErrors = {};
       for (const key of ['amount', 'method', 'reference', 'proof'] as const) {
-        const message = error.errors[key]?.[0];
-        if (message) fields[key] = message;
+        if (error.errors[key]?.length) fields[key] = FIELD_MESSAGES[key];
       }
       if (hasErrors(fields)) {
         setErrors(fields);
@@ -140,7 +152,8 @@ export function DeclarationForm({
         return;
       }
 
-      setFormError(error.message || GENERIC);
+      // R4 : un refus que cet écran ne sait pas lire ne se recopie pas.
+      setFormError(GENERIC);
       return;
     }
 
