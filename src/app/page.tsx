@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { Shell } from '@/components/Shell';
 
 /**
@@ -12,6 +13,10 @@ export default function Home() {
         <p className="m-0 max-w-[320px]">
           Utilisez le lien reçu de votre association.
         </p>
+        <div className="grow" />
+        <Link href="/bureau" className="small text-ink-muted">
+          Espace du bureau
+        </Link>
       </div>
     </Shell>
   );

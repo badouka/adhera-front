@@ -180,3 +180,135 @@ describe('design — aucune couleur en hexadécimal dans les composants', () => 
     expect(offenders).toEqual([]);
   });
 });
+
+/**
+ * Le scan commun des garde-fous de F2 : chaque fichier de `dirs`, commentaires
+ * retirés, contre chaque motif interdit.
+ */
+function scan(dirs: string[], forbidden: ReadonlyArray<{ label: string; pattern: RegExp }>) {
+  const offenders: string[] = [];
+  let scanned = 0;
+  for (const dir of dirs) {
+    for (const file of walk(dir, ['.ts', '.tsx'])) {
+      scanned += 1;
+      const code = stripComments(readFileSync(file, 'utf8'));
+      for (const { label, pattern } of forbidden) {
+        if (pattern.test(code)) offenders.push(`${relative(process.cwd(), file)} → ${label}`);
+      }
+    }
+  }
+  return { offenders, scanned };
+}
+
+const BUREAU_DIRS = [
+  join(SRC, 'lib', 'bureau'),
+  join(SRC, 'app', 'bureau'),
+  join(SRC, 'components', 'bureau'),
+];
+
+/**
+ * R8 — aucune injection de HTML ni de code.
+ *
+ * Une injection de script volerait le jeton du bureau, qui valide des
+ * paiements. React échappe tout par défaut : il suffit de ne jamais le
+ * contourner.
+ */
+describe('R8 — ni HTML brut, ni eval, dans tout src/', () => {
+  const FORBIDDEN = [
+    { label: 'dangerouslySetInnerHTML', pattern: /dangerouslySetInnerHTML/ },
+    { label: 'innerHTML', pattern: /\binnerHTML\b/ },
+    { label: 'outerHTML', pattern: /\bouterHTML\b/ },
+    { label: 'insertAdjacentHTML', pattern: /\binsertAdjacentHTML\b/ },
+    { label: 'eval(', pattern: /(^|[^\w.$])eval\s*\(/m },
+    { label: 'new Function(', pattern: /\bnew\s+Function\s*\(/ },
+  ];
+
+  it('ne trouve aucun contournement de l’échappement de React', () => {
+    const { offenders, scanned } = scan([SRC], FORBIDDEN);
+    expect(scanned).toBeGreaterThan(30);
+    expect(offenders).toEqual([]);
+  });
+
+  it('le scan voit les violations en code, pas en commentaire', () => {
+    const hit = (code: string) => FORBIDDEN.some(({ pattern }) => pattern.test(stripComments(code)));
+    expect(hit('<div dangerouslySetInnerHTML={{ __html: x }} />')).toBe(true);
+    expect(hit('node.innerHTML = x;')).toBe(true);
+    expect(hit('const y = eval(x);')).toBe(true);
+    expect(hit('const f = new Function("return 1");')).toBe(true);
+    expect(hit('// node.innerHTML = x;')).toBe(false);
+    expect(hit('/* eval(x) */')).toBe(false);
+    // Un mot qui finit par « eval » n'est pas eval.
+    expect(hit('retrieval(x); obj.eval(x);')).toBe(false);
+  });
+});
+
+/**
+ * R7 — le jeton du bureau vit en mémoire + sessionStorage, jamais dans un
+ * stockage persistant ni dans un cookie lisible.
+ */
+describe('R7 — aucun stockage persistant du jeton dans l’espace bureau', () => {
+  const FORBIDDEN = [
+    { label: 'localStorage', pattern: /localStorage/ },
+    { label: 'document.cookie', pattern: /document\.cookie/ },
+    { label: 'indexedDB', pattern: /indexedDB/ },
+  ];
+
+  it('ni localStorage, ni cookie, ni IndexedDB sous src/lib|app|components/bureau', () => {
+    const { offenders, scanned } = scan(BUREAU_DIRS, FORBIDDEN);
+    expect(scanned).toBeGreaterThan(10);
+    expect(offenders).toEqual([]);
+  });
+
+  it('la session passe bien par sessionStorage', () => {
+    const session = stripComments(readFileSync(join(SRC, 'lib', 'bureau', 'session.ts'), 'utf8'));
+    expect(session).toContain('sessionStorage');
+  });
+
+  it('le scan voit localStorage en code, pas en commentaire', () => {
+    const hit = (code: string) => FORBIDDEN.some(({ pattern }) => pattern.test(stripComments(code)));
+    expect(hit("window.localStorage.setItem('t', token);")).toBe(true);
+    expect(hit('document.cookie = "t=" + token;')).toBe(true);
+    expect(hit('// jamais localStorage')).toBe(false);
+  });
+});
+
+/** R1 de F1, étendu à l'espace bureau : il est bien dans le périmètre du scan. */
+describe('R1 — l’espace bureau ne formate aucun montant', () => {
+  it('les fichiers de /bureau sont scannés, et aucun ne formate', () => {
+    const { offenders, scanned } = scan(BUREAU_DIRS, [
+      { label: 'toLocaleString(', pattern: /toLocaleString\(/ },
+      { label: 'Intl.NumberFormat', pattern: /Intl\.NumberFormat/ },
+      { label: 'toFixed(', pattern: /toFixed\(/ },
+    ]);
+    expect(scanned).toBeGreaterThan(10);
+    expect(offenders).toEqual([]);
+  });
+
+  it('les composants serveur de /bureau n’appellent pas l’API (R2)', () => {
+    const layout = stripComments(readFileSync(join(SRC, 'app', 'bureau', 'layout.tsx'), 'utf8'));
+    expect(layout).not.toContain('fetch(');
+    expect(layout).not.toMatch(/from\s+['"]@?[./\w-]*lib\/bureau\/api['"]/);
+    // Toutes les pages de /bureau sont des composants client.
+    for (const file of walk(join(SRC, 'app', 'bureau'), ['page.tsx'])) {
+      expect(readFileSync(file, 'utf8').trimStart().startsWith("'use client'")).toBe(true);
+    }
+  });
+});
+
+/** Tout lien sortant de l'espace bureau ouvre un onglet SANS opener ni Referer. */
+describe('R3 — liens sortants du bureau', () => {
+  it('chaque target="_blank" porte rel="noopener noreferrer"', () => {
+    const offenders: string[] = [];
+    for (const dir of BUREAU_DIRS) {
+      for (const file of walk(dir, ['.tsx'])) {
+        const code = stripComments(readFileSync(file, 'utf8'));
+        for (const match of code.matchAll(/target="_blank"[^>]*/g)) {
+          if (!match[0].includes('rel="noopener noreferrer"')) {
+            offenders.push(relative(process.cwd(), file));
+          }
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});

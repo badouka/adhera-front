@@ -1,4 +1,4 @@
-# Adhera — la page du membre
+# Adhera — la page du membre et l'espace du bureau
 
 L'écran que voit un membre quand il ouvre le lien reçu par WhatsApp :
 ce qu'il doit, comment payer, la déclaration de son paiement, ses reçus.
@@ -72,3 +72,33 @@ membre de la minute recevrait un 429 — pendant une campagne, c'est la panne.
 - **R6** — le bouton principal dit ce qu'il fait : « J'ai payé, je confirme »,
   puis « Envoyer ma confirmation ». Déclarer n'est pas payer ; seul le bureau
   valide.
+
+## L'espace du bureau (`/bureau`, F2)
+
+Le président, le trésorier, le secrétaire s'y connectent par e-mail et mot de
+passe (`POST /admin/login`). L'écran d'accueil est **« À valider »** : les
+versements déclarés par les membres, que le bureau vérifie puis valide (ce qui
+émet le reçu) ou rejette avec un motif. Autour : le registre, la fiche membre
+(lien WhatsApp, saisie directe, sortie) et les réglages.
+
+Le contrat est `_handoff/adhera-api-bureau.md` (v3.5.6), hors dépôt.
+
+- **Un seul client HTTP** : `src/lib/bureau/api.ts`. Il lit les DEUX
+  enveloppes (`{success, message, data}` pour `login`, réponse nue pour
+  `admin/membership/*`).
+- **R7** — le jeton vit en mémoire + `sessionStorage`
+  (`src/lib/bureau/session.ts`), jamais ailleurs. Un `401` sur n'importe quelle
+  route le purge et renvoie à `/bureau/connexion?session=expiree`.
+- **R8** — ni `dangerouslySetInnerHTML`, ni `innerHTML`, ni `eval` dans `src/`.
+- **R9** — valider, rejeter, saisir un versement, régénérer un lien, déclarer
+  une sortie : chaque geste passe par une confirmation qui récapitule
+  (`ConfirmDialog`).
+- Le reçu PDF exige le Bearer : il est tiré en blob, jamais par un lien nu.
+- Le justificatif : lien signé de 60 min, demandé au clic, ouvert tel quel.
+- Les rôles ne cachent rien : le serveur ne les lit pas (contrat §2).
+
+En local, le tenant passe en query sur la page de connexion
+(`/bureau/connexion?tenant=demo-asso`), puis voyage avec la session.
+
+`tests/guards.test.ts` tient aussi R7, R8 et R1 étendu à `/bureau`, chacun
+vérifié par contre-épreuve.

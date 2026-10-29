@@ -15,7 +15,8 @@ const csp = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isProd ? '' : " 'unsafe-eval'"}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data:",
+  // Le logo de l'association est servi par l'API (`logo_url`).
+  "img-src 'self' data: https://api.eventflow.africa",
   "font-src 'self'",
   "connect-src 'self' https://api.eventflow.africa",
   "frame-ancestors 'none'",
