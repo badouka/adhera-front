@@ -195,7 +195,12 @@ export type MemberLink = {
 export type WhatsappMessage = {
   /** Porte des U+00A0 voulus : ne JAMAIS normaliser (§5). */
   message: string;
-  wa_url: string;
+  /**
+   * `null` quand le membre n'a pas de numéro mobile utilisable (pas de
+   * téléphone, ou un fixe). Absent du contrat v3.5.6, constaté sur demo-asso.
+   */
+  wa_url: string | null;
+  phone_is_usable?: boolean;
 };
 
 /* ───────────────────────────── Versements ─────────────────────────── */

@@ -156,6 +156,24 @@ describe('B8 — le lien du membre', () => {
     expect(writeText).toHaveBeenLastCalledWith('https://demo-asso.adhera.africa/m/6yuExNKOD1Pj');
   });
 
+  it('sans numéro WhatsApp utilisable (wa_url null) : pas de bouton mort, et ça se dit', async () => {
+    // Réponse réelle de demo-asso pour un membre sans téléphone mobile.
+    server(MOUSSA, [
+      {
+        match: /\/whatsapp$/,
+        body: { message: NBSP_MESSAGE, wa_url: null, phone_is_usable: false, url: 'https://demo-asso.adhera.africa/m/6yuExNKOD1Pj' },
+      },
+    ]);
+    const user = userEvent.setup();
+    renderInBureau(<FicheMembrePage />);
+    await user.click(await screen.findByRole('button', { name: 'Envoyer le lien' }));
+
+    await screen.findByText(/Aucun numéro WhatsApp utilisable/);
+    expect(screen.queryByText('Ouvrir WhatsApp')).not.toBeInTheDocument();
+    // Le message reste copiable, pour l'envoyer par un autre moyen.
+    expect(screen.getByRole('button', { name: 'Copier le message' })).toBeInTheDocument();
+  });
+
   it('régénérer passe par une confirmation qui dit ce qu’elle casse (R9)', async () => {
     const fetchMock = server(MOUSSA, [
       { method: 'POST', match: /link\/rotate$/, body: { url: 'https://demo-asso.adhera.africa/m/NOUVEAU', rotated_at: '2026-10-29T21:00:00+00:00' } },

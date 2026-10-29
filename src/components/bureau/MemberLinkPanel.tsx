@@ -126,16 +126,27 @@ export function MemberLinkPanel({
             <p className="m-0 rounded-[var(--radius-sm)] border border-line bg-surface p-3 whitespace-pre-line break-words">
               {whatsapp.value.message}
             </p>
+            {/* Sans numéro mobile utilisable, l'API ne sert pas de `wa_url` :
+                un bouton sans lien ne ferait rien au toucher. */}
+            {whatsapp.value.wa_url ? null : (
+              <p className="small m-0 font-semibold text-due">
+                Aucun numéro WhatsApp utilisable sur la fiche de ce membre.
+                Copiez le message pour l’envoyer autrement, ou ajoutez un numéro
+                mobile dans son identité.
+              </p>
+            )}
             <div className="flex flex-wrap gap-2">
-              <a
-                href={whatsapp.value.wa_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={buttonClass('primary', 'no-underline')}
-              >
-                <ChatIcon />
-                Ouvrir WhatsApp
-              </a>
+              {whatsapp.value.wa_url ? (
+                <a
+                  href={whatsapp.value.wa_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={buttonClass('primary', 'no-underline')}
+                >
+                  <ChatIcon />
+                  Ouvrir WhatsApp
+                </a>
+              ) : null}
               <CopyAction value={whatsapp.value.message} label="Copier le message" />
             </div>
           </>
