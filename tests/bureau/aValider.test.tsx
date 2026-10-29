@@ -239,6 +239,28 @@ describe('B4 — rejeter (R9)', () => {
     expect(calls(server, 'POST')).toHaveLength(0);
   });
 
+  it('ne promet pas au bureau que le membre lira le motif : sa page ne le sert pas', async () => {
+    // Contrat §8 : la charge publique du membre ne porte aucun rejet ni motif.
+    fakeServer([
+      { method: 'POST', match: /reject$/, body: payment({ status: 'rejected', rejection_reason: 'Référence introuvable.' }) },
+      { match: 'membership/payments', body: [payment()] },
+    ]);
+    const user = userEvent.setup();
+    renderInBureau(<AValiderPage />);
+    await user.click(await screen.findByRole('button', { name: 'Rejeter' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Rejeter cette déclaration ?' });
+    expect(within(dialog).queryByText(/membre verra/)).not.toBeInTheDocument();
+    expect(within(dialog).getByText(/ne s’affiche pas sur la page du membre/)).toBeInTheDocument();
+
+    await user.type(within(dialog).getByLabelText(/Motif du rejet/), 'Référence introuvable.');
+    await user.click(within(dialog).getByRole('button', { name: 'Rejeter la déclaration' }));
+
+    const notice = await screen.findByText(/rejetée\./);
+    expect(notice.textContent).not.toMatch(/verra le motif/);
+    expect(notice.textContent).toMatch(/prévenez-le/);
+  });
+
   it('envoie le motif, puis retire la ligne de la file', async () => {
     const reason = 'Référence introuvable chez Orange Money.';
     const server = fakeServer([
@@ -251,7 +273,7 @@ describe('B4 — rejeter (R9)', () => {
     await user.type(screen.getByLabelText(/Motif du rejet/), reason);
     await user.click(screen.getByRole('button', { name: 'Rejeter la déclaration' }));
 
-    await screen.findByText(/rejetée\. Le membre verra le motif/);
+    await screen.findByText(/rejetée\. Le membre peut en déclarer une nouvelle/);
     const posts = calls(server, 'POST');
     expect(posts).toHaveLength(1);
     expect(posts[0]?.url).toMatch(/\/reject$/);

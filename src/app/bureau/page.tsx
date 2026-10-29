@@ -175,7 +175,8 @@ function OutcomeNotice({
       <Notice tone="info">
         <span>
           Déclaration de {payment.member_name} ({payment.amount_formatted}) rejetée.
-          Le membre verra le motif sur sa page.
+          Le membre peut en déclarer une nouvelle depuis son lien. Sa page
+          n’affiche pas le motif : prévenez-le si besoin.
         </span>
         <span>
           <Button tone="ghost" className="px-0" onClick={onClose}>

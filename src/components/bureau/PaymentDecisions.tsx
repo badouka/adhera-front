@@ -100,8 +100,11 @@ export function ValidateDialog({
 }
 
 /**
- * B4 — Rejeter. Le motif est obligatoire : le membre verra que sa
- * déclaration a été refusée, et pourquoi, puis pourra en refaire une.
+ * B4 — Rejeter. Le motif est obligatoire et reste dans `rejection_reason`.
+ *
+ * ⚠️ La page du membre ne le montre pas : sa charge publique ne porte ni rejet
+ * ni motif (contrat §8). Le membre voit seulement sa déclaration disparaître et
+ * peut en refaire une ; l'écran ne promet donc rien de plus au bureau.
  */
 export function RejectDialog({
   payment,
@@ -153,7 +156,7 @@ export function RejectDialog({
         label="Motif du rejet"
         required
         error={fieldError}
-        hint="Le membre verra ce motif et pourra déclarer à nouveau son versement."
+        hint="Le motif reste visible dans l’onglet « Rejetés », mais ne s’affiche pas sur la page du membre. Celui-ci pourra déclarer à nouveau son versement."
       >
         {(props) => (
           <textarea
