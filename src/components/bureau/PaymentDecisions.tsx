@@ -11,14 +11,17 @@ import { Button, Field, inputClass } from './ui';
 /** Le motif d'un refus : le membre le lira. 10 caractères au moins. */
 export const MIN_REJECTION_LENGTH = 10;
 
-/** « 100 000 FCFA — Wave — sans référence » : le cœur du récapitulatif R9. */
-export function paymentSummary(payment: Payment): string {
-  return [
-    payment.member_name,
-    payment.amount_formatted,
-    payment.method_label,
-    payment.reference?.trim() || 'sans référence',
-  ].join(' — ');
+/**
+ * « Moussa Ndiaye — 100 000 FCFA — Wave — sans référence » : le cœur du
+ * récapitulatif R9. Le montant ne se coupe jamais en deux lignes.
+ */
+function PaymentSummary({ payment }: { payment: Payment }) {
+  return (
+    <>
+      {payment.member_name} — <span className="money">{payment.amount_formatted}</span> —{' '}
+      {payment.method_label} — {payment.reference?.trim() || 'sans référence'}
+    </>
+  );
 }
 
 function PanelError({ message }: { message: string | null }) {
@@ -95,7 +98,7 @@ export function ValidatePanel({
       className="flex flex-col gap-3 rounded-[var(--radius-sm)] border-2 border-indigo bg-indigo-soft p-3"
     >
       <p className="m-0 font-semibold break-words" data-testid="recap">
-        {paymentSummary(payment)}
+        <PaymentSummary payment={payment} />
         {formatDate(paidOn) ? ` — payé le ${formatDate(paidOn)}` : ''} — un reçu sera
         émis
       </p>
@@ -197,7 +200,7 @@ export function RejectPanel({
       className="flex flex-col gap-3 rounded-[var(--radius-sm)] border-2 border-late bg-late-soft p-3"
     >
       <p id={`${ids}-title`} className="m-0 font-semibold break-words">
-        Refuser : {paymentSummary(payment)}
+        Refuser : <PaymentSummary payment={payment} />
       </p>
       <Field
         label="Motif du refus"

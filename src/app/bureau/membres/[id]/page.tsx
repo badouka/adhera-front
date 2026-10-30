@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useBureau } from '@/components/bureau/BureauContext';
 import { ContactsPanel } from '@/components/bureau/ContactsPanel';
 import { DirectPaymentPanel } from '@/components/bureau/DirectPaymentPanel';
@@ -44,7 +44,7 @@ type Load<T> =
 
 type Action = 'link' | 'payment' | 'leave' | null;
 
-type Notice_ = { tone: 'paid' | 'info'; text: string; receipt?: Payment['receipt'] };
+type Notice_ = { tone: 'paid' | 'info'; text: ReactNode; receipt?: Payment['receipt'] };
 
 /**
  * B7 — la fiche d'un membre : identité, situation, cotisations (et leurs
@@ -228,9 +228,14 @@ export default function FicheMembrePage() {
             const period = periodLabel(payment.due?.period_start, payment.due?.period_end);
             setNotice({
               tone: 'paid',
-              text: `${
-                payment.receipt ? `Reçu ${payment.receipt.reference} émis` : 'Paiement encaissé'
-              } — ${payment.amount_formatted}.${period ? ` Cotisation ${period}.` : ''}`,
+              text: (
+                <>
+                  {payment.receipt ? `Reçu ${payment.receipt.reference} émis` : 'Paiement encaissé'}
+                  {' — '}
+                  <span className="money">{payment.amount_formatted}</span>.
+                  {period ? ` Cotisation ${period}.` : ''}
+                </>
+              ),
               receipt: payment.receipt,
             });
             reload();

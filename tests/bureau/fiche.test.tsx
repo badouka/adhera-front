@@ -270,7 +270,11 @@ describe('B9 — « Encaisser » depuis la fiche (R9 dans le panneau)', () => {
     const user = await openPanel();
     await user.click(screen.getByRole('button', { name: 'Encaisser 150 000 FCFA' }));
 
-    await screen.findByText(/Reçu REC-2026-AAAA0001 émis — 150 000 FCFA\./);
+    await screen.findByText(
+      fullText('Reçu REC-2026-AAAA0001 émis — 150 000 FCFA. Cotisation du 1er octobre 2026 au 30 septembre 2027.'),
+    );
+    // Le montant tient sur une ligne.
+    expect(screen.getAllByText('150 000 FCFA', { selector: '.money' }).length).toBeGreaterThan(0);
     const post = calls(fetchMock, 'POST')[0];
     expect(JSON.parse(post?.init.body as string)).toEqual({
       amount: 150000,
