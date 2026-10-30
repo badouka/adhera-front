@@ -17,6 +17,7 @@ import {
   login,
   logout,
   createMember,
+  readRetryAfter,
 } from '@/lib/bureau/api';
 import { getSession, navigation, resetSessionCache, saveSession } from '@/lib/bureau/session';
 import { fakeResponse, memberItem, SESSION, TOKEN } from './fixtures';
@@ -196,5 +197,18 @@ describe('la déconnexion', () => {
     await logout();
     expect(fetchMock.mock.calls[0]?.[0]).toBe('https://api.eventflow.africa/api/v1/admin/logout');
     expect(getSession()).toBeNull();
+  });
+});
+
+describe('readRetryAfter — le délai d’un 429', () => {
+  it('le corps d’abord, puis l’en-tête en secondes, puis en date HTTP', () => {
+    const now = Date.parse('2026-10-30T12:00:00Z');
+    expect(readRetryAfter({ retry_after: 3329 }, new Headers({ 'Retry-After': '60' }), now)).toBe(3329);
+    expect(readRetryAfter({}, new Headers({ 'Retry-After': '42' }), now)).toBe(42);
+    expect(
+      readRetryAfter({}, new Headers({ 'Retry-After': 'Fri, 30 Oct 2026 12:10:00 GMT' }), now),
+    ).toBe(600);
+    expect(readRetryAfter({}, new Headers(), now)).toBeNull();
+    expect(readRetryAfter({ retry_after: 'bientôt' }, undefined, now)).toBeNull();
   });
 });

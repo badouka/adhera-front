@@ -3,7 +3,7 @@
  * @vitest-environment-options { "url": "https://demo-asso.adhera.africa/bureau" }
  */
 
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ConnexionPage from '@/app/bureau/connexion/page';
@@ -71,6 +71,24 @@ describe('le cadre du bureau', () => {
     expect(screen.getAllByRole('button', { name: 'Se déconnecter' }).length).toBeGreaterThan(0);
     // Pas de bannière quand le mode est pris en charge.
     expect(screen.queryByText(/pas encore pris en charge/)).not.toBeInTheDocument();
+  });
+
+  it('« Encaisser » : en tête de la navigation, et visible hors du menu mobile', async () => {
+    saveSession(SESSION);
+    fakeServer([{ match: 'membership/settings', body: settings() }]);
+    render(<BureauFrame>contenu protégé</BureauFrame>);
+    await screen.findByText('contenu protégé');
+
+    // Deux liens : la barre latérale (grand écran) et l'en-tête mobile, qui
+    // n'exige pas d'ouvrir le menu.
+    const links = screen.getAllByRole('link', { name: 'Encaisser' });
+    expect(links).toHaveLength(2);
+    for (const link of links) expect(link).toHaveAttribute('href', '/bureau/encaisser');
+    expect(screen.getByRole('button', { name: 'Ouvrir le menu' })).toHaveAttribute('aria-expanded', 'false');
+    // Dans la barre latérale, il précède « À valider ».
+    const sidebar = screen.getAllByRole('navigation', { name: 'Espace du bureau' })[0] as HTMLElement;
+    const order = within(sidebar).getAllByRole('link').map((a) => a.textContent);
+    expect(order[0]).toBe('Encaisser');
   });
 
   it('mode_is_supported: false → UNE bannière', async () => {
@@ -143,10 +161,33 @@ describe('B1 — la connexion', () => {
     expect(replace).not.toHaveBeenCalled();
   });
 
-  it('un 429 → « Trop de tentatives »', async () => {
+  it('un 429 du verrou par compte : le délai réel, lu dans le corps', async () => {
+    fakeServer([{
+      method: 'POST', match: 'login', status: 429,
+      body: { message: 'Trop de tentatives.', code: 'too_many_attempts', retry_after: 2470 },
+      headers: { 'Retry-After': '60' },
+    }]);
+    await fill('tresorier@demo-asso.test', 'x');
+    // 2 470 s = 41,2 min → 42, arrondi au supérieur. Le corps l'emporte.
+    await screen.findByText('Trop de tentatives. Réessayez dans 42 minutes.');
+    expect(document.body.textContent).not.toMatch(/quelques minutes/);
+  });
+
+  it('un 429 sans `retry_after` : le délai de l’en-tête `Retry-After`', async () => {
+    fakeServer([{
+      method: 'POST', match: 'login', status: 429,
+      body: { message: 'Too Many Attempts.' },
+      headers: { 'Retry-After': '3329' },
+    }]);
+    await fill('tresorier@demo-asso.test', 'x');
+    await screen.findByText('Trop de tentatives. Réessayez dans 56 minutes.');
+  });
+
+  it('un 429 du limiteur IP, sans délai lisible : sa borne, 1 minute', async () => {
+    // En production, l'en-tête n'est pas exposé en CORS : c'est ce cas-là.
     fakeServer([{ method: 'POST', match: 'login', status: 429, body: { message: 'Too Many Attempts.' } }]);
     await fill('tresorier@demo-asso.test', 'x');
-    await screen.findByText('Trop de tentatives, réessayez dans quelques minutes.');
+    await screen.findByText('Trop de tentatives. Réessayez dans 1 minute.');
   });
 
   it('un succès garde le jeton dans l’onglet et ouvre « À valider »', async () => {

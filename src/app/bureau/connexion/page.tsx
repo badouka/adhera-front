@@ -76,9 +76,8 @@ export default function ConnexionPage() {
       setPassword('');
       if (error instanceof ApiError && error.code === INVALID_CREDENTIALS) {
         setFormError('E-mail ou mot de passe incorrect.');
-      } else if (error instanceof ApiError && error.status === 429) {
-        setFormError('Trop de tentatives, réessayez dans quelques minutes.');
       } else {
+        // Un 429 y compris : « Réessayez dans 42 minutes », le délai réel.
         setFormError(errorMessage(error, 'La connexion n’a pas abouti. Réessayez.'));
       }
       setSending(false);

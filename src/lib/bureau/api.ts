@@ -52,6 +52,8 @@ export const MEMBERSHIP_BASE = `${ADMIN_BASE}/membership`;
  */
 export class BureauApiError extends ApiError {
   readonly body: Record<string, unknown>;
+  /** Le délai d'un `429`, en secondes, s'il a été servi (corps ou en-tête). */
+  readonly retryAfter: number | null;
 
   constructor(
     status: number,
@@ -59,11 +61,38 @@ export class BureauApiError extends ApiError {
     message: string,
     errors: FieldErrors = {},
     body: Record<string, unknown> = {},
+    retryAfter: number | null = null,
   ) {
     super(status, code, message, errors);
     this.name = 'BureauApiError';
     this.body = body;
+    this.retryAfter = retryAfter;
   }
+}
+
+/**
+ * Le délai d'un `429`, en secondes : `retry_after` du corps d'abord (ce que le
+ * contrat destine à l'écran, §2), l'en-tête `Retry-After` à défaut.
+ *
+ * ⚠️ En production, l'en-tête n'est PAS lisible depuis le navigateur : l'API
+ * ne l'expose pas en CORS (`Access-Control-Expose-Headers` absent, constaté le
+ * 2026-10-30). Le repli ne sert donc que si nginx l'expose un jour.
+ */
+export function readRetryAfter(
+  body: Record<string, unknown>,
+  headers: Headers | undefined,
+  now: number = Date.now(),
+): number | null {
+  const fromBody = body.retry_after;
+  if (typeof fromBody === 'number' && Number.isFinite(fromBody) && fromBody >= 0) {
+    return fromBody;
+  }
+  const raw = headers?.get('Retry-After')?.trim();
+  if (!raw) return null;
+  // Des secondes, ou une date HTTP (RFC 9110).
+  if (/^\d+$/.test(raw)) return Number(raw);
+  const at = Date.parse(raw);
+  return Number.isNaN(at) ? null : Math.max(0, Math.round((at - now) / 1000));
 }
 
 /** Codes posés par ce client lui-même, jamais par le serveur. */
@@ -116,6 +145,7 @@ async function toError(response: Response): Promise<BureauApiError> {
     typeof body.message === 'string' ? body.message : response.statusText,
     readFieldErrors(body.errors),
     body,
+    response.status === 429 ? readRetryAfter(body, response.headers) : null,
   );
 }
 
@@ -424,17 +454,17 @@ export function rejectPayment(id: string, reason: string) {
 }
 
 /**
- * Un lien signé, valable 60 minutes : à demander AU CLIC (§6). Le contrat ne
- * montre pas la clé de la réponse : `url` est attendue, et à défaut on prend
- * le premier champ qui est une adresse https — sans jamais la retoucher, toute
- * modification invalide la signature.
+ * Un lien signé, valable 60 minutes : à demander AU CLIC (§6). La clé servie
+ * est `download_url` ; à défaut on prend le premier champ qui est une adresse
+ * https — sans jamais la retoucher, toute modification invalide la signature.
+ * Depuis v3.5.7 le fichier s'ouvre dans l'onglet (`inline`).
  */
 export async function getProofUrl(id: string): Promise<string> {
   const body = await request<ProofUrl | Record<string, unknown> | null>(
     `membership/payments/${seg(id)}/proof-url`,
   );
   if (body && typeof body === 'object') {
-    const values = [body.url, ...Object.values(body)];
+    const values = [body.download_url, body.url, ...Object.values(body)];
     for (const value of values) {
       if (typeof value === 'string' && value.startsWith('https://')) return value;
     }

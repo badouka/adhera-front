@@ -9,6 +9,25 @@
 
 import { ApiError } from '../api';
 
+/** Le verrou par compte de `admin/login` (§2) : dix échecs par heure. */
+export const TOO_MANY_ATTEMPTS = 'too_many_attempts';
+
+/**
+ * Le délai d'attente d'un `429`, en minutes entières, arrondi au supérieur :
+ * « Trop de tentatives. Réessayez dans 42 minutes. » Jamais « quelques
+ * minutes » : un délai vague fait réessayer trop tôt, et réessayer prolonge le
+ * verrou.
+ *
+ * Sans délai lisible, on retombe sur la borne du limiteur qui a répondu,
+ * reconnu à son `code` (R4, piège 17) : sans code, c'est le limiteur par IP
+ * (10 / minute) ; avec `too_many_attempts`, le verrou par compte (1 heure).
+ */
+export function tooManyAttemptsMessage(retryAfter: number | null, code: string | null): string {
+  const seconds = retryAfter ?? (code === TOO_MANY_ATTEMPTS ? 3600 : 60);
+  const minutes = Math.max(1, Math.ceil(seconds / 60));
+  return `Trop de tentatives. Réessayez dans ${minutes} minute${minutes > 1 ? 's' : ''}.`;
+}
+
 const BY_CODE: Record<string, string> = {
   feature_disabled:
     'Ce service n’est pas inclus dans l’offre de votre association. Contactez DIGISSOL.',
@@ -20,7 +39,7 @@ const BY_CODE: Record<string, string> = {
   file_too_large: 'Le fichier dépasse 2 Mo.',
   logo_missing: 'Aucun fichier n’a été reçu. Choisissez une image, puis réessayez.',
   upload_invalid: 'Le fichier n’a pas pu être lu. Essayez avec une autre image.',
-  proof_missing: 'Aucun justificatif n’est joint à ce versement.',
+  proof_missing: 'Aucune capture n’est jointe à ce paiement.',
   member_is_not_an_organisation:
     'Seule une organisation peut avoir des contacts rattachés.',
   unknown_member: 'Membre introuvable.',
@@ -44,7 +63,9 @@ export function errorMessage(error: unknown, fallback: string): string {
     return 'Connexion impossible. Vérifiez votre réseau, puis réessayez.';
   }
   if (error.status === 429) {
-    return 'Trop de requêtes. Réessayez dans une minute.';
+    const retryAfter =
+      'retryAfter' in error && typeof error.retryAfter === 'number' ? error.retryAfter : null;
+    return tooManyAttemptsMessage(retryAfter, error.code);
   }
   if (error.status === 403) {
     return 'Cette action n’est pas autorisée pour votre association.';
