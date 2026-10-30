@@ -8,7 +8,7 @@ import { ContactsPanel } from '@/components/bureau/ContactsPanel';
 import { DirectPaymentPanel } from '@/components/bureau/DirectPaymentPanel';
 import { ReceiptButton } from '@/components/bureau/Documents';
 import { decisionLabel, isModeUnsupported, periodLabel } from '@/components/bureau/format';
-import { ChatIcon, ChevronLeftIcon, PlusIcon } from '@/components/bureau/Icons';
+import { CashIcon, ChatIcon, ChevronLeftIcon } from '@/components/bureau/Icons';
 import { LeavePanel } from '@/components/bureau/LeavePanel';
 import { MemberForm } from '@/components/bureau/MemberForm';
 import { MemberLinkPanel } from '@/components/bureau/MemberLinkPanel';
@@ -200,8 +200,8 @@ export default function FicheMembrePage() {
               onClick={() => setAction(action === 'payment' ? null : 'payment')}
               aria-expanded={action === 'payment'}
             >
-              <PlusIcon />
-              Enregistrer un versement
+              <CashIcon size={18} />
+              Encaisser
             </Button>
           ) : null}
           <Button
@@ -228,9 +228,9 @@ export default function FicheMembrePage() {
             const period = periodLabel(payment.due?.period_start, payment.due?.period_end);
             setNotice({
               tone: 'paid',
-              text: `Versement de ${payment.amount_formatted} enregistré et validé.${
-                payment.receipt ? ' Reçu émis.' : ''
-              }${period ? ` Cotisation ${period}.` : ''}`,
+              text: `${
+                payment.receipt ? `Reçu ${payment.receipt.reference} émis` : 'Paiement encaissé'
+              } — ${payment.amount_formatted}.${period ? ` Cotisation ${period}.` : ''}`,
               receipt: payment.receipt,
             });
             reload();
@@ -296,7 +296,9 @@ export default function FicheMembrePage() {
               <Row label="Couvert jusqu’au">{formatDate(m.covered_until) || '—'}</Row>
               <Row label="Prochaine échéance">{formatDate(m.next_due_date) || '—'}</Row>
               {/* null = INCONNU, jamais « 0 FCFA » (piège 4). */}
-              <Row label="Reste à payer">{m.balance_due_formatted ?? '—'}</Row>
+              <Row label="Reste à payer">
+                <span className="money">{m.balance_due_formatted ?? '—'}</span>
+              </Row>
             </dl>
           ) : (
             <p className="m-0 text-ink-muted">
@@ -373,15 +375,15 @@ function DuesPanel({ dues }: { dues: MemberDue[] }) {
               <dl className="small tnum m-0 grid grid-cols-3 gap-2">
                 <div className="flex flex-col">
                   <dt className="text-ink-muted">Cotisation</dt>
-                  <dd className="m-0 font-semibold">{due.amount_due_formatted ?? '—'}</dd>
+                  <dd className="money m-0 font-semibold">{due.amount_due_formatted ?? '—'}</dd>
                 </div>
                 <div className="flex flex-col">
                   <dt className="text-ink-muted">Payé</dt>
-                  <dd className="m-0 font-semibold">{due.amount_paid_formatted ?? '—'}</dd>
+                  <dd className="money m-0 font-semibold">{due.amount_paid_formatted ?? '—'}</dd>
                 </div>
                 <div className="flex flex-col">
                   <dt className="text-ink-muted">Reste</dt>
-                  <dd className="m-0 font-semibold">{due.balance_due_formatted ?? '—'}</dd>
+                  <dd className="money m-0 font-semibold">{due.balance_due_formatted ?? '—'}</dd>
                 </div>
               </dl>
               {due.receipts.length > 0 ? (
@@ -396,7 +398,7 @@ function DuesPanel({ dues }: { dues: MemberDue[] }) {
                           compact
                         />
                         <span className="small tnum text-ink-muted">
-                          {receipt.amount_formatted}
+                          <span className="money">{receipt.amount_formatted}</span>
                           {formatDateTime(receipt.issued_at)
                             ? `, le ${formatDateTime(receipt.issued_at)}`
                             : ''}
@@ -452,7 +454,7 @@ function PaymentsPanel({
               className="flex flex-col gap-1 rounded-[var(--radius-sm)] border border-line p-3"
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="tnum font-bold">{payment.amount_formatted}</span>
+                <span className="money tnum font-bold">{payment.amount_formatted}</span>
                 <Pastille tone={PAYMENT_TONE[payment.status]}>
                   {PAYMENT_STATUS_LABELS[payment.status] ?? payment.status}
                 </Pastille>
@@ -473,13 +475,13 @@ function PaymentsPanel({
               ) : null}
               {payment.status === 'rejected' ? (
                 <span className="small text-ink-muted">
-                  {decisionLabel('Rejeté', payment.decided_at, payment.decided_by_name)}
+                  {decisionLabel('Refusé', payment.decided_at, payment.decided_by_name)}
                   {payment.rejection_reason ? ` — ${payment.rejection_reason}` : ''}
                 </span>
               ) : null}
               {payment.status === 'declared' ? (
                 <Link href="/bureau" className="small font-semibold">
-                  À valider dans « Versements »
+                  À valider depuis l’accueil
                 </Link>
               ) : null}
               {payment.receipt ? (

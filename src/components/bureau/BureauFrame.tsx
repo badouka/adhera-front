@@ -21,6 +21,7 @@ import {
   type BureauContextValue,
 } from './BureauContext';
 import {
+  CashIcon,
   CloseIcon,
   InboxIcon,
   LogoutIcon,
@@ -28,9 +29,13 @@ import {
   SettingsIcon,
   UsersIcon,
 } from './Icons';
-import { Button, Skeleton } from './ui';
+import { Button, buttonClass, Skeleton } from './ui';
+
+/** « Encaisser » ouvre la navigation : c'est le geste le plus fréquent. */
+const ENCAISSER = { href: '/bureau/encaisser', label: 'Encaisser', icon: CashIcon } as const;
 
 const NAV = [
+  ENCAISSER,
   { href: '/bureau', label: 'À valider', icon: InboxIcon },
   { href: '/bureau/membres', label: 'Membres', icon: UsersIcon },
   { href: '/bureau/reglages', label: 'Réglages', icon: SettingsIcon },
@@ -218,6 +223,19 @@ function Sidebar({ pathname }: { pathname: string }) {
       <nav aria-label="Espace du bureau" className="flex flex-col gap-1">
         {NAV.map(({ href, label, icon: Icon }) => {
           const active = isActive(pathname, href);
+          if (href === ENCAISSER.href) {
+            return (
+              <Link
+                key={href}
+                href={href}
+                aria-current={active ? 'page' : undefined}
+                className="mb-3 flex min-h-12 items-center justify-center gap-2 rounded-[var(--radius-md)] bg-surface-raised px-3 text-[17px] font-bold text-indigo! no-underline"
+              >
+                <Icon />
+                {label}
+              </Link>
+            );
+          }
           return (
             <Link
               key={href}
@@ -266,6 +284,15 @@ function TopBar({ pathname }: { pathname: string }) {
         <span className="heading min-w-0 grow truncate">
           {settings.issuer_name?.trim() || 'Espace du bureau'}
         </span>
+        {/* Toujours visible, hors du menu : le geste le plus fréquent. */}
+        <Link
+          href={ENCAISSER.href}
+          aria-current={isActive(pathname, ENCAISSER.href) ? 'page' : undefined}
+          className={buttonClass('primary', 'shrink-0 px-3 no-underline')}
+        >
+          <CashIcon size={18} />
+          Encaisser
+        </Link>
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
@@ -281,7 +308,7 @@ function TopBar({ pathname }: { pathname: string }) {
       {open ? (
         <div id="bureau-menu" className="flex flex-col gap-1 border-t border-line bg-ink px-3 py-3 text-[var(--sidebar-text)]">
           <nav aria-label="Espace du bureau" className="flex flex-col gap-1">
-            {NAV.map(({ href, label, icon: Icon }) => {
+            {NAV.filter((item) => item.href !== ENCAISSER.href).map(({ href, label, icon: Icon }) => {
               const active = isActive(pathname, href);
               return (
                 <Link

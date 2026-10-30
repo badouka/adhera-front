@@ -29,6 +29,16 @@ export function InboxIcon({ className, size = 20 }: IconProps) {
   );
 }
 
+export function CashIcon({ className, size = 20 }: IconProps) {
+  return (
+    <svg {...base(size)} className={className}>
+      <rect x="2" y="6" width="20" height="12" rx="2" />
+      <circle cx="12" cy="12" r="2.5" />
+      <path d="M6 12h.01M18 12h.01" />
+    </svg>
+  );
+}
+
 export function UsersIcon({ className, size = 20 }: IconProps) {
   return (
     <svg {...base(size)} className={className}>
