@@ -23,7 +23,9 @@ type Errors = Partial<Record<FieldName, string>>;
  */
 export const MEMBER_FIELD_ERRORS: Record<FieldName, string> = {
   type: 'Choisissez le type de membre.',
-  name: 'Indiquez le nom du membre (255 caractères au plus).',
+  first_name: 'Indiquez le prénom (255 caractères au plus).',
+  last_name: 'Indiquez le nom de famille (255 caractères au plus).',
+  name: 'Indiquez la raison sociale (255 caractères au plus).',
   phone: 'Vérifiez le numéro de téléphone.',
   email: 'Vérifiez l’adresse e-mail : elle est invalide ou déjà utilisée.',
   region: 'Vérifiez la région (255 caractères au plus).',
@@ -62,7 +64,12 @@ export function MemberForm({
 }) {
   const imposed = fixedType(memberTypes);
   const [type, setType] = useState<MemberType>(initial?.type ?? imposed ?? 'personne');
-  const [name, setName] = useState(initial?.name ?? '');
+  // Une fiche ancienne peut porter `first_name: null` (reprise v3.5.7) : le
+  // champ s'ouvre vide, et c'est l'occasion de le compléter.
+  const [firstName, setFirstName] = useState(initial?.first_name ?? '');
+  const [lastName, setLastName] = useState(initial?.last_name ?? '');
+  // La raison sociale d'une organisation EST son `name`.
+  const [name, setName] = useState(initial?.type === 'organisation' ? initial.name : '');
   const [phone, setPhone] = useState(initial?.phone ?? '');
   const [email, setEmail] = useState(initial?.email ?? '');
   const [region, setRegion] = useState(initial?.region ?? '');
@@ -102,9 +109,16 @@ export function MemberForm({
       ?.focus();
   }
 
+  const effectiveType = imposed ?? type;
+
   function validate(): Errors {
     const next: Errors = {};
-    if (name.trim() === '') next.name = 'Indiquez le nom du membre.';
+    if (effectiveType === 'personne') {
+      if (firstName.trim() === '') next.first_name = 'Indiquez le prénom.';
+      if (lastName.trim() === '') next.last_name = 'Indiquez le nom de famille.';
+    } else if (name.trim() === '') {
+      next.name = 'Indiquez la raison sociale.';
+    }
     if (email.trim() !== '' && !/^\S+@\S+\.\S+$/.test(email.trim())) {
       next.email = 'Cette adresse e-mail n’est pas valide.';
     }
@@ -130,8 +144,12 @@ export function MemberForm({
     setSending(true);
     try {
       await onSubmit({
-        type: imposed ?? type,
-        name: name.trim(),
+        type: effectiveType,
+        // Jamais les deux jeux à la fois : l'API refuse un prénom sur une
+        // organisation, et ignore un `name` sur une personne.
+        ...(effectiveType === 'personne'
+          ? { first_name: firstName.trim(), last_name: lastName.trim() }
+          : { name: name.trim() }),
         phone: emptyToNull(phone),
         email: emptyToNull(email),
         region: emptyToNull(region),
@@ -193,11 +211,26 @@ export function MemberForm({
         </fieldset>
       )}
 
-      <Field label={type === 'organisation' ? 'Nom de l’organisation' : 'Nom complet'} required error={errors.name}>
-        {(props) => (
-          <input {...props} name="name" maxLength={255} value={name} onChange={(e) => setName(e.target.value)} className={inputClass(!!errors.name)} />
-        )}
-      </Field>
+      {effectiveType === 'personne' ? (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Prénom" required error={errors.first_name}>
+            {(props) => (
+              <input {...props} name="first_name" autoComplete="off" maxLength={255} value={firstName} onChange={(e) => setFirstName(e.target.value)} className={inputClass(!!errors.first_name)} />
+            )}
+          </Field>
+          <Field label="Nom" required error={errors.last_name}>
+            {(props) => (
+              <input {...props} name="last_name" autoComplete="off" maxLength={255} value={lastName} onChange={(e) => setLastName(e.target.value)} className={inputClass(!!errors.last_name)} />
+            )}
+          </Field>
+        </div>
+      ) : (
+        <Field label="Raison sociale" required error={errors.name}>
+          {(props) => (
+            <input {...props} name="name" autoComplete="off" maxLength={255} value={name} onChange={(e) => setName(e.target.value)} className={inputClass(!!errors.name)} />
+          )}
+        </Field>
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Téléphone" optional error={errors.phone} hint="Le numéro WhatsApp, de préférence.">

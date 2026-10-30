@@ -15,7 +15,7 @@ import type {
 } from '@/lib/bureau/types';
 
 /**
- * Les charges utiles du contrat bureau v3.5.6, recopiées des réponses réelles
+ * Les charges utiles du contrat bureau v3.5.7, recopiées des réponses réelles
  * de `demo-asso` (`_handoff/adhera-api-bureau.md`). Les `*_formatted` sont ceux
  * que le serveur rend : le client ne les recalcule jamais (R1).
  */
@@ -74,6 +74,8 @@ export function memberItem(overrides: Partial<MemberListItem> = {}): MemberListI
     id: '01a18799-0a3e-702e-936a-68c61af98554',
     type: 'personne',
     name: 'Moussa Ndiaye (test)',
+    first_name: 'Moussa',
+    last_name: 'Ndiaye (test)',
     phone: '775695563',
     email: null,
     region: 'Dakar',
@@ -96,6 +98,8 @@ export const ORGANISATION: MemberListItem = memberItem({
   id: '01a18799-0a46-7321-befc-4c55c08110b7',
   type: 'organisation',
   name: 'Agence Test Conseil (test)',
+  first_name: null,
+  last_name: null,
   phone: null,
   email: 'badouka+m3@gmail.com',
   joined_at: '2024-06-01',
@@ -144,14 +148,30 @@ export const CATEGORIES: Category[] = [
   { id: 1, label: 'Membre actif', mode: 'forfait', amount: 250000, amount_formatted: '250 000 FCFA', sort_order: 0, is_active: true, is_calculable: true },
 ];
 
+/**
+ * Un texte coupé par des balises (un montant dans `<span class="money">`) :
+ * l'élément le plus profond dont le texte complet vaut `text`.
+ */
+export function fullText(text: string) {
+  return (_: string, el: Element | null) =>
+    !!el &&
+    el.textContent === text &&
+    !Array.from(el.children).some((child) => child.textContent === text);
+}
+
 /** Une réponse HTTP minimale. */
-export function fakeResponse(status: number, body: unknown): Response {
+export function fakeResponse(
+  status: number,
+  body: unknown,
+  headers: Record<string, string> = {},
+): Response {
   return {
     ok: status >= 200 && status < 300,
     status,
     statusText: `HTTP ${status}`,
     json: async () => body,
     blob: async () => new Blob(['%PDF-1.4'], { type: 'application/pdf' }),
+    headers: new Headers(headers),
   } as unknown as Response;
 }
 
@@ -161,6 +181,7 @@ type Route = {
   match: string | RegExp;
   status?: number;
   body: unknown;
+  headers?: Record<string, string>;
 };
 
 /**
@@ -177,7 +198,7 @@ export function fakeServer(routes: Route[]) {
         (typeof r.match === 'string' ? path.startsWith(r.match) : r.match.test(path)),
     );
     if (!route) throw new Error(`Route non simulée : ${method} ${path}`);
-    return fakeResponse(route.status ?? 200, route.body);
+    return fakeResponse(route.status ?? 200, route.body, route.headers);
   });
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;

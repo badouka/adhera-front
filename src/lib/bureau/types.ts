@@ -1,6 +1,6 @@
 /**
  * Le contrat de l'API bureau, recopié de `_handoff/adhera-api-bureau.md`
- * (v3.5.6-adhera-recus-bureau).
+ * (v3.5.7-adhera-etape1).
  *
  * R1 : les champs `*_formatted` sont les SEULS montants affichables. Les champs
  * numériques ne servent qu'au calcul (borne d'un formulaire), jamais au rendu.
@@ -94,7 +94,17 @@ export type LeftReason = 'resigned' | 'struck_off' | 'deceased' | 'other';
 export type MemberListItem = {
   id: string;
   type: MemberType;
+  /**
+   * Le libellé d'affichage — et le seul qu'on affiche : « Prénom Nom » dérivé
+   * pour une personne, raison sociale saisie pour une organisation (v3.5.7).
+   */
   name: string;
+  /**
+   * Pour le FORMULAIRE seulement. `null` pour une organisation, et possible
+   * sur une fiche ancienne dont la reprise n'a pas su découper le nom.
+   */
+  first_name?: string | null;
+  last_name?: string | null;
   phone: string | null;
   email: string | null;
   region: string | null;
@@ -149,15 +159,21 @@ export type ContactRole = 'principal' | 'billing' | 'delegate';
 export type Contact = {
   id: string;
   member_id: string;
+  /** Dérivé de `first_name` + `last_name` : c'est lui qu'on affiche. */
   name: string;
+  /** Nullables en base : la reprise a pu laisser un prénom vide. */
+  first_name?: string | null;
+  last_name?: string | null;
   role_title: string | null;
   phone: string | null;
   email: string | null;
   role: ContactRole;
 };
 
+/** Un contact est une personne : prénom et nom sont REQUIS (v3.5.7). */
 export type ContactInput = {
-  name: string;
+  first_name: string;
+  last_name: string;
   role: ContactRole;
   role_title: string | null;
   phone: string | null;
@@ -169,9 +185,16 @@ export type MemberDetail = MemberListItem & {
   dues: MemberDue[];
 };
 
+/**
+ * Le nom dépend du type (v3.5.7) : `first_name` + `last_name` pour une
+ * personne (son `name` est dérivé, et ignoré s'il est envoyé), `name` pour une
+ * organisation (ses `first_name` / `last_name` sont REFUSÉS).
+ */
 export type MemberInput = {
   type: MemberType;
-  name: string;
+  first_name?: string;
+  last_name?: string;
+  name?: string;
   phone: string | null;
   email: string | null;
   region: string | null;
@@ -248,7 +271,15 @@ export type DirectPaymentInput = {
   reference: string | null;
 };
 
-export type ProofUrl = { url: string };
+export type ProofUrl = {
+  download_url: string;
+  expires_in_minutes?: number;
+  original_name?: string;
+  mime_type?: string;
+  size?: number;
+  /** Ancienne clé supposée par F2 : gardée en repli. */
+  url?: string;
+};
 
 /* ───────────────────────────── Libellés ───────────────────────────── */
 
@@ -293,5 +324,5 @@ export const DUE_STATUS_LABELS: Record<DueStatus, string> = {
 export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
   declared: 'À valider',
   validated: 'Validé',
-  rejected: 'Rejeté',
+  rejected: 'Refusé',
 };

@@ -12,6 +12,7 @@ import {
   CATEGORIES,
   calls,
   fakeServer,
+  fullText,
   memberDetail,
   ORGANISATION,
   payment,
@@ -196,75 +197,80 @@ describe('B8 — le lien du membre', () => {
   });
 });
 
-describe('B9 — la saisie directe (R9)', () => {
+describe('B9 — « Encaisser » depuis la fiche (R9 dans le panneau)', () => {
   async function openPanel() {
     const user = userEvent.setup();
     renderInBureau(<FicheMembrePage />);
-    await user.click(await screen.findByRole('button', { name: 'Enregistrer un versement' }));
+    await user.click(await screen.findByRole('button', { name: 'Encaisser' }));
     return user;
   }
+
+  const DONE = payment({
+    status: 'validated',
+    method: 'especes',
+    method_label: 'Espèces',
+    amount: 150000,
+    amount_formatted: '150 000 FCFA',
+    reference: null,
+    receipt: { id: 'r-9', reference: 'REC-2026-AAAA0001' },
+  });
 
   it('affiche la période visée avant toute saisie', async () => {
     server();
     await openPanel();
     expect(
-      screen.getByText(
-        'Cotisation du 1er octobre 2026 au 30 septembre 2027 — reste à payer 150 000 FCFA',
-      ),
+      screen.getByText(fullText('Cotisation du 1er octobre 2026 au 30 septembre 2027 — reste 150 000 FCFA')),
     ).toBeInTheDocument();
   });
 
-  it('refuse un montant au-delà du reste à payer, et une référence Wave absente', async () => {
+  it('préremplit le solde et Espèces ; le récapitulatif tient sur une ligne', async () => {
+    server();
+    await openPanel();
+    expect((screen.getByLabelText(/Montant reçu/) as HTMLInputElement).value).toBe('150000');
+    expect(screen.getByRole('radio', { name: 'Espèces' })).toBeChecked();
+    expect(screen.getByTestId('recap').textContent).toBe(
+      'Moussa Ndiaye (test) — 150 000 FCFA — Espèces — un reçu sera émis',
+    );
+    // Pas de seconde fenêtre : le bouton dit le montant, et c'est tout.
+    expect(screen.getByRole('button', { name: 'Encaisser 150 000 FCFA' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('refuse un montant au-delà du reste à payer ; Wave n’exige plus de référence', async () => {
     const fetchMock = server();
     const user = await openPanel();
     const amount = screen.getByLabelText(/Montant reçu/);
     await user.clear(amount);
     await user.type(amount, '200000');
     await user.click(screen.getByRole('radio', { name: 'Wave' }));
-    await user.click(screen.getByRole('button', { name: 'Vérifier le versement' }));
+    await user.click(screen.getByRole('button', { name: /^Encaisser 200 000 FCFA$/ }));
 
     expect(screen.getByText(/ne peut pas dépasser ce qui reste à payer \(150 000 FCFA\)/)).toBeInTheDocument();
-    expect(screen.getByText('La référence est obligatoire pour Orange Money et Wave.')).toBeInTheDocument();
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByText(/référence est obligatoire/)).not.toBeInTheDocument();
     expect(calls(fetchMock, 'POST')).toHaveLength(0);
   });
 
-  it('récapitule, prévient, puis enregistre et propose le reçu', async () => {
+  it('un autre montant : la saisie est réaffichée formatée (§ D)', async () => {
+    server();
+    const user = await openPanel();
+    const amount = screen.getByLabelText(/Montant reçu/);
+    await user.clear(amount);
+    await user.type(amount, '50000');
+    expect(screen.getByText(fullText('Soit 50 000 FCFA'))).toBeInTheDocument();
+    expect(screen.getByTestId('recap').textContent).toBe(
+      'Moussa Ndiaye (test) — 50 000 FCFA — Espèces — un reçu sera émis',
+    );
+    expect(screen.getByRole('button', { name: 'Encaisser 50 000 FCFA' })).toBeInTheDocument();
+  });
+
+  it('un toucher envoie, et le reçu est proposé', async () => {
     const fetchMock = server(MOUSSA, [
-      {
-        method: 'POST',
-        match: /members\/[^/]+\/payments$/,
-        status: 201,
-        body: payment({
-          status: 'validated',
-          method: 'especes',
-          method_label: 'Espèces',
-          amount: 150000,
-          amount_formatted: '150 000 FCFA',
-          reference: null,
-          receipt: { id: 'r-9', reference: 'REC-2026-AAAA0001' },
-        }),
-      },
+      { method: 'POST', match: /members\/[^/]+\/payments$/, status: 201, body: DONE },
     ]);
     const user = await openPanel();
-    // Préremplie avec le solde, la saisie est la valeur brute du champ (R1).
-    expect((screen.getByLabelText(/Montant reçu/) as HTMLInputElement).value).toBe('150000');
-    await user.click(screen.getByRole('button', { name: 'Vérifier le versement' }));
+    await user.click(screen.getByRole('button', { name: 'Encaisser 150 000 FCFA' }));
 
-    const dialog = screen.getByRole('dialog', { name: 'Enregistrer ce versement ?' });
-    expect(within(dialog).getByText('Moussa Ndiaye (test)')).toBeInTheDocument();
-    expect(within(dialog).getByText('le solde de la période, 150 000 FCFA')).toBeInTheDocument();
-    expect(within(dialog).getByText('Espèces')).toBeInTheDocument();
-    expect(
-      within(dialog).getByText(
-        'Ce versement sera enregistré et validé immédiatement, et un reçu sera émis.',
-      ),
-    ).toBeInTheDocument();
-    expect(calls(fetchMock, 'POST')).toHaveLength(0);
-
-    await user.click(within(dialog).getByRole('button', { name: 'Enregistrer et émettre le reçu' }));
-
-    await screen.findByText(/Versement de 150 000 FCFA enregistré et validé\. Reçu émis\./);
+    await screen.findByText(/Reçu REC-2026-AAAA0001 émis — 150 000 FCFA\./);
     const post = calls(fetchMock, 'POST')[0];
     expect(JSON.parse(post?.init.body as string)).toEqual({
       amount: 150000,
@@ -274,11 +280,114 @@ describe('B9 — la saisie directe (R9)', () => {
     expect(screen.getByRole('button', { name: 'Télécharger le reçu' })).toBeInTheDocument();
   });
 
-  it('n’est pas proposée quand le mode de cotisation n’est pas pris en charge', async () => {
+  it('un 422 s’affiche en français, jamais brut', async () => {
+    server(MOUSSA, [
+      {
+        method: 'POST',
+        match: /members\/[^/]+\/payments$/,
+        status: 422,
+        body: { message: 'The amount exceeds the balance.', code: 'amount_exceeds_balance' },
+      },
+    ]);
+    const user = await openPanel();
+    await user.click(screen.getByRole('button', { name: 'Encaisser 150 000 FCFA' }));
+    await screen.findByText('Le montant dépasse ce qui reste à payer.');
+    expect(document.body.textContent).not.toMatch(/exceeds/);
+  });
+
+  it('n’est pas proposé quand le mode de cotisation n’est pas pris en charge', async () => {
     server();
     renderInBureau(<FicheMembrePage />, { modeSupported: false });
     await screen.findByRole('heading', { name: 'Moussa Ndiaye (test)' });
-    expect(screen.queryByRole('button', { name: 'Enregistrer un versement' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Encaisser' })).not.toBeInTheDocument();
+  });
+});
+
+describe('B7 — prénom et nom à l’édition', () => {
+  async function edit(member = MOUSSA, extra: Parameters<typeof fakeServer>[0] = []) {
+    const fetchMock = server(member, extra);
+    const user = userEvent.setup();
+    renderInBureau(<FicheMembrePage />);
+    await user.click(await screen.findByRole('button', { name: 'Modifier' }));
+    return { user, fetchMock };
+  }
+
+  it('une personne : « Prénom » et « Nom », préremplis ; le PUT n’envoie pas `name`', async () => {
+    const { user, fetchMock } = await edit(MOUSSA, [
+      { method: 'PUT', match: `membership/members/${MOUSSA.id}`, body: MOUSSA },
+    ]);
+    expect((screen.getByLabelText(/^Prénom/) as HTMLInputElement).value).toBe('Moussa');
+    expect((screen.getByLabelText(/^Nom/) as HTMLInputElement).value).toBe('Ndiaye (test)');
+    expect(screen.queryByLabelText(/Raison sociale/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Enregistrer les modifications' }));
+    await waitFor(() => expect(calls(fetchMock, 'PUT')).toHaveLength(1));
+    const body = JSON.parse(calls(fetchMock, 'PUT')[0]?.init.body as string);
+    expect(body).toMatchObject({ type: 'personne', first_name: 'Moussa', last_name: 'Ndiaye (test)' });
+    expect(body).not.toHaveProperty('name');
+  });
+
+  it('une fiche ancienne au prénom null : champ vide, et exigé', async () => {
+    const { user, fetchMock } = await edit(memberDetail({ first_name: null, last_name: 'Ndiaye' }));
+    expect((screen.getByLabelText(/^Prénom/) as HTMLInputElement).value).toBe('');
+    await user.click(screen.getByRole('button', { name: 'Enregistrer les modifications' }));
+    expect(screen.getByText('Indiquez le prénom.')).toBeInTheDocument();
+    expect(calls(fetchMock, 'PUT')).toHaveLength(0);
+  });
+
+  it('une organisation : « Raison sociale » seule ; le PUT n’envoie ni prénom ni nom', async () => {
+    const { user, fetchMock } = await edit(AGENCE, [
+      { method: 'PUT', match: `membership/members/${AGENCE.id}`, body: AGENCE },
+    ]);
+    expect((screen.getByLabelText(/Raison sociale/) as HTMLInputElement).value).toBe('Agence Test Conseil (test)');
+    expect(screen.queryByLabelText(/^Prénom/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Enregistrer les modifications' }));
+    await waitFor(() => expect(calls(fetchMock, 'PUT')).toHaveLength(1));
+    const body = JSON.parse(calls(fetchMock, 'PUT')[0]?.init.body as string);
+    expect(body).toMatchObject({ type: 'organisation', name: 'Agence Test Conseil (test)' });
+    expect(body).not.toHaveProperty('first_name');
+    expect(body).not.toHaveProperty('last_name');
+  });
+
+  it('un 422 sur `first_name` se range sous « Prénom », en français', async () => {
+    const { user } = await edit(MOUSSA, [
+      {
+        method: 'PUT',
+        match: `membership/members/${MOUSSA.id}`,
+        status: 422,
+        body: { message: 'Membre invalide.', errors: { first_name: ['The prénom field is required.'] } },
+      },
+    ]);
+    await user.click(screen.getByRole('button', { name: 'Enregistrer les modifications' }));
+    await screen.findByText('Indiquez le prénom (255 caractères au plus).');
+    expect(document.body.textContent).not.toMatch(/field is required/);
+  });
+});
+
+describe('contacts d’une organisation : prénom et nom', () => {
+  it('exige les deux, puis les envoie sans `name`', async () => {
+    const created = {
+      id: 'c-2', member_id: AGENCE.id, name: 'Khady Ndiaye', first_name: 'Khady', last_name: 'Ndiaye',
+      role_title: null, phone: null, email: null, role: 'principal',
+    };
+    const fetchMock = server(AGENCE, [
+      { method: 'POST', match: /contacts$/, status: 201, body: created },
+    ]);
+    const user = userEvent.setup();
+    renderInBureau(<FicheMembrePage />);
+    await user.click(await screen.findByRole('button', { name: 'Ajouter un contact' }));
+
+    await user.type(screen.getByLabelText(/^Nom/), 'Ndiaye');
+    await user.click(screen.getByRole('button', { name: 'Ajouter le contact' }));
+    expect(screen.getByText('Indiquez le prénom du contact.')).toBeInTheDocument();
+    expect(calls(fetchMock, 'POST')).toHaveLength(0);
+
+    await user.type(screen.getByLabelText(/^Prénom/), 'Khady');
+    await user.click(screen.getByRole('button', { name: 'Ajouter le contact' }));
+    await screen.findByText('Khady Ndiaye');
+    const body = JSON.parse(calls(fetchMock, 'POST')[0]?.init.body as string);
+    expect(body).toMatchObject({ first_name: 'Khady', last_name: 'Ndiaye', role: 'principal' });
+    expect(body).not.toHaveProperty('name');
   });
 });
 

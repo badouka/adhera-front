@@ -12,6 +12,7 @@ import {
   CATEGORIES,
   calls,
   fakeServer,
+  fullText,
   memberItem,
   ORGANISATION,
   renderInBureau,
@@ -75,7 +76,7 @@ describe('B5 — le registre', () => {
     renderInBureau(<MembresPage />);
     const cards = within(await screen.findByTestId('member-cards'));
     expect(cards.getByText('Moussa Ndiaye (test)')).toBeInTheDocument();
-    expect(cards.getByText('Reste à payer 150 000 FCFA')).toBeInTheDocument();
+    expect(cards.getByText(fullText('Reste à payer 150 000 FCFA'))).toBeInTheDocument();
     expect(cards.getByText('Couvert jusqu’au 13 mars 2027')).toBeInTheDocument();
     expect(cards.getAllByText('Pas à jour')).toHaveLength(2);
     expect(cards.getByText('À jour')).toBeInTheDocument();
@@ -83,11 +84,28 @@ describe('B5 — le registre', () => {
     expect(within(screen.getByTestId('member-table')).getByText('Awa Diallo (test)')).toBeInTheDocument();
   });
 
+  it('garde l’ordre du serveur : aucun retri côté client (v3.5.7)', async () => {
+    // L'ordre mesuré sur demo-asso : par nom de famille, l'organisation
+    // intercalée à la lettre A. Un tri client par `name` le casserait
+    // (« Awa Diallo » passerait avant « Mariama Ba »).
+    const ordered = [
+      memberItem({ id: 'o', type: 'organisation', name: 'Agence Conseil Teranga', first_name: null, last_name: null }),
+      memberItem({ id: 'b', name: 'Mariama Ba', first_name: 'Mariama', last_name: 'Ba' }),
+      memberItem({ id: 'd', name: 'Awa Diallo', first_name: 'Awa', last_name: 'Diallo' }),
+      memberItem({ id: 's', name: 'Fatou Sarr', first_name: 'Fatou', last_name: 'Sarr' }),
+    ];
+    server(ordered);
+    renderInBureau(<MembresPage />);
+    const table = await screen.findByTestId('member-table');
+    const names = within(table).getAllByRole('link').map((a) => a.textContent);
+    expect(names).toEqual(['Agence Conseil Teranga', 'Mariama Ba', 'Awa Diallo', 'Fatou Sarr']);
+  });
+
   it('balance_due null → « — », jamais « 0 FCFA »', async () => {
     server([ORGANISATION]);
     renderInBureau(<MembresPage />);
     const cards = within(await screen.findByTestId('member-cards'));
-    expect(cards.getByText('Reste à payer —')).toBeInTheDocument();
+    expect(cards.getByText(fullText('Reste à payer —'))).toBeInTheDocument();
     expect(cards.queryByText(/0 FCFA/)).not.toBeInTheDocument();
   });
 

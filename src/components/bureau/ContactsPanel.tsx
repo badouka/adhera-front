@@ -14,7 +14,8 @@ const ROLE_LABEL = Object.fromEntries(CONTACT_ROLES.map((r) => [r.value, r.label
 >;
 
 const FIELD_ERRORS: Record<string, string> = {
-  name: 'Indiquez le nom du contact.',
+  first_name: 'Indiquez le prénom du contact.',
+  last_name: 'Indiquez le nom de famille du contact.',
   role: 'Choisissez le rôle du contact.',
   role_title: 'Vérifiez la fonction (255 caractères au plus).',
   phone: 'Vérifiez le numéro de téléphone.',
@@ -142,7 +143,8 @@ function ContactForm({
   onCreated: (contact: Contact) => void;
   onCancel: () => void;
 }) {
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [role, setRole] = useState<ContactRole>('principal');
   const [roleTitle, setRoleTitle] = useState('');
   const [phone, setPhone] = useState('');
@@ -155,8 +157,12 @@ function ContactForm({
     event.preventDefault();
     if (busy) return;
     setFormError(null);
-    if (name.trim() === '') {
-      setErrors({ name: FIELD_ERRORS.name as string });
+    // Un contact est une personne : prénom ET nom, sans condition (v3.5.7).
+    const missing: Record<string, string> = {};
+    if (firstName.trim() === '') missing.first_name = FIELD_ERRORS.first_name as string;
+    if (lastName.trim() === '') missing.last_name = FIELD_ERRORS.last_name as string;
+    if (Object.keys(missing).length > 0) {
+      setErrors(missing);
       return;
     }
     setErrors({});
@@ -164,7 +170,8 @@ function ContactForm({
     try {
       onCreated(
         await createContact(memberId, {
-          name: name.trim(),
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
           role,
           role_title: roleTitle.trim() || null,
           phone: phone.trim() || null,
@@ -187,9 +194,14 @@ function ContactForm({
   return (
     <form className="m-0 flex flex-col gap-3 border-t border-line pt-3" onSubmit={submit} noValidate>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="Nom" required error={errors.name}>
+        <Field label="Prénom" required error={errors.first_name}>
           {(props) => (
-            <input {...props} maxLength={255} value={name} onChange={(e) => setName(e.target.value)} className={inputClass(!!errors.name)} />
+            <input {...props} name="first_name" autoComplete="off" maxLength={255} value={firstName} onChange={(e) => setFirstName(e.target.value)} className={inputClass(!!errors.first_name)} />
+          )}
+        </Field>
+        <Field label="Nom" required error={errors.last_name}>
+          {(props) => (
+            <input {...props} name="last_name" autoComplete="off" maxLength={255} value={lastName} onChange={(e) => setLastName(e.target.value)} className={inputClass(!!errors.last_name)} />
           )}
         </Field>
         <Field label="Rôle" required error={errors.role}>
