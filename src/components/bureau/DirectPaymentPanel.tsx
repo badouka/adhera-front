@@ -288,9 +288,10 @@ export function DirectPaymentPanel({
             {busy ? (
               'Encaissement…'
             ) : shownAmount ? (
-              <>
+              // Un seul enfant flex : sinon le `gap` du bouton s'ajoute à l'espace.
+              <span>
                 Encaisser <span className="money">{shownAmount}</span>
-              </>
+              </span>
             ) : (
               'Encaisser'
             )}

@@ -161,7 +161,12 @@ export function MemberPage({ token }: { token: string }) {
         </p>
       ) : null}
 
-      <Greeting state={state} memberName={payload.member.name} />
+      <Greeting
+        state={state}
+        memberName={payload.member.name}
+        // « Votre acompte a bien été reçu » contredirait l'encart de refus.
+        quiet={!!payload.last_rejection}
+      />
 
       {state === 'E2' ? <UpToDate payload={payload} /> : null}
       {state === 'E4' ? (
@@ -225,9 +230,12 @@ export function MemberPage({ token }: { token: string }) {
 function Greeting({
   state,
   memberName,
+  quiet = false,
 }: {
   state: ReturnType<typeof resolveMemberState>;
   memberName: string;
+  /** Sans sous-titre : un autre message parle juste en dessous. */
+  quiet?: boolean;
 }) {
   const name = memberName.trim();
 
@@ -239,7 +247,7 @@ function Greeting({
     E5: 'Votre cotisation est en préparation.',
     E6: 'Rien à régler pour l’instant.',
   };
-  const subtitle = subtitles[state];
+  const subtitle = quiet ? null : subtitles[state];
 
   return (
     <div className="flex flex-col gap-1">

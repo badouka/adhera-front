@@ -290,7 +290,7 @@ describe('B4 — refuser', () => {
     await user.click(screen.getByRole('button', { name: 'Refuser le paiement' }));
 
     await screen.findByText(
-      fullText('Paiement de Moussa Ndiaye (test) (100 000 FCFA) refusé. Le membre verra le motif sur sa page et pourra signaler à nouveau son paiement.'),
+      fullText('Paiement refusé : Moussa Ndiaye (test), 100 000 FCFA. Le membre verra le motif sur sa page et pourra signaler à nouveau son paiement.'),
     );
     const posts = calls(server, 'POST');
     expect(posts).toHaveLength(1);

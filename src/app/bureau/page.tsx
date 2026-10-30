@@ -184,10 +184,9 @@ function OutcomeNotice({
     return (
       <Notice tone="info">
         <span>
-          Paiement de {payment.member_name} (
-          <span className="money">{payment.amount_formatted}</span>) refusé. Le
-          membre verra le motif sur sa page et pourra signaler à nouveau son
-          paiement.
+          Paiement refusé : {payment.member_name},{' '}
+          <span className="money">{payment.amount_formatted}</span>. Le membre
+          verra le motif sur sa page et pourra signaler à nouveau son paiement.
         </span>
         <span>
           <Button tone="ghost" className="px-0" onClick={onClose}>

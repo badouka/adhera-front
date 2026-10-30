@@ -401,6 +401,12 @@ describe('le rejet est visible (`last_rejection`)', () => {
     expect(screen.getByRole('button', { name: 'J’ai payé' })).toBeInTheDocument();
   });
 
+  it('en partiel, le sous-titre « acompte reçu » se tait devant l’encart', async () => {
+    renderWith(fakeResponse(200, { ...rejected, due: DUE_PARTIAL }));
+    await screen.findByRole('region', { name: 'Paiement non confirmé' });
+    expect(screen.queryByText('Votre acompte a bien été reçu.')).not.toBeInTheDocument();
+  });
+
   it('cite la référence quand elle existe, et ajoute le point manquant', async () => {
     renderWith(
       fakeResponse(200, {
