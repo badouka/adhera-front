@@ -1,37 +1,50 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { isSessionError, rejectPayment, validatePayment } from '@/lib/bureau/api';
 import { errorMessage } from '@/lib/bureau/messages';
 import type { Payment } from '@/lib/bureau/types';
-import { formatDateTime, todayInDakar } from '@/lib/dates';
-import { ConfirmDialog, Recap } from './ConfirmDialog';
-import { dateError, isModeUnsupported, periodLabel } from './format';
-import { Field, inputClass } from './ui';
+import { formatDate, todayInDakar } from '@/lib/dates';
+import { dateError, isModeUnsupported } from './format';
+import { Button, Field, inputClass } from './ui';
 
-/** Le motif d'un rejet : le membre le lira. 10 caractères au moins. */
+/** Le motif d'un refus : le membre le lira. 10 caractères au moins. */
 export const MIN_REJECTION_LENGTH = 10;
 
-function recapRows(payment: Payment) {
+/** « 100 000 FCFA — Wave — sans référence » : le cœur du récapitulatif R9. */
+export function paymentSummary(payment: Payment): string {
   return [
-    { label: 'Membre', value: payment.member_name },
-    { label: 'Montant', value: payment.amount_formatted },
-    { label: 'Mode', value: payment.method_label },
-    { label: 'Référence', value: payment.reference?.trim() || '—' },
-    {
-      label: 'Période',
-      value: periodLabel(payment.due?.period_start, payment.due?.period_end),
-    },
-    { label: 'Déclaré le', value: formatDateTime(payment.declared_at) },
-  ];
+    payment.member_name,
+    payment.amount_formatted,
+    payment.method_label,
+    payment.reference?.trim() || 'sans référence',
+  ].join(' — ');
+}
+
+function PanelError({ message }: { message: string | null }) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (message) ref.current?.focus();
+  }, [message]);
+  if (!message) return null;
+  return (
+    <p
+      ref={ref}
+      tabIndex={-1}
+      role="alert"
+      className="m-0 rounded-[var(--radius-sm)] bg-late-soft p-3 font-semibold text-late"
+    >
+      {message}
+    </p>
+  );
 }
 
 /**
- * B3 — Valider. La date du paiement est préremplie avec `paid_on`. Une
- * validation crédite la période et ne se réécrit jamais : la confirmation le
- * dit avant le clic.
+ * B3 — « Reçu ✓ ». La confirmation R9 est un panneau léger, posé dans la
+ * ligne : le récapitulatif tient sur une ligne, et un seul bouton confirme.
+ * Une validation crédite la période et ne se réécrit jamais.
  */
-export function ValidateDialog({
+export function ValidatePanel({
   payment,
   onDone,
   onCancel,
@@ -43,15 +56,25 @@ export function ValidateDialog({
   onModeUnsupported: () => void;
 }) {
   const [paidOn, setPaidOn] = useState(payment.paid_on ?? todayInDakar());
+  const [dateOpen, setDateOpen] = useState(false);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const confirmRef = useRef<HTMLButtonElement>(null);
+
+  // Le focus va au bouton qui conclut : un toucher de plus, rien d'autre.
+  useEffect(() => {
+    confirmRef.current?.focus();
+  }, []);
 
   async function confirm() {
     if (busy) return;
     const invalid = dateError(paidOn, 'la date du paiement');
     setFieldError(invalid);
-    if (invalid) return;
+    if (invalid) {
+      setDateOpen(true);
+      return;
+    }
 
     setBusy(true);
     setError(null);
@@ -60,53 +83,70 @@ export function ValidateDialog({
     } catch (cause) {
       if (isSessionError(cause)) return;
       if (isModeUnsupported(cause)) onModeUnsupported();
-      setError(errorMessage(cause, 'Le versement n’a pas pu être validé.'));
+      setError(errorMessage(cause, 'Le paiement n’a pas pu être confirmé.'));
       setBusy(false);
     }
   }
 
   return (
-    <ConfirmDialog
-      title="Valider ce versement ?"
-      confirmLabel="Valider et émettre le reçu"
-      busy={busy}
-      error={error}
-      onConfirm={confirm}
-      onCancel={onCancel}
+    <div
+      role="group"
+      aria-label="Confirmer la réception"
+      className="flex flex-col gap-3 rounded-[var(--radius-sm)] border-2 border-indigo bg-indigo-soft p-3"
     >
-      <Recap rows={recapRows(payment)} />
-      <Field
-        label="Date du paiement"
-        error={fieldError}
-        hint="Celle qui figurera sur le reçu."
-      >
-        {(props) => (
-          <input
-            {...props}
-            type="date"
-            value={paidOn}
-            max={todayInDakar()}
-            onChange={(e) => setPaidOn(e.target.value)}
-            className={inputClass(!!fieldError)}
-          />
-        )}
-      </Field>
-      <p className="m-0">
-        Vérifiez d’abord que ce montant est bien arrivé sur le compte de
-        l’association. Un versement validé ne peut plus être modifié.
+      <p className="m-0 font-semibold break-words" data-testid="recap">
+        {paymentSummary(payment)}
+        {formatDate(paidOn) ? ` — payé le ${formatDate(paidOn)}` : ''} — un reçu sera
+        émis
       </p>
-    </ConfirmDialog>
+
+      {dateOpen ? (
+        <Field label="Date du paiement" error={fieldError} hint="Celle qui figurera sur le reçu.">
+          {(props) => (
+            <input
+              {...props}
+              type="date"
+              value={paidOn}
+              max={todayInDakar()}
+              onChange={(e) => setPaidOn(e.target.value)}
+              className={inputClass(!!fieldError)}
+            />
+          )}
+        </Field>
+      ) : null}
+
+      <PanelError message={error} />
+
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <Button
+          ref={confirmRef}
+          tone="primary"
+          onClick={confirm}
+          disabled={busy}
+          className="min-h-12 text-[17px] sm:min-w-[180px]"
+        >
+          {busy ? 'Envoi…' : 'Confirmer'}
+        </Button>
+        <Button tone="ghost" onClick={onCancel} disabled={busy}>
+          Annuler
+        </Button>
+        {dateOpen ? null : (
+          <Button tone="ghost" onClick={() => setDateOpen(true)} disabled={busy} className="sm:ml-auto">
+            Autre date de paiement ?
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }
 
 /**
- * B4 — Rejeter. Le motif est obligatoire et reste dans `rejection_reason`.
- *
- * ⚠️ La page du membre ne le montre pas : sa charge publique ne porte ni rejet
- * ni motif (contrat §8). Le membre voit seulement sa déclaration disparaître et
- * peut en refaire une ; l'écran ne promet donc rien de plus au bureau.
+ * B4 — Refuser. Le motif est obligatoire, et depuis v3.5.7 il est LU PAR LE
+ * MEMBRE sur sa page (`last_rejection.reason`) : l'écran le dit au moment de
+ * la saisie, c'est le seul endroit où l'on peut encore éviter une note
+ * interne.
  */
-export function RejectDialog({
+export function RejectPanel({
   payment,
   onDone,
   onCancel,
@@ -115,10 +155,16 @@ export function RejectDialog({
   onDone: (rejected: Payment) => void;
   onCancel: () => void;
 }) {
+  const ids = useId();
   const [reason, setReason] = useState('');
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const reasonRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    reasonRef.current?.focus();
+  }, []);
 
   async function confirm() {
     if (busy) return;
@@ -128,7 +174,10 @@ export function RejectDialog({
         ? `Expliquez le motif en ${MIN_REJECTION_LENGTH} caractères au moins : le membre le lira.`
         : null;
     setFieldError(invalid);
-    if (invalid) return;
+    if (invalid) {
+      reasonRef.current?.focus();
+      return;
+    }
 
     setBusy(true);
     setError(null);
@@ -136,31 +185,30 @@ export function RejectDialog({
       onDone(await rejectPayment(payment.id, text));
     } catch (cause) {
       if (isSessionError(cause)) return;
-      setError(errorMessage(cause, 'La déclaration n’a pas pu être rejetée.'));
+      setError(errorMessage(cause, 'Le paiement n’a pas pu être refusé.'));
       setBusy(false);
     }
   }
 
   return (
-    <ConfirmDialog
-      title="Rejeter cette déclaration ?"
-      confirmLabel="Rejeter la déclaration"
-      confirmTone="danger"
-      busy={busy}
-      error={error}
-      onConfirm={confirm}
-      onCancel={onCancel}
+    <div
+      role="group"
+      aria-labelledby={`${ids}-title`}
+      className="flex flex-col gap-3 rounded-[var(--radius-sm)] border-2 border-late bg-late-soft p-3"
     >
-      <Recap rows={recapRows(payment)} />
+      <p id={`${ids}-title`} className="m-0 font-semibold break-words">
+        Refuser : {paymentSummary(payment)}
+      </p>
       <Field
-        label="Motif du rejet"
+        label="Motif du refus"
         required
         error={fieldError}
-        hint="Le motif reste visible dans l’onglet « Rejetés », mais ne s’affiche pas sur la page du membre. Celui-ci pourra déclarer à nouveau son versement."
+        hint="Ce motif sera affiché au membre sur sa page."
       >
         {(props) => (
           <textarea
             {...props}
+            ref={reasonRef}
             rows={3}
             maxLength={500}
             value={reason}
@@ -169,6 +217,17 @@ export function RejectDialog({
           />
         )}
       </Field>
-    </ConfirmDialog>
+
+      <PanelError message={error} />
+
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Button tone="danger" onClick={confirm} disabled={busy}>
+          {busy ? 'Envoi…' : 'Refuser le paiement'}
+        </Button>
+        <Button tone="ghost" onClick={onCancel} disabled={busy}>
+          Annuler
+        </Button>
+      </div>
+    </div>
   );
 }

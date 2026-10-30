@@ -90,7 +90,7 @@ export function ReceiptButton({
 }
 
 /**
- * « Voir le justificatif ». Le lien signé vit 60 minutes : il est demandé AU
+ * « Voir la capture » jointe par le membre. Le lien signé vit 60 minutes : il est demandé AU
  * CLIC, jamais au chargement de la liste, et ouvert tel quel — toute
  * retouche (paramètre ajouté, recomposition) invalide sa signature.
  *
@@ -120,7 +120,7 @@ export function ProofButton({ paymentId }: { paymentId: string }) {
     } catch (cause) {
       tab?.close();
       if (!isSessionError(cause)) {
-        setError(errorMessage(cause, 'Le justificatif n’a pas pu être ouvert.'));
+        setError(errorMessage(cause, 'La capture n’a pas pu être ouverte.'));
       }
     } finally {
       setBusy(false);
@@ -136,7 +136,7 @@ export function ProofButton({ paymentId }: { paymentId: string }) {
         className={buttonClass('secondary')}
       >
         <EyeIcon />
-        {busy ? 'Ouverture…' : 'Voir le justificatif'}
+        {busy ? 'Ouverture…' : 'Voir la capture'}
       </button>
       {fallbackUrl ? (
         <a
@@ -145,7 +145,7 @@ export function ProofButton({ paymentId }: { paymentId: string }) {
           rel="noopener noreferrer"
           className="small font-semibold"
         >
-          Ouvrir le justificatif dans un nouvel onglet
+          Ouvrir la capture dans un nouvel onglet
         </a>
       ) : null}
       {error ? (

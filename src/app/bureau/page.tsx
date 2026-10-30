@@ -5,9 +5,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { useBureau } from '@/components/bureau/BureauContext';
 import { ProofButton, ReceiptButton } from '@/components/bureau/Documents';
 import { decisionLabel, periodLabel } from '@/components/bureau/format';
-import { RejectDialog, ValidateDialog } from '@/components/bureau/PaymentDecisions';
+import { CashIcon } from '@/components/bureau/Icons';
+import { RejectPanel, ValidatePanel } from '@/components/bureau/PaymentDecisions';
 import {
   Button,
+  buttonClass,
   EmptyState,
   Notice,
   PageTitle,
@@ -22,13 +24,13 @@ import { formatDate, formatDateTime } from '@/lib/dates';
 const TABS: ReadonlyArray<{ value: PaymentStatus; label: string }> = [
   { value: 'declared', label: 'À valider' },
   { value: 'validated', label: 'Validés' },
-  { value: 'rejected', label: 'Rejetés' },
+  { value: 'rejected', label: 'Refusés' },
 ];
 
 const EMPTY: Record<PaymentStatus, string> = {
   declared: 'Aucun versement à valider.',
   validated: 'Aucun versement validé.',
-  rejected: 'Aucune déclaration rejetée.',
+  rejected: 'Aucun paiement refusé.',
 };
 
 type Load =
@@ -41,11 +43,11 @@ type Outcome =
   | { kind: 'rejected'; payment: Payment };
 
 /**
- * B2 — « À valider », la page d'accueil du bureau.
+ * B2 — l'accueil du bureau : « Encaisser » en tête, puis « À valider ».
  *
- * Un membre a déclaré un versement depuis son lien : le trésorier le vérifie
- * (justificatif, relevé Orange Money ou Wave), puis le valide — ce qui émet le
- * reçu — ou le rejette avec un motif. Le plus ancien d'abord.
+ * Un membre a signalé un paiement depuis son lien : le trésorier regarde la
+ * capture ou son relevé, touche « Reçu ✓ » puis « Confirmer » — ce qui émet le
+ * reçu — ou refuse avec un motif que le membre lira. Le plus ancien d'abord.
  */
 export default function AValiderPage() {
   const { modeSupported, markModeUnsupported } = useBureau();
@@ -86,9 +88,18 @@ export default function AValiderPage() {
 
   return (
     <>
+      {/* Le geste le plus fréquent, le plus visible de l'accueil. */}
+      <Link
+        href="/bureau/encaisser"
+        className={buttonClass('primary', 'min-h-14 self-stretch text-[18px] no-underline sm:self-start sm:px-8')}
+      >
+        <CashIcon />
+        Encaisser un paiement
+      </Link>
+
       <PageTitle
-        title="Versements"
-        subtitle="Les versements déclarés par les membres depuis leur lien."
+        title="À valider"
+        subtitle="Les paiements signalés par les membres depuis leur lien."
       />
 
       {outcome ? <OutcomeNotice outcome={outcome} onClose={() => setOutcome(null)} /> : null}
@@ -127,35 +138,34 @@ export default function AValiderPage() {
                 canValidate={modeSupported}
                 onValidate={() => setAction({ kind: 'validate', payment })}
                 onReject={() => setAction({ kind: 'reject', payment })}
+                panel={
+                  action?.payment.id !== payment.id ? null : action.kind === 'validate' ? (
+                    <ValidatePanel
+                      payment={payment}
+                      onCancel={() => setAction(null)}
+                      onModeUnsupported={markModeUnsupported}
+                      onDone={(validated) => {
+                        setAction(null);
+                        removeFromList(validated.id);
+                        setOutcome({ kind: 'validated', payment: validated });
+                      }}
+                    />
+                  ) : (
+                    <RejectPanel
+                      payment={payment}
+                      onCancel={() => setAction(null)}
+                      onDone={(rejected) => {
+                        setAction(null);
+                        removeFromList(rejected.id);
+                        setOutcome({ kind: 'rejected', payment: rejected });
+                      }}
+                    />
+                  )
+                }
               />
             </li>
           ))}
         </ul>
-      ) : null}
-
-      {action?.kind === 'validate' ? (
-        <ValidateDialog
-          payment={action.payment}
-          onCancel={() => setAction(null)}
-          onModeUnsupported={markModeUnsupported}
-          onDone={(validated) => {
-            setAction(null);
-            removeFromList(validated.id);
-            setOutcome({ kind: 'validated', payment: validated });
-          }}
-        />
-      ) : null}
-
-      {action?.kind === 'reject' ? (
-        <RejectDialog
-          payment={action.payment}
-          onCancel={() => setAction(null)}
-          onDone={(rejected) => {
-            setAction(null);
-            removeFromList(rejected.id);
-            setOutcome({ kind: 'rejected', payment: rejected });
-          }}
-        />
       ) : null}
     </>
   );
@@ -174,9 +184,10 @@ function OutcomeNotice({
     return (
       <Notice tone="info">
         <span>
-          Déclaration de {payment.member_name} ({payment.amount_formatted}) rejetée.
-          Le membre peut en déclarer une nouvelle depuis son lien. Sa page
-          n’affiche pas le motif : prévenez-le si besoin.
+          Paiement de {payment.member_name} (
+          <span className="money">{payment.amount_formatted}</span>) refusé. Le
+          membre verra le motif sur sa page et pourra signaler à nouveau son
+          paiement.
         </span>
         <span>
           <Button tone="ghost" className="px-0" onClick={onClose}>
@@ -192,9 +203,9 @@ function OutcomeNotice({
   return (
     <Notice tone="paid">
       <span>
-        {payment.receipt ? 'Versement validé. Reçu émis.' : 'Versement validé.'}{' '}
+        {payment.receipt ? `Reçu ${payment.receipt.reference} émis.` : 'Paiement confirmé.'}{' '}
         <span className="font-normal">
-          {payment.member_name}, {payment.amount_formatted}.
+          {payment.member_name}, <span className="money">{payment.amount_formatted}</span>.
         </span>
       </span>
       <span className="flex flex-wrap gap-2">
@@ -218,15 +229,20 @@ function PaymentCard({
   canValidate,
   onValidate,
   onReject,
+  panel,
 }: {
   payment: Payment;
   canValidate: boolean;
   onValidate: () => void;
   onReject: () => void;
+  /** Le panneau léger de « Reçu ✓ » ou de « Refuser », quand il est ouvert. */
+  panel: React.ReactNode | null;
 }) {
   const period = periodLabel(payment.due?.period_start, payment.due?.period_end);
-  const declaredOn = formatDateTime(payment.declared_at);
   const paidOn = formatDate(payment.paid_on);
+  const declaredOn = formatDateTime(payment.declared_at);
+  const reference = payment.reference?.trim();
+  const panelOpen = panel !== null;
 
   return (
     <article className="flex flex-col gap-3 rounded-[var(--radius-md)] border border-line bg-surface-raised p-4">
@@ -243,31 +259,24 @@ function PaymentCard({
           ) : null}
         </div>
         {/* R1 : le montant tel que servi, jamais reformaté. */}
-        <span className="tnum text-[22px] leading-7 font-bold">
+        <span className="money tnum text-[22px] leading-7 font-bold">
           {payment.amount_formatted}
         </span>
       </div>
 
-      <dl className="small m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-        <dt className="text-ink-muted">Mode</dt>
-        <dd className="m-0 font-semibold">{payment.method_label}</dd>
-        <dt className="text-ink-muted">Référence</dt>
-        <dd className="m-0 font-semibold break-all">
-          {payment.reference?.trim() || '—'}
-        </dd>
-        {paidOn ? (
-          <>
-            <dt className="text-ink-muted">Payé le</dt>
-            <dd className="m-0">{paidOn}</dd>
-          </>
-        ) : null}
-        {declaredOn ? (
-          <>
-            <dt className="text-ink-muted">Déclaré le</dt>
-            <dd className="m-0">{declaredOn}</dd>
-          </>
-        ) : null}
-      </dl>
+      <p className="m-0 flex flex-wrap gap-x-2 gap-y-1">
+        <span className="font-semibold">{payment.method_label}</span>
+        <span aria-hidden="true" className="text-ink-muted">·</span>
+        {reference ? (
+          <span className="font-semibold break-all">{reference}</span>
+        ) : (
+          <span className="text-ink-muted">sans référence</span>
+        )}
+        <span aria-hidden="true" className="text-ink-muted">·</span>
+        <span>
+          {paidOn ? `payé le ${paidOn}` : declaredOn ? `signalé le ${declaredOn}` : '—'}
+        </span>
+      </p>
 
       {payment.status === 'validated' ? (
         <p className="small m-0 font-semibold text-paid">
@@ -278,7 +287,7 @@ function PaymentCard({
       {payment.status === 'rejected' ? (
         <div className="small flex flex-col gap-1">
           <p className="m-0 font-semibold text-late">
-            {decisionLabel('Rejeté', payment.decided_at, payment.decided_by_name)}
+            {decisionLabel('Refusé', payment.decided_at, payment.decided_by_name)}
           </p>
           {payment.rejection_reason ? (
             <p className="m-0 whitespace-pre-line break-words">
@@ -288,29 +297,45 @@ function PaymentCard({
         </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        {payment.has_proof ? <ProofButton paymentId={payment.id} /> : null}
-        {payment.status === 'validated' && payment.receipt ? (
-          <ReceiptButton
-            receiptId={payment.receipt.id}
-            reference={payment.receipt.reference}
-          />
-        ) : null}
-        {payment.status === 'declared' ? (
-          <>
-            <Button onClick={onReject}>
-              Rejeter
+      {payment.status === 'declared' && !panelOpen ? (
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start">
+          {canValidate ? (
+            <Button
+              tone="primary"
+              onClick={onValidate}
+              className="min-h-13 text-[18px] sm:min-w-[180px]"
+            >
+              Reçu ✓
             </Button>
-            {canValidate ? (
-              <Button tone="primary" onClick={onValidate}>
-                Valider
-              </Button>
-            ) : null}
-          </>
-        ) : null}
-      </div>
-      {payment.status === 'declared' && !payment.has_proof ? (
-        <p className="small m-0 text-ink-muted">Aucun justificatif joint.</p>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            {payment.has_proof ? <ProofButton paymentId={payment.id} /> : null}
+            <Button onClick={onReject}>Refuser</Button>
+          </div>
+        </div>
+      ) : null}
+
+      {payment.status === 'declared' && panelOpen ? (
+        <>
+          {payment.has_proof ? (
+            <span>
+              <ProofButton paymentId={payment.id} />
+            </span>
+          ) : null}
+          {panel}
+        </>
+      ) : null}
+
+      {payment.status !== 'declared' ? (
+        <div className="flex flex-wrap gap-2">
+          {payment.has_proof ? <ProofButton paymentId={payment.id} /> : null}
+          {payment.status === 'validated' && payment.receipt ? (
+            <ReceiptButton
+              receiptId={payment.receipt.id}
+              reference={payment.receipt.reference}
+            />
+          ) : null}
+        </div>
       ) : null}
     </article>
   );

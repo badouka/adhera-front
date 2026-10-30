@@ -8,7 +8,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AValiderPage from '@/app/bureau/page';
 import { resetSessionCache, saveSession } from '@/lib/bureau/session';
-import { calls, fakeServer, payment, renderInBureau, SESSION } from './fixtures';
+import { calls, fakeServer, fullText, payment, renderInBureau, SESSION } from './fixtures';
 
 vi.mock('next/link', () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
@@ -39,7 +39,17 @@ const VALIDATED = payment({
 });
 
 describe('B2 — la file « À valider »', () => {
-  it('demande les déclarations et en affiche chaque détail', async () => {
+  it('« Encaisser » est en tête de l’accueil', async () => {
+    fakeServer([{ match: 'membership/payments', body: [] }]);
+    renderInBureau(<AValiderPage />);
+    const encaisser = await screen.findByRole('link', { name: 'Encaisser un paiement' });
+    expect(encaisser).toHaveAttribute('href', '/bureau/encaisser');
+    // Avant tout le reste de la page.
+    const title = screen.getByRole('heading', { name: 'À valider' });
+    expect(encaisser.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('chaque ligne : nom, montant, mode, référence, date, et « Reçu ✓ »', async () => {
     const server = fakeServer([{ match: 'membership/payments', body: [payment()] }]);
     renderInBureau(<AValiderPage />);
 
@@ -51,13 +61,21 @@ describe('B2 — la file « À valider »', () => {
     expect(screen.getByText('100 000 FCFA')).toBeInTheDocument();
     expect(screen.getByText('Wave')).toBeInTheDocument();
     expect(screen.getByText('TEST-F1')).toBeInTheDocument();
-    // Payé le, puis déclaré le : les deux dates sont lues sans glisser à LA.
-    expect(screen.getAllByText('29 octobre 2026', { selector: 'dd' })).toHaveLength(2);
+    expect(screen.getByText('payé le 29 octobre 2026')).toBeInTheDocument();
     expect(
       screen.getByText('Cotisation du 1er octobre 2026 au 30 septembre 2027'),
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Valider' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Rejeter' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reçu ✓' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Refuser' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Voir la capture' })).toBeInTheDocument();
+  });
+
+  it('sans référence : « sans référence », et sans capture : pas de bouton', async () => {
+    fakeServer([{ match: 'membership/payments', body: [payment({ reference: null, has_proof: false })] }]);
+    renderInBureau(<AValiderPage />);
+    await screen.findByText('Moussa Ndiaye (test)');
+    expect(screen.getByText('sans référence')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /capture/ })).not.toBeInTheDocument();
   });
 
   it('état vide : « Aucun versement à valider. »', async () => {
@@ -66,18 +84,10 @@ describe('B2 — la file « À valider »', () => {
     await screen.findByText('Aucun versement à valider.');
   });
 
-  it('sans justificatif : pas de bouton, et ça se dit', async () => {
-    fakeServer([{ match: 'membership/payments', body: [payment({ has_proof: false })] }]);
-    renderInBureau(<AValiderPage />);
-    await screen.findByText('Moussa Ndiaye (test)');
-    expect(screen.queryByRole('button', { name: /justificatif/ })).not.toBeInTheDocument();
-    expect(screen.getByText('Aucun justificatif joint.')).toBeInTheDocument();
-  });
-
-  it('le justificatif : lien signé demandé AU CLIC, ouvert tel quel, sans opener', async () => {
+  it('la capture : lien signé demandé AU CLIC, ouvert tel quel, sans opener', async () => {
     const signed = 'https://api.eventflow.africa/api/v1/membership/proofs/p?tenant=demo-asso&signature=abc';
     const server = fakeServer([
-      { match: /proof-url$/, body: { url: signed } },
+      { match: /proof-url$/, body: { download_url: signed, expires_in_minutes: 60, mime_type: 'image/png' } },
       { match: 'membership/payments', body: [payment()] },
     ]);
     const tab = { opener: {} as unknown, closed: false, location: { replace: vi.fn() }, close: vi.fn() };
@@ -89,8 +99,9 @@ describe('B2 — la file « À valider »', () => {
     // Rien n'est demandé au chargement : le lien périme en 60 minutes.
     expect(calls(server).some((c) => c.url.includes('proof-url'))).toBe(false);
 
-    await user.click(screen.getByRole('button', { name: 'Voir le justificatif' }));
+    await user.click(screen.getByRole('button', { name: 'Voir la capture' }));
 
+    // `inline` côté serveur : ouverte dans un nouvel onglet, lien intact.
     await waitFor(() => expect(tab.location.replace).toHaveBeenCalledWith(signed));
     expect(open).toHaveBeenCalledWith('', '_blank');
     expect(tab.opener).toBeNull();
@@ -111,10 +122,10 @@ describe('B2 — la file « À valider »', () => {
     await screen.findByText('Validé le 29 octobre 2026 par Trésorier Démo');
     expect(calls(server).at(-1)?.url).toContain('status=validated');
     expect(screen.getByRole('button', { name: 'Télécharger le reçu' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Valider' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reçu ✓' })).not.toBeInTheDocument();
   });
 
-  it('onglet « Rejetés » : le motif, qui, quand', async () => {
+  it('onglet « Refusés » : le motif, qui, quand', async () => {
     fakeServer([
       {
         match: 'membership/payments?status=rejected',
@@ -133,54 +144,70 @@ describe('B2 — la file « À valider »', () => {
     renderInBureau(<AValiderPage />);
     await screen.findByText('Aucun versement à valider.');
 
-    await user.click(screen.getByRole('tab', { name: 'Rejetés' }));
+    await user.click(screen.getByRole('tab', { name: 'Refusés' }));
 
-    await screen.findByText('Rejeté le 29 octobre 2026 par Trésorier Démo');
+    await screen.findByText('Refusé le 29 octobre 2026 par Trésorier Démo');
     expect(screen.getByText('Motif : Référence introuvable chez Orange Money.')).toBeInTheDocument();
   });
 
-  it('mode de cotisation non pris en charge : aucun bouton « Valider »', async () => {
+  it('mode de cotisation non pris en charge : aucun bouton « Reçu ✓ »', async () => {
     fakeServer([{ match: 'membership/payments', body: [payment()] }]);
     renderInBureau(<AValiderPage />, { modeSupported: false });
     await screen.findByText('Moussa Ndiaye (test)');
-    expect(screen.queryByRole('button', { name: 'Valider' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reçu ✓' })).not.toBeInTheDocument();
   });
 });
 
-describe('B3 — valider (R9)', () => {
-  it('récapitule, préremplit la date, puis valide et propose le reçu', async () => {
+describe('B3 — « Reçu ✓ » : la confirmation légère (R9)', () => {
+  it('« Reçu ✓ » ouvre un panneau, pas une boîte modale ; « Confirmer » valide', async () => {
     const server = fakeServer([
-      { method: 'POST', match: /validate$/, body: { ...VALIDATED, paid_on: '2026-10-28' } },
+      { method: 'POST', match: /validate$/, body: VALIDATED },
       { match: 'membership/payments', body: [payment()] },
     ]);
     const user = userEvent.setup();
     renderInBureau(<AValiderPage />);
-    await user.click(await screen.findByRole('button', { name: 'Valider' }));
+    await user.click(await screen.findByRole('button', { name: 'Reçu ✓' }));
 
-    const dialog = screen.getByRole('dialog', { name: 'Valider ce versement ?' });
-    // Le récapitulatif : nom, montant formaté, mode, référence.
-    for (const text of ['Moussa Ndiaye (test)', '100 000 FCFA', 'Wave', 'TEST-F1']) {
-      expect(within(dialog).getByText(text)).toBeInTheDocument();
-    }
-    const date = within(dialog).getByLabelText('Date du paiement') as HTMLInputElement;
-    expect(date.value).toBe('2026-10-29');
-    // Rien n'est parti avant la confirmation.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    const panel = screen.getByRole('group', { name: 'Confirmer la réception' });
+    // Le récapitulatif tient sur une ligne : nom, montant formaté, mode, référence.
+    expect(within(panel).getByTestId('recap').textContent).toBe(
+      'Moussa Ndiaye (test) — 100 000 FCFA — Wave — TEST-F1 — payé le 29 octobre 2026 — un reçu sera émis',
+    );
+    // Un seul bouton confirme, et il a le focus : un toucher de plus.
+    const confirm = within(panel).getByRole('button', { name: 'Confirmer' });
+    expect(document.activeElement).toBe(confirm);
     expect(calls(server, 'POST')).toHaveLength(0);
 
-    await user.clear(date);
-    await user.type(date, '2026-10-28');
-    await user.click(within(dialog).getByRole('button', { name: 'Valider et émettre le reçu' }));
+    await user.click(confirm);
 
-    await screen.findByText('Versement validé. Reçu émis.');
+    await screen.findByText(/Reçu REC-2026-CB4A73AE émis\./);
     const posts = calls(server, 'POST');
     expect(posts).toHaveLength(1);
     expect(posts[0]?.url).toBe(
       'https://api.eventflow.africa/api/v1/admin/membership/payments/01a1893f-d5b7-707e-9a64-6f65cb4a73ae/validate',
     );
-    expect(JSON.parse(posts[0]?.init.body as string)).toEqual({ paid_on: '2026-10-28' });
+    expect(JSON.parse(posts[0]?.init.body as string)).toEqual({ paid_on: '2026-10-29' });
     expect(screen.getByRole('button', { name: 'Télécharger le reçu' })).toBeInTheDocument();
-    // La ligne a quitté la file.
-    expect(screen.queryByRole('button', { name: 'Valider' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reçu ✓' })).not.toBeInTheDocument();
+  });
+
+  it('une autre date de paiement reste possible, repliée', async () => {
+    const server = fakeServer([
+      { method: 'POST', match: /validate$/, body: VALIDATED },
+      { match: 'membership/payments', body: [payment()] },
+    ]);
+    const user = userEvent.setup();
+    renderInBureau(<AValiderPage />);
+    await user.click(await screen.findByRole('button', { name: 'Reçu ✓' }));
+    expect(screen.queryByLabelText('Date du paiement')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Autre date de paiement ?' }));
+    const date = screen.getByLabelText('Date du paiement') as HTMLInputElement;
+    await user.clear(date);
+    await user.type(date, '2026-10-28');
+    await user.click(screen.getByRole('button', { name: 'Confirmer' }));
+    await waitFor(() => expect(calls(server, 'POST')).toHaveLength(1));
+    expect(JSON.parse(calls(server, 'POST')[0]?.init.body as string)).toEqual({ paid_on: '2026-10-28' });
   });
 
   it('sans reçu dans la réponse : ni promesse, ni lien', async () => {
@@ -190,11 +217,11 @@ describe('B3 — valider (R9)', () => {
     ]);
     const user = userEvent.setup();
     renderInBureau(<AValiderPage />);
-    await user.click(await screen.findByRole('button', { name: 'Valider' }));
-    await user.click(screen.getByRole('button', { name: 'Valider et émettre le reçu' }));
+    await user.click(await screen.findByRole('button', { name: 'Reçu ✓' }));
+    await user.click(screen.getByRole('button', { name: 'Confirmer' }));
 
-    await screen.findByText('Versement validé.');
-    expect(screen.queryByText(/Reçu émis/)).not.toBeInTheDocument();
+    await screen.findByText('Paiement confirmé.');
+    expect(screen.queryByText(/Reçu .* émis/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Télécharger le reçu' })).not.toBeInTheDocument();
   });
 
@@ -202,66 +229,55 @@ describe('B3 — valider (R9)', () => {
     const server = fakeServer([{ match: 'membership/payments', body: [payment()] }]);
     const user = userEvent.setup();
     renderInBureau(<AValiderPage />);
-    await user.click(await screen.findByRole('button', { name: 'Valider' }));
+    await user.click(await screen.findByRole('button', { name: 'Reçu ✓' }));
     await user.click(screen.getByRole('button', { name: 'Annuler' }));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Confirmer la réception' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reçu ✓' })).toBeInTheDocument();
     expect(calls(server, 'POST')).toHaveLength(0);
   });
 
-  it('un refus du serveur reste dans la boîte, en français', async () => {
+  it('un refus du serveur reste dans le panneau, en français', async () => {
     fakeServer([
       { method: 'POST', match: /validate$/, status: 409, body: { message: 'Mode non pris en charge.', code: 'cotisation_mode_unsupported' } },
       { match: 'membership/payments', body: [payment()] },
     ]);
     const user = userEvent.setup();
     const { value } = renderInBureau(<AValiderPage />);
-    await user.click(await screen.findByRole('button', { name: 'Valider' }));
-    await user.click(screen.getByRole('button', { name: 'Valider et émettre le reçu' }));
+    await user.click(await screen.findByRole('button', { name: 'Reçu ✓' }));
+    await user.click(screen.getByRole('button', { name: 'Confirmer' }));
 
     await screen.findByText(/mode de cotisation de votre association n’est pas encore pris en charge/);
     expect(value.markModeUnsupported).toHaveBeenCalled();
   });
 });
 
-describe('B4 — rejeter (R9)', () => {
+describe('B4 — refuser', () => {
   it('refuse un motif de moins de 10 caractères, sans appeler l’API', async () => {
     const server = fakeServer([{ match: 'membership/payments', body: [payment()] }]);
     const user = userEvent.setup();
     renderInBureau(<AValiderPage />);
-    await user.click(await screen.findByRole('button', { name: 'Rejeter' }));
+    await user.click(await screen.findByRole('button', { name: 'Refuser' }));
 
-    const dialog = screen.getByRole('dialog', { name: 'Rejeter cette déclaration ?' });
-    expect(within(dialog).getByText('TEST-F1')).toBeInTheDocument();
-    await user.type(within(dialog).getByLabelText(/Motif du rejet/), '  trop  ');
-    await user.click(within(dialog).getByRole('button', { name: 'Rejeter la déclaration' }));
+    await user.type(screen.getByLabelText(/Motif du refus/), '  trop  ');
+    await user.click(screen.getByRole('button', { name: 'Refuser le paiement' }));
 
-    expect(within(dialog).getByText(/10 caractères au moins/)).toBeInTheDocument();
+    expect(screen.getByText(/10 caractères au moins/)).toBeInTheDocument();
     expect(calls(server, 'POST')).toHaveLength(0);
   });
 
-  it('ne promet pas au bureau que le membre lira le motif : sa page ne le sert pas', async () => {
-    // Contrat §8 : la charge publique du membre ne porte aucun rejet ni motif.
-    fakeServer([
-      { method: 'POST', match: /reject$/, body: payment({ status: 'rejected', rejection_reason: 'Référence introuvable.' }) },
-      { match: 'membership/payments', body: [payment()] },
-    ]);
+  it('le texte d’aide dit la vérité : le membre lira le motif sur sa page', async () => {
+    fakeServer([{ match: 'membership/payments', body: [payment()] }]);
     const user = userEvent.setup();
     renderInBureau(<AValiderPage />);
-    await user.click(await screen.findByRole('button', { name: 'Rejeter' }));
+    await user.click(await screen.findByRole('button', { name: 'Refuser' }));
 
-    const dialog = screen.getByRole('dialog', { name: 'Rejeter cette déclaration ?' });
-    expect(within(dialog).queryByText(/membre verra/)).not.toBeInTheDocument();
-    expect(within(dialog).getByText(/ne s’affiche pas sur la page du membre/)).toBeInTheDocument();
-
-    await user.type(within(dialog).getByLabelText(/Motif du rejet/), 'Référence introuvable.');
-    await user.click(within(dialog).getByRole('button', { name: 'Rejeter la déclaration' }));
-
-    const notice = await screen.findByText(/rejetée\./);
-    expect(notice.textContent).not.toMatch(/verra le motif/);
-    expect(notice.textContent).toMatch(/prévenez-le/);
+    const reason = screen.getByLabelText(/Motif du refus/);
+    const hint = screen.getByText('Ce motif sera affiché au membre sur sa page.');
+    expect(reason.getAttribute('aria-describedby')).toContain(hint.id);
+    expect(document.body.textContent).not.toMatch(/ne s’affiche pas sur la page du membre/);
   });
 
-  it('envoie le motif, puis retire la ligne de la file', async () => {
+  it('envoie le motif, retire la ligne, et annonce que le membre le verra', async () => {
     const reason = 'Référence introuvable chez Orange Money.';
     const server = fakeServer([
       { method: 'POST', match: /reject$/, body: payment({ status: 'rejected', rejection_reason: reason }) },
@@ -269,14 +285,17 @@ describe('B4 — rejeter (R9)', () => {
     ]);
     const user = userEvent.setup();
     renderInBureau(<AValiderPage />);
-    await user.click(await screen.findByRole('button', { name: 'Rejeter' }));
-    await user.type(screen.getByLabelText(/Motif du rejet/), reason);
-    await user.click(screen.getByRole('button', { name: 'Rejeter la déclaration' }));
+    await user.click(await screen.findByRole('button', { name: 'Refuser' }));
+    await user.type(screen.getByLabelText(/Motif du refus/), reason);
+    await user.click(screen.getByRole('button', { name: 'Refuser le paiement' }));
 
-    await screen.findByText(/rejetée\. Le membre peut en déclarer une nouvelle/);
+    await screen.findByText(
+      fullText('Paiement de Moussa Ndiaye (test) (100 000 FCFA) refusé. Le membre verra le motif sur sa page et pourra signaler à nouveau son paiement.'),
+    );
     const posts = calls(server, 'POST');
     expect(posts).toHaveLength(1);
     expect(posts[0]?.url).toMatch(/\/reject$/);
     expect(JSON.parse(posts[0]?.init.body as string)).toEqual({ reason });
+    expect(screen.queryByRole('button', { name: 'Reçu ✓' })).not.toBeInTheDocument();
   });
 });
