@@ -1,35 +1,33 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { DeclarationForm } from '@/components/DeclarationForm';
 import {
   InvalidLink,
   Loading,
   TechnicalError,
   Unavailable,
 } from '@/components/Fallbacks';
-import { CheckIcon, ClockIcon, DocumentIcon } from '@/components/Icons';
+import { CheckIcon, ClockIcon } from '@/components/Icons';
 import { Pastille } from '@/components/Pastille';
 import { PaymentHowTo } from '@/components/PaymentHowTo';
+import { PaymentSheet } from '@/components/PaymentSheet';
 import { ReceiptList } from '@/components/ReceiptList';
 import { Card, Shell } from '@/components/Shell';
 import { fetchMember } from '@/lib/api';
-import { formatDate, formatDateTime, isPast } from '@/lib/dates';
+import { formatDate, isPast } from '@/lib/dates';
 import { resolveMemberState, screenForError } from '@/lib/state';
 import { resolveTenant } from '@/lib/tenant';
-import type {
-  Due,
-  MemberPayload,
-  Organisation,
-  PaymentMethod,
-  ScreenState,
-} from '@/lib/types';
+import type { LastRejection, MemberPayload, ScreenState } from '@/lib/types';
 
 type Notice = { message: string; tone: 'paid' | 'info' };
 
 /**
  * L'écran du membre, de bout en bout : résolution du tenant, chargement,
  * et rendu des états E1 à E9.
+ *
+ * Étape 1 : un seul geste. Le membre voit ce qu'il doit, copie un numéro,
+ * paie dans Wave ou Orange Money, revient et touche « J'ai payé », puis
+ * « Confirmer ». Rien d'autre n'est exigé de lui.
  *
  * R2 : tout se passe dans le navigateur. R5 : aucun cache, chaque visite
  * interroge l'API.
@@ -38,8 +36,9 @@ export function MemberPage({ token }: { token: string }) {
   const [screen, setScreen] = useState<ScreenState>({ kind: 'loading' });
   const [tenant, setTenant] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
-  const [formOpen, setFormOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [justSent, setJustSent] = useState(false);
   const noticeRef = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
@@ -67,7 +66,7 @@ export function MemberPage({ token }: { token: string }) {
     return () => controller.abort();
   }, [token, attempt]);
 
-  // Le focus suit l'information : succès de l'envoi, ou message du serveur.
+  // Le focus suit l'information : message du serveur.
   useEffect(() => {
     if (notice) noticeRef.current?.focus();
   }, [notice]);
@@ -79,18 +78,17 @@ export function MemberPage({ token }: { token: string }) {
     reload();
   }, [reload]);
 
-  const onDeclared = useCallback(
-    (message: string) => {
-      setFormOpen(false);
-      setNotice({ message, tone: 'paid' });
-      reload();
-    },
-    [reload],
-  );
+  // 201 : l'écran E4 dit lui-même « Merci » ; aucun message en plus.
+  const onDeclared = useCallback(() => {
+    setSheetOpen(false);
+    setNotice(null);
+    setJustSent(true);
+    reload();
+  }, [reload]);
 
   const onNeedsReload = useCallback(
     (message: string) => {
-      setFormOpen(false);
+      setSheetOpen(false);
       setNotice({ message, tone: 'info' });
       reload();
     },
@@ -140,9 +138,13 @@ export function MemberPage({ token }: { token: string }) {
 
   const { payload } = screen;
   const state = resolveMemberState(payload);
+  const due = payload.due;
 
   return (
-    <Shell organisationName={payload.organisation.name}>
+    <Shell
+      organisationName={payload.organisation.name}
+      logoUrl={payload.organisation.logo_url}
+    >
       {notice ? (
         <p
           ref={noticeRef}
@@ -162,42 +164,59 @@ export function MemberPage({ token }: { token: string }) {
       <Greeting state={state} memberName={payload.member.name} />
 
       {state === 'E2' ? <UpToDate payload={payload} /> : null}
-      {state === 'E4' ? <PendingDeclarationBlock payload={payload} /> : null}
+      {state === 'E4' ? (
+        <PendingBlock payload={payload} focusOnMount={justSent} />
+      ) : null}
       {state === 'E5' ? <AmountUnknown /> : null}
       {state === 'E6' ? <NothingDue /> : null}
 
+      {(state === 'E3' || state === 'E3b') && due ? (
+        <>
+          {payload.last_rejection ? (
+            <RejectionNotice rejection={payload.last_rejection} />
+          ) : null}
+          <DueBlock payload={payload} partial={state === 'E3b'} />
+          <PaymentHowTo organisation={payload.organisation} />
+        </>
+      ) : null}
+
+      <ReceiptList receipts={payload.receipts} token={token} tenant={tenant} />
+
+      <div className="grow" />
+
       {state === 'E3' || state === 'E3b' ? (
-        <DueBlock
-          payload={payload}
+        // Le seul bouton principal, collé au bas de l'écran : visible sans
+        // défiler sur un téléphone de 360 px, quelle que soit la hauteur de
+        // ce qui précède.
+        <div className="sticky bottom-0 -mx-4 border-t border-line bg-surface px-4 pt-3 pb-3">
+          <button
+            type="button"
+            onClick={() => {
+              setNotice(null);
+              setSheetOpen(true);
+            }}
+            className="flex h-14 w-full items-center justify-center rounded-[var(--radius-md)] bg-indigo text-[18px] font-bold text-on-indigo"
+          >
+            J’ai payé
+          </button>
+        </div>
+      ) : (
+        <p className="small m-0 text-center text-ink-muted">
+          Gardez ce lien : il vous servira pour vos prochaines cotisations.
+        </p>
+      )}
+
+      {sheetOpen && due && (state === 'E3' || state === 'E3b') ? (
+        <PaymentSheet
           token={token}
           tenant={tenant}
-          partial={state === 'E3b'}
-          formOpen={formOpen}
-          onOpenForm={() => {
-            setNotice(null);
-            setFormOpen(true);
-          }}
-          onCloseForm={() => setFormOpen(false)}
+          organisation={payload.organisation}
+          balance={due.balance ?? 0}
+          balanceFormatted={due.balance_formatted}
           onDeclared={onDeclared}
           onNeedsReload={onNeedsReload}
+          onCancel={() => setSheetOpen(false)}
         />
-      ) : null}
-
-      {state === 'E2' || state === 'E4' ? (
-        <ReceiptList
-          receipts={payload.receipts}
-          token={token}
-          tenant={tenant}
-        />
-      ) : null}
-
-      {state === 'E2' || state === 'E4' ? (
-        <>
-          <div className="grow" />
-          <p className="small m-0 text-center text-ink-muted">
-            Gardez ce lien : il vous servira pour vos prochaines cotisations.
-          </p>
-        </>
       ) : null}
     </Shell>
   );
@@ -211,21 +230,21 @@ function Greeting({
   memberName: string;
 }) {
   const name = memberName.trim();
-  const title = state === 'E4' ? (name ? `Merci, ${name}` : 'Merci') : name ? `Bonjour ${name}` : 'Bonjour';
 
-  const subtitles: Record<typeof state, string> = {
+  const subtitles: Record<typeof state, string | null> = {
     E2: 'Merci pour votre cotisation.',
-    E3: 'Voici votre cotisation.',
+    E3: null,
     E3b: 'Votre acompte a bien été reçu.',
-    E4: 'Votre confirmation est bien arrivée.',
+    E4: null,
     E5: 'Votre cotisation est en préparation.',
     E6: 'Rien à régler pour l’instant.',
   };
+  const subtitle = subtitles[state];
 
   return (
     <div className="flex flex-col gap-1">
-      <h1 className="title m-0">{title}</h1>
-      <p className="m-0 text-ink-muted">{subtitles[state]}</p>
+      <h1 className="heading m-0">{name ? `Bonjour ${name}` : 'Bonjour'}</h1>
+      {subtitle ? <p className="m-0 text-ink-muted">{subtitle}</p> : null}
     </div>
   );
 }
@@ -248,38 +267,88 @@ function UpToDate({ payload }: { payload: MemberPayload }) {
   );
 }
 
-/** E4 — déclaration en attente de validation. Pas de formulaire. */
-function PendingDeclarationBlock({ payload }: { payload: MemberPayload }) {
+/** E4 — paiement signalé, en attente du bureau. Pas de bouton. */
+function PendingBlock({
+  payload,
+  focusOnMount,
+}: {
+  payload: MemberPayload;
+  /** Vrai juste après l'envoi : le focus suit l'information. */
+  focusOnMount: boolean;
+}) {
+  const thanksRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (focusOnMount) thanksRef.current?.focus();
+  }, [focusOnMount]);
+
   const pending = payload.pending_declaration;
   if (!pending) return null;
 
-  const declaredOn = formatDateTime(pending.declared_at);
+  const reference = pending.reference?.trim();
+  const details = [
+    pending.method_label?.trim(),
+    reference ? `réf. ${reference}` : null,
+  ].filter(Boolean);
 
   return (
     <>
       <Card>
-        <div className="flex items-center justify-between gap-2">
-          <span className="label text-ink-muted">PAIEMENT DÉCLARÉ</span>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="label text-ink-muted">PAIEMENT SIGNALÉ</span>
           <Pastille tone="info" icon={<ClockIcon />}>
-            En attente de validation
+            En attente de confirmation
           </Pastille>
         </div>
         <div className="amount">{pending.amount_formatted}</div>
+        {details.length > 0 ? (
+          <p className="m-0 break-words text-ink-muted">{details.join(' · ')}</p>
+        ) : null}
       </Card>
 
-      <section className="flex items-start gap-3 px-1">
-        <DocumentIcon className="shrink-0 text-ink-muted" />
-        <p className="m-0">
-          Votre confirmation de {pending.amount_formatted}
-          {declaredOn ? `, envoyée le ${declaredOn},` : ''} est en cours de
-          vérification par le bureau. Votre reçu apparaîtra sur cette page.
-        </p>
-      </section>
+      <p
+        ref={thanksRef}
+        tabIndex={-1}
+        role="status"
+        className="m-0 rounded-[var(--radius-md)] bg-paid-soft p-4 font-semibold text-paid"
+      >
+        Merci. Le bureau confirmera votre paiement, et vous recevrez votre reçu
+        ici.
+      </p>
     </>
   );
 }
 
-/** E5 — le montant n'est pas encore fixé : le serveur refuserait la déclaration. */
+/**
+ * Le dernier paiement signalé a été refusé (v3.5.7). Le motif est écrit par le
+ * bureau pour le membre : il s'affiche tel quel, en texte (R8).
+ */
+function RejectionNotice({ rejection }: { rejection: LastRejection }) {
+  const reference = rejection.reference?.trim();
+  const details = [
+    rejection.method_label?.trim(),
+    reference ? `réf. ${reference}` : null,
+  ].filter(Boolean);
+  const reason = rejection.reason.trim();
+  // Un motif qui finit déjà sa phrase ne prend pas de second point.
+  const stop = /[.!?…]$/.test(reason) ? '' : '.';
+
+  return (
+    <section
+      aria-label="Paiement non confirmé"
+      className="rounded-[var(--radius-md)] border-l-4 border-late bg-late-soft p-4"
+    >
+      <p className="m-0 break-words">
+        Votre paiement de{' '}
+        <span className="money font-semibold">{rejection.amount_formatted}</span>
+        {details.length > 0 ? ` (${details.join(', ')})` : ''} n’a pas été
+        confirmé : <span className="whitespace-pre-line">{reason}</span>
+        {stop} Vous pouvez le signaler à nouveau.
+      </p>
+    </section>
+  );
+}
+
+/** E5 — le montant n'est pas encore fixé : le serveur refuserait le signalement. */
 function AmountUnknown() {
   return (
     <Card>
@@ -300,27 +369,13 @@ function NothingDue() {
   );
 }
 
-/** E3 / E3b — une cotisation est réclamable. */
+/** E3 / E3b — le montant, en très gros, et ce qu'il couvre. */
 function DueBlock({
   payload,
-  token,
-  tenant,
   partial,
-  formOpen,
-  onOpenForm,
-  onCloseForm,
-  onDeclared,
-  onNeedsReload,
 }: {
   payload: MemberPayload;
-  token: string;
-  tenant: string;
   partial: boolean;
-  formOpen: boolean;
-  onOpenForm: () => void;
-  onCloseForm: () => void;
-  onDeclared: (message: string) => void;
-  onNeedsReload: (message: string) => void;
 }) {
   const due = payload.due;
   if (!due) return null;
@@ -329,107 +384,41 @@ function DueBlock({
   const late = isPast(due.period_end);
   const periodStart = formatDate(due.period_start);
   const periodEnd = formatDate(due.period_end);
+  // Le libellé du serveur d'abord ; les dates relues en UTC à défaut.
+  const period =
+    due.period_label?.trim() ||
+    (periodStart && periodEnd ? `du ${periodStart} au ${periodEnd}` : '');
 
   return (
-    <>
-      <Card>
-        <div className="flex items-center justify-between gap-2">
-          <span className="label text-ink-muted">
-            {partial ? 'RESTE À PAYER' : 'À PAYER'}
-          </span>
-          <Pastille tone={late ? 'late' : 'due'}>
-            {late ? 'En retard' : 'À régler'}
-          </Pastille>
-        </div>
-
-        {/* R1 : jamais de montant recalculé, seulement le champ *_formatted. */}
-        <div className="amount">{due.balance_formatted}</div>
-
-        <p className="m-0">
-          {late && periodStart ? (
-            <>
-              Attendue depuis le {periodStart}.
-              <br />
-            </>
-          ) : null}
-          {periodStart && periodEnd
-            ? `Elle couvre la période du ${periodStart} au ${periodEnd}.`
-            : null}
-          {partial ? (
-            <>
-              <br />
-              Votre cotisation sera à jour dès que le reste sera réglé.
-            </>
-          ) : null}
-        </p>
-      </Card>
-
-      {partial ? <PartialBreakdown due={due} /> : null}
-
-      <PaymentHowTo organisation={payload.organisation} />
-
-      <ReceiptList receipts={payload.receipts} token={token} tenant={tenant} />
-
-      <div className="grow" />
-
-      {formOpen ? (
-        <DeclarationForm
-          token={token}
-          tenant={tenant}
-          balance={due.balance ?? 0}
-          defaultMethod={defaultMethodFor(payload.organisation)}
-          onDeclared={onDeclared}
-          onNeedsReload={onNeedsReload}
-          onCancel={onCloseForm}
-        />
-      ) : (
-        <button
-          type="button"
-          onClick={onOpenForm}
-          className="flex h-13 items-center justify-center rounded-[var(--radius-md)] bg-indigo text-[17px] font-bold text-on-indigo"
-        >
-          J’ai payé, je confirme
-        </button>
-      )}
-    </>
-  );
-}
-
-/** E3b — « Déjà réglé : X sur Y », détaillé comme la maquette Partiel. */
-function PartialBreakdown({ due }: { due: Due }) {
-  const periodStart = formatDate(due.period_start);
-  const periodEnd = formatDate(due.period_end);
-
-  return (
-    <Card className="gap-2">
-      <div className="flex justify-between gap-2">
-        <span className="text-ink-muted">Cotisation</span>
-        <span className="tnum">{due.amount_due_formatted}</span>
-      </div>
-      <div className="flex justify-between gap-2">
-        <span className="text-ink-muted">Déjà réglé</span>
-        <span className="tnum">{due.amount_paid_formatted}</span>
-      </div>
-      <div className="h-px bg-line" />
-      <div className="flex justify-between gap-2 font-bold">
-        <span>Reste à payer</span>
-        <span className="tnum">{due.balance_formatted}</span>
-      </div>
-      {periodStart && periodEnd ? (
-        <span className="small text-ink-muted">
-          Période du {periodStart} au {periodEnd}
+    <Card>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="label text-ink-muted">
+          {partial ? 'RESTE À PAYER' : 'À PAYER'}
         </span>
-      ) : null}
+        <Pastille tone={late ? 'late' : 'due'}>
+          {late ? 'En retard' : 'À régler'}
+        </Pastille>
+      </div>
+
+      {/* R1 : jamais de montant recalculé, seulement le champ *_formatted. */}
+      <div className="amount text-[clamp(28px,10vw,40px)] leading-[1.15]">{due.balance_formatted}</div>
+
+      <div className="small flex flex-col text-ink-muted">
+        {period ? <span>Cotisation {period}</span> : null}
+        {due.category_label?.trim() ? <span>{due.category_label}</span> : null}
+        {partial ? (
+          <span>
+            Déjà réglé : <span className="money">{due.amount_paid_formatted}</span>
+            {due.amount_due_formatted ? (
+              <>
+                {' '}
+                sur <span className="money">{due.amount_due_formatted}</span>
+              </>
+            ) : null}
+          </span>
+        ) : null}
+        {late && periodStart ? <span>Attendue depuis le {periodStart}.</span> : null}
+      </div>
     </Card>
   );
-}
-
-/**
- * Le mode présélectionné suit ce que l'association accepte réellement : inutile
- * de proposer Orange Money d'abord si seul Wave est servi.
- */
-function defaultMethodFor(organisation: Organisation): PaymentMethod {
-  if (organisation.om_merchant_number) return 'om';
-  if (organisation.wave_merchant_number) return 'wave';
-  return 'om';
 }

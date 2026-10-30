@@ -67,6 +67,12 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Un montant ne se coupe jamais en deux lignes (« 250 000 » / « FCFA »). */
+.amount,
+.money {
+  white-space: nowrap;
+}
+
 a {
   color: var(--link);
 }

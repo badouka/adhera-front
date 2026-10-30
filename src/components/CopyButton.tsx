@@ -18,12 +18,15 @@ export function CopyButton({
   value,
   label,
   selectRef,
+  large = false,
 }: {
   value: string;
   /** Ce que lit un lecteur d'écran : « Copier le numéro Orange Money ». */
   label: string;
   /** L'élément à sélectionner si le presse-papiers est indisponible. */
   selectRef?: React.RefObject<HTMLElement | null>;
+  /** Pleine largeur, pour la carte d'un numéro marchand. */
+  large?: boolean;
 }) {
   const [outcome, setOutcome] = useState<Outcome>('idle');
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -92,7 +95,15 @@ export function CopyButton({
         type="button"
         onClick={copy}
         aria-label={label}
-        className="small inline-flex min-h-11 shrink-0 items-center gap-[6px] rounded-[var(--radius-sm)] border border-line-strong bg-surface-raised px-3 font-semibold text-ink"
+        className={
+          large
+            ? `flex h-12 w-full items-center justify-center gap-2 rounded-[var(--radius-md)] border-2 font-bold ${
+                outcome === 'copied'
+                  ? 'border-paid bg-paid-soft text-paid'
+                  : 'border-indigo bg-surface-raised text-indigo'
+              }`
+            : 'small inline-flex min-h-11 shrink-0 items-center gap-[6px] rounded-[var(--radius-sm)] border border-line-strong bg-surface-raised px-3 font-semibold text-ink'
+        }
       >
         {outcome === 'copied' ? null : <CopyIcon />}
         {outcome === 'copied' ? 'Copié' : 'Copier'}

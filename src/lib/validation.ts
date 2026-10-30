@@ -3,7 +3,7 @@
  * l'autorité : ces contrôles évitent un aller-retour, ils ne le remplacent pas.
  */
 
-import { METHODS_REQUIRING_REFERENCE, type PaymentMethod } from './types';
+import type { PaymentMethod } from './types';
 
 /** 10 Mo, comme `max:10240` (Ko) côté Laravel. */
 export const MAX_PROOF_BYTES = 10 * 1024 * 1024;
@@ -56,10 +56,10 @@ export function proofError(file: File): string | null {
     (file.type === '' && ALLOWED_PROOF_EXTENSIONS.some((e) => name.endsWith(e)));
 
   if (!typeOk) {
-    return 'Le justificatif doit être une image JPG, PNG ou WebP, ou un PDF.';
+    return 'La capture doit être une image JPG, PNG ou WebP, ou un PDF.';
   }
   if (file.size > MAX_PROOF_BYTES) {
-    return 'Le justificatif ne doit pas dépasser 10 Mo.';
+    return 'La capture ne doit pas dépasser 10 Mo.';
   }
   return null;
 }
@@ -82,11 +82,9 @@ export function validateDeclaration(
     errors.amount = 'Le montant ne peut pas dépasser ce qui reste à payer.';
   }
 
+  // v3.5.7 : la référence n'est plus exigée d'aucun mode.
   const reference = draft.reference.trim();
-  if (METHODS_REQUIRING_REFERENCE.has(draft.method) && reference === '') {
-    errors.reference =
-      'Recopiez la référence de la transaction : elle figure dans le SMS.';
-  } else if (reference.length > MAX_REFERENCE_LENGTH) {
+  if (reference.length > MAX_REFERENCE_LENGTH) {
     errors.reference = 'La référence ne doit pas dépasser 255 caractères.';
   }
 

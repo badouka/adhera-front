@@ -3,7 +3,8 @@
  * @vitest-environment-options { "url": "https://demo-asso.adhera.africa/m/aaaa" }
  */
 
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemberPage } from '@/app/m/[token]/MemberPage';
 import { DUE, DUE_PARTIAL, fakeResponse, payload, TOKEN } from './fixtures';
@@ -48,7 +49,7 @@ describe('le tenant et l’en-tête', () => {
 
   it('n’affiche pas d’en-tête vide quand le nom de l’organisation est vide', async () => {
     renderWith(
-      fakeResponse(200, payload({ organisation: { name: '', om_merchant_number: null, wave_merchant_number: null, payment_instructions: null } })),
+      fakeResponse(200, payload({ organisation: { name: '', logo_url: null, om_merchant_number: null, wave_merchant_number: null, payment_instructions: null } })),
     );
 
     await screen.findByText(/Bonjour Awa Diallo/);
@@ -128,7 +129,7 @@ describe('E2 — à jour', () => {
 
     await screen.findByText('Mes reçus');
     expect(
-      screen.getByText('Cotisation de 250 000 FCFA'),
+      screen.getByText((_, el) => el?.textContent === 'Cotisation de 250 000 FCFA' && el.tagName === 'SPAN' && el.classList.contains('font-semibold')),
     ).toBeInTheDocument();
     expect(
       screen.getByText('Reçu REC-2026-0012 du 13 novembre 2026'),
@@ -166,16 +167,31 @@ describe('E3 — cotisation due', () => {
 
     await screen.findByText('À PAYER');
     expect(screen.getByText('250 000 FCFA')).toBeInTheDocument();
+    // `period_label` et `category_label`, tels que servis.
     expect(
-      screen.getByText(/Elle couvre la période du 5 novembre 2025 au 4 novembre 2026\./),
+      screen.getByText('Cotisation du 5 novembre 2025 au 4 novembre 2026'),
     ).toBeInTheDocument();
+    expect(screen.getByText('Membre actif')).toBeInTheDocument();
     expect(screen.getByText('77 000 00 00')).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Copier le numéro Orange Money' }),
     ).toBeInTheDocument();
   });
 
-  it('dit « J’ai payé, je confirme », jamais « Payer »', async () => {
+  it('sans `period_label`, la période se relit depuis les dates', async () => {
+    renderWith(
+      fakeResponse(
+        200,
+        payload({
+          standing: { is_up_to_date: false, covered_until: null },
+          due: { ...DUE, period_label: null },
+        }),
+      ),
+    );
+    await screen.findByText('Cotisation du 5 novembre 2025 au 4 novembre 2026');
+  });
+
+  it('un seul bouton principal : « J’ai payé », jamais « Payer »', async () => {
     renderWith(
       fakeResponse(
         200,
@@ -186,10 +202,15 @@ describe('E3 — cotisation due', () => {
       ),
     );
 
-    await screen.findByRole('button', { name: 'J’ai payé, je confirme' });
+    await screen.findByRole('button', { name: 'J’ai payé' });
     expect(
       screen.queryByRole('button', { name: /^Payer$/ }),
     ).not.toBeInTheDocument();
+    // Les autres boutons sont des « Copier » : un seul geste principal.
+    const others = screen
+      .getAllByRole('button')
+      .filter((b) => b.textContent !== 'J’ai payé' && !/Copier/.test(b.textContent ?? ''));
+    expect(others).toEqual([]);
   });
 
   it('marque « En retard » quand la fin de période est passée', async () => {
@@ -235,6 +256,7 @@ describe('E3 — cotisation due', () => {
         payload({
           organisation: {
             name: 'Association Démo',
+            logo_url: null,
             om_merchant_number: '77 000 00 00',
             wave_merchant_number: '78 111 11 11',
             payment_instructions: 'Guichet ouvert\nle samedi matin.',
@@ -263,6 +285,7 @@ describe('E3 — cotisation due', () => {
         payload({
           organisation: {
             name: 'Association Démo',
+            logo_url: null,
             om_merchant_number: null,
             wave_merchant_number: null,
             payment_instructions: '<img src=x onerror=alert(1)>Payez au bureau.',
@@ -293,54 +316,211 @@ describe('E3b — partiel', () => {
     );
 
     await screen.findByText('RESTE À PAYER');
-    expect(screen.getByText('Déjà réglé')).toBeInTheDocument();
-    expect(screen.getByText('100 000 FCFA')).toBeInTheDocument();
-    expect(screen.getByText('250 000 FCFA')).toBeInTheDocument();
-    // Le reste à payer apparaît deux fois : en gros, et dans le détail.
-    expect(screen.getAllByText('150 000 FCFA')).toHaveLength(2);
+    expect(screen.getByText('150 000 FCFA')).toBeInTheDocument();
+    expect(
+      screen.getByText((_, el) => el?.tagName === 'SPAN' && el.textContent === 'Déjà réglé : 100 000 FCFA sur 250 000 FCFA'),
+    ).toBeInTheDocument();
   });
 });
 
-describe('E4 — déclaration en attente', () => {
+describe('E4 — paiement signalé, en attente', () => {
   const pending = payload({
     standing: { is_up_to_date: false, covered_until: null },
     due: DUE,
     pending_declaration: {
       amount: 250000,
       amount_formatted: '250 000 FCFA',
+      method_label: 'Wave',
+      reference: null,
       declared_at: '2026-11-12T10:30:00Z',
     },
   });
 
-  it('annonce la vérification par le bureau', async () => {
+  it('remercie, et annonce la confirmation par le bureau', async () => {
     renderWith(fakeResponse(200, pending));
 
-    await screen.findByText('En attente de validation');
+    await screen.findByText('En attente de confirmation');
     expect(
       screen.getByText(
-        /Votre confirmation de 250 000 FCFA, envoyée le 12 novembre 2026, est en cours de vérification par le bureau\. Votre reçu apparaîtra sur cette page\./,
+        'Merci. Le bureau confirmera votre paiement, et vous recevrez votre reçu ici.',
       ),
     ).toBeInTheDocument();
+    expect(screen.getByText('250 000 FCFA')).toBeInTheDocument();
   });
 
-  it('n’affiche pas de formulaire', async () => {
+  it('affiche le mode, et la référence quand elle est servie', async () => {
     renderWith(fakeResponse(200, pending));
+    await screen.findByText('Wave');
+    cleanup();
 
-    await screen.findByText('En attente de validation');
-    expect(
-      screen.queryByRole('button', { name: 'J’ai payé, je confirme' }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: 'Envoyer ma confirmation' }),
-    ).not.toBeInTheDocument();
+    renderWith(
+      fakeResponse(200, {
+        ...pending,
+        pending_declaration: { ...pending.pending_declaration, reference: 'TX-42' },
+      }),
+    );
+    await screen.findByText('Wave · réf. TX-42');
   });
 
-  it('n’invente ni mode ni référence : l’API ne les sert pas', async () => {
+  it('n’affiche pas de bouton « J’ai payé »', async () => {
     renderWith(fakeResponse(200, pending));
 
-    await screen.findByText('En attente de validation');
-    expect(screen.queryByText('Avec')).not.toBeInTheDocument();
-    expect(screen.queryByText('Référence')).not.toBeInTheDocument();
+    await screen.findByText('En attente de confirmation');
+    expect(screen.queryByRole('button', { name: 'J’ai payé' })).not.toBeInTheDocument();
+  });
+});
+
+describe('le rejet est visible (`last_rejection`)', () => {
+  const REJECTION = {
+    amount_formatted: '50 000 FCFA',
+    method_label: 'Wave',
+    reference: null,
+    reason: 'Aucun transfert Wave reçu à ce montant. Merci de renvoyer la capture.',
+    decided_at: '2026-10-30T12:47:11+00:00',
+  };
+  const rejected = payload({
+    standing: { is_up_to_date: false, covered_until: null },
+    due: DUE,
+    last_rejection: REJECTION,
+  });
+
+  function rejectionText(): string | null | undefined {
+    return screen.queryByRole('region', { name: 'Paiement non confirmé' })?.textContent;
+  }
+
+  it('l’encart s’affiche au-dessus du montant, motif tel quel', async () => {
+    renderWith(fakeResponse(200, rejected));
+    const region = await screen.findByRole('region', { name: 'Paiement non confirmé' });
+    expect(region.textContent).toBe(
+      'Votre paiement de 50 000 FCFA (Wave) n’a pas été confirmé : Aucun transfert Wave reçu à ce montant. Merci de renvoyer la capture. Vous pouvez le signaler à nouveau.',
+    );
+    // Au-dessus du montant.
+    const amount = screen.getByText('250 000 FCFA');
+    expect(region.compareDocumentPosition(amount) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // « J'ai payé » reste le geste suivant.
+    expect(screen.getByRole('button', { name: 'J’ai payé' })).toBeInTheDocument();
+  });
+
+  it('cite la référence quand elle existe, et ajoute le point manquant', async () => {
+    renderWith(
+      fakeResponse(200, {
+        ...rejected,
+        last_rejection: { ...REJECTION, reference: 'TX-9', reason: 'Référence introuvable chez Wave' },
+      }),
+    );
+    await screen.findByRole('region', { name: 'Paiement non confirmé' });
+    expect(rejectionText()).toBe(
+      'Votre paiement de 50 000 FCFA (Wave, réf. TX-9) n’a pas été confirmé : Référence introuvable chez Wave. Vous pouvez le signaler à nouveau.',
+    );
+  });
+
+  it('le motif est échappé, jamais interprété (R8)', async () => {
+    renderWith(
+      fakeResponse(200, {
+        ...rejected,
+        last_rejection: { ...REJECTION, reason: '<img src=x onerror=alert(1)>' },
+      }),
+    );
+    await screen.findByRole('region', { name: 'Paiement non confirmé' });
+    expect(rejectionText()).toContain('<img src=x onerror=alert(1)>');
+    expect(document.querySelector('img[src="x"]')).toBeNull();
+  });
+
+  it('se masque quand `last_rejection` vaut null', async () => {
+    renderWith(fakeResponse(200, { ...rejected, last_rejection: null }));
+    await screen.findByText('À PAYER');
+    expect(rejectionText()).toBeUndefined();
+  });
+
+  it('disparaît après un nouveau signalement', async () => {
+    const user = userEvent.setup();
+    const pendingAfter = {
+      ...rejected,
+      last_rejection: null,
+      pending_declaration: {
+        amount: 250000,
+        amount_formatted: '250 000 FCFA',
+        method_label: 'Wave',
+        reference: null,
+        declared_at: '2026-11-12T10:30:00Z',
+      },
+    };
+    fetchMock
+      .mockResolvedValueOnce(fakeResponse(200, rejected))
+      .mockResolvedValueOnce(fakeResponse(201, { declared: true }))
+      .mockResolvedValueOnce(fakeResponse(200, pendingAfter));
+    render(<MemberPage token={TOKEN} />);
+
+    await screen.findByRole('region', { name: 'Paiement non confirmé' });
+    await user.click(screen.getByRole('button', { name: 'J’ai payé' }));
+    await user.click(screen.getByRole('button', { name: 'Confirmer' }));
+
+    await screen.findByText('En attente de confirmation');
+    expect(rejectionText()).toBeUndefined();
+  });
+});
+
+describe('vocabulaire — ce que lit le membre', () => {
+  const BANNED = /d[ée]clar|justificatif/i;
+
+  it('aucun état ne dit « déclar… » ni « justificatif », feuille dépliée comprise', async () => {
+    const user = userEvent.setup();
+    const states = [
+      payload(),
+      payload({ standing: { is_up_to_date: false, covered_until: null }, due: DUE_PARTIAL }),
+      payload({
+        standing: { is_up_to_date: false, covered_until: null },
+        due: DUE,
+        pending_declaration: {
+          amount: 1, amount_formatted: '1 FCFA', method_label: 'Wave', reference: 'X', declared_at: '2026-11-12T10:30:00Z',
+        },
+      }),
+      payload({ standing: { is_up_to_date: false, covered_until: null }, due: { ...DUE, amount_due: null } }),
+      payload({ standing: { is_up_to_date: false, covered_until: null } }),
+    ];
+    for (const state of states) {
+      fetchMock.mockResolvedValueOnce(fakeResponse(200, state));
+      render(<MemberPage token={TOKEN} />);
+      await screen.findByText('Propulsé par Adhera');
+      await waitFor(() => expect(document.body.textContent).toMatch(/Bonjour/));
+      expect(document.body.textContent).not.toMatch(BANNED);
+      cleanup();
+    }
+
+    // E3, feuille ouverte et tout déplié.
+    fetchMock.mockResolvedValue(fakeResponse(200, payload({
+      standing: { is_up_to_date: false, covered_until: null }, due: DUE,
+    })));
+    render(<MemberPage token={TOKEN} />);
+    await user.click(await screen.findByRole('button', { name: 'J’ai payé' }));
+    const dialog = screen.getByRole('dialog');
+    for (const name of [
+      'Payer un autre montant ?',
+      'Ajouter la référence du transfert (facultatif)',
+      'Ajouter une capture d’écran (facultatif)',
+    ]) {
+      await user.click(within(dialog).getByRole('button', { name }));
+    }
+    expect(document.body.textContent).not.toMatch(BANNED);
+  });
+});
+
+describe('le logo de l’association', () => {
+  it('s’affiche à côté du nom quand `logo_url` est servi', async () => {
+    const logo = 'https://api.eventflow.africa/storage-tenantdemo-asso/membership/logo-e40fd0e4.png';
+    renderWith(
+      fakeResponse(200, payload({ organisation: { ...payload().organisation, logo_url: logo } })),
+    );
+    await screen.findByText('Association Démo');
+    const img = document.querySelector('header img');
+    expect(img).toHaveAttribute('src', logo);
+    expect(img).toHaveAttribute('referrerpolicy', 'no-referrer');
+  });
+
+  it('rien quand il est null', async () => {
+    renderWith(fakeResponse(200, payload()));
+    await screen.findByText('Association Démo');
+    expect(document.querySelector('header img')).toBeNull();
   });
 });
 

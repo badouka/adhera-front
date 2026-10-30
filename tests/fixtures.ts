@@ -1,7 +1,7 @@
 import type { MemberPayload } from '@/lib/types';
 
 /**
- * Une charge utile simulée, calquée sur le contrat v3.5.1. Les montants
+ * Une charge utile simulée, calquée sur le contrat v3.5.7. Les montants
  * `*_formatted` sont ceux que le serveur rendrait : le client ne les recalcule
  * jamais (R1).
  */
@@ -9,14 +9,16 @@ export function payload(overrides: Partial<MemberPayload> = {}): MemberPayload {
   return {
     organisation: {
       name: 'Association Démo',
+      logo_url: null,
       om_merchant_number: '77 000 00 00',
       wave_merchant_number: null,
       payment_instructions: null,
     },
-    member: { name: 'Awa Diallo' },
+    member: { name: 'Awa Diallo', first_name: 'Awa', last_name: 'Diallo' },
     standing: { is_up_to_date: true, covered_until: '2027-03-13' },
     due: null,
     pending_declaration: null,
+    last_rejection: null,
     receipts: [],
     ...overrides,
   };
@@ -26,6 +28,8 @@ export function payload(overrides: Partial<MemberPayload> = {}): MemberPayload {
 export const DUE = {
   period_start: '2025-11-05',
   period_end: '2026-11-04',
+  period_label: 'du 5 novembre 2025 au 4 novembre 2026',
+  category_label: 'Membre actif',
   amount_due: 250000,
   amount_due_formatted: '250 000 FCFA',
   amount_paid: 0,

@@ -37,7 +37,7 @@ export function ReceiptList({
               <DownloadIcon className="shrink-0 text-indigo" />
               <span className="flex min-w-0 grow flex-col">
                 <span className="font-semibold tnum">
-                  Cotisation de {receipt.amount_formatted}
+                  Cotisation de <span className="money">{receipt.amount_formatted}</span>
                 </span>
                 <span className="small text-ink-muted">
                   Reçu {receipt.reference} du {formatDateTime(receipt.issued_at)}
