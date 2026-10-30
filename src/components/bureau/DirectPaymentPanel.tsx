@@ -188,6 +188,9 @@ export function DirectPaymentPanel({
                 inputMode="numeric"
                 autoComplete="off"
                 value={amount}
+                // Le solde prérempli se remplace d'une frappe, sans l'effacer chiffre
+                // par chiffre.
+                onFocus={(e) => e.currentTarget.select()}
                 onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ''))}
                 className="tnum min-w-0 grow border-0 bg-transparent text-[20px] font-bold text-ink outline-none"
               />

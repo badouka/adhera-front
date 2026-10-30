@@ -332,6 +332,9 @@ export function PaymentSheet({
                   inputMode="numeric"
                   autoComplete="off"
                   value={amount}
+                  // Le solde prérempli se remplace d'une frappe, sans l'effacer chiffre
+                  // par chiffre.
+                  onFocus={(e) => e.currentTarget.select()}
                   onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ''))}
                   aria-invalid={errors.amount ? true : undefined}
                   aria-describedby={`${amountId}-hint${errors.amount ? ` ${amountId}-error` : ''}`}
