@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { CheckIcon } from '@/components/Icons';
 import { Pastille } from '@/components/Pastille';
 import type { MemberListItem } from '@/lib/bureau/types';
@@ -23,11 +24,15 @@ export function StandingPastille({ member }: { member: MemberListItem }) {
  * ⚠️ `balance_due_formatted: null` veut dire INCONNU, jamais « rien à payer »
  * (piège 4) : on affiche « — », jamais « 0 FCFA ».
  */
-export function standingDetail(member: MemberListItem): string {
+export function standingDetail(member: MemberListItem): ReactNode {
   if (member.status === 'pending') return 'Candidature en attente';
   if (member.is_up_to_date) {
     const until = formatDate(member.covered_until);
     return until ? `Couvert jusqu’au ${until}` : 'À jour';
   }
-  return `Reste à payer ${member.balance_due_formatted ?? '—'}`;
+  return (
+    <>
+      Reste à payer <span className="money">{member.balance_due_formatted ?? '—'}</span>
+    </>
+  );
 }

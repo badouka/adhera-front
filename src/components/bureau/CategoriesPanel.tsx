@@ -215,7 +215,12 @@ export function CategoriesPanel() {
                   <span className="font-semibold break-words">{category.label}</span>
                   <span className="small tnum text-ink-muted">
                     {CATEGORY_MODES[category.mode] ?? category.mode}
-                    {category.amount_formatted ? ` — ${category.amount_formatted}` : ''}
+                    {category.amount_formatted ? (
+                      <>
+                        {' — '}
+                        <span className="money">{category.amount_formatted}</span>
+                      </>
+                    ) : null}
                   </span>
                   {category.is_calculable ? null : (
                     <span className="small font-semibold text-due">

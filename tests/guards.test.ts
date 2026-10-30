@@ -82,10 +82,11 @@ export function stripComments(source: string): string {
 describe('R1 — aucun formatage de montant côté client', () => {
   const FORBIDDEN = ['toLocaleString(', 'Intl.NumberFormat', 'toFixed('];
 
-  it('ne formate aucun nombre dans src/', () => {
+  it('ne formate aucun nombre dans src/, hors du helper de saisie (§ D)', () => {
     const offenders: string[] = [];
 
     for (const file of walk(SRC, ['.ts', '.tsx'])) {
+      if (file === TYPED_AMOUNT) continue;
       const code = stripComments(readFileSync(file, 'utf8'));
       for (const needle of FORBIDDEN) {
         if (code.includes(needle)) {
@@ -107,6 +108,49 @@ describe('R1 — aucun formatage de montant côté client', () => {
     expect(stripComments("const u = 'https://a'; y.toFixed(1);")).toContain(
       'toFixed(',
     );
+  });
+});
+
+/**
+ * § D — l'exception UNIQUE à R1 : `formatTypedAmount` réaffiche la saisie de
+ * l'utilisateur avant l'envoi. Seuls les composants de saisie de montant ont
+ * le droit de l'importer.
+ */
+const TYPED_AMOUNT = join(SRC, 'lib', 'typedAmount.ts');
+const TYPED_AMOUNT_ALLOWED = [
+  join(SRC, 'components', 'PaymentSheet.tsx'),
+  join(SRC, 'components', 'bureau', 'DirectPaymentPanel.tsx'),
+];
+
+/** Vrai si le code importe le helper, quel que soit le chemin employé. */
+export function importsTypedAmount(code: string): boolean {
+  return /from\s+['"][^'"]*typedAmount['"]/.test(code) || /\bformatTypedAmount\b/.test(code);
+}
+
+describe('§ D — formatTypedAmount, réservé aux composants de saisie', () => {
+  it('n’est importé que par la liste blanche', () => {
+    const importers = walk(SRC, ['.ts', '.tsx'])
+      .filter((file) => file !== TYPED_AMOUNT)
+      .filter((file) => importsTypedAmount(stripComments(readFileSync(file, 'utf8'))));
+
+    expect(importers.map((f) => relative(process.cwd(), f)).sort()).toEqual(
+      TYPED_AMOUNT_ALLOWED.map((f) => relative(process.cwd(), f)).sort(),
+    );
+  });
+
+  it('contre-épreuve : un import hors liste blanche serait vu', () => {
+    expect(importsTypedAmount("import { formatTypedAmount } from '@/lib/typedAmount';")).toBe(true);
+    expect(importsTypedAmount("import * as t from '../lib/typedAmount';")).toBe(true);
+    expect(importsTypedAmount(stripComments('// formatTypedAmount(1)'))).toBe(false);
+    expect(importsTypedAmount("import { parseAmount } from '@/lib/validation';")).toBe(false);
+  });
+
+  it('contre-épreuve : Intl.NumberFormat ailleurs que dans le helper reste interdit', () => {
+    // Le helper est la seule exception du scan R1 : la même ligne, n'importe
+    // où ailleurs, serait signalée.
+    const helper = stripComments(readFileSync(TYPED_AMOUNT, 'utf8'));
+    expect(helper).toContain('Intl.NumberFormat');
+    expect(['toLocaleString(', 'Intl.NumberFormat', 'toFixed('].some((n) => helper.includes(n))).toBe(true);
   });
 });
 
@@ -310,5 +354,99 @@ describe('R3 — liens sortants du bureau', () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+});
+
+/** Les chaînes et le texte JSX d'un fichier, sans identifiants ni codes. */
+export function visibleStrings(code: string): string[] {
+  const out: string[] = [];
+  for (const m of code.matchAll(/'((?:[^'\\\n]|\\.)*)'|"((?:[^"\\\n]|\\.)*)"|`((?:[^`\\]|\\.)*)`/g)) {
+    out.push(m[1] ?? m[2] ?? m[3] ?? '');
+  }
+  for (const m of code.matchAll(/>([^<>{}]*[A-Za-zÀ-ÿ][^<>{}]*)</g)) out.push(m[1] ?? '');
+  // Un code d'API (`declaration_pending`) ou un chemin d'import n'est pas
+  // affiché : seuls comptent les mots d'un humain.
+  return out.filter((t) => !/^[\w./@\-[\]]*$/.test(t.trim()));
+}
+
+/**
+ * Étape 1 — le membre « paie », il ne « déclare » pas. Ni « déclarer », ni
+ * « déclaration », ni « justificatif » sur son écran.
+ */
+describe('vocabulaire — l’écran du membre', () => {
+  const MEMBER_FILES = [
+    join(SRC, 'app', 'm', '[token]', 'MemberPage.tsx'),
+    join(SRC, 'components', 'PaymentSheet.tsx'),
+    join(SRC, 'components', 'PaymentHowTo.tsx'),
+    join(SRC, 'components', 'CopyButton.tsx'),
+    join(SRC, 'components', 'ReceiptList.tsx'),
+    join(SRC, 'components', 'Fallbacks.tsx'),
+    join(SRC, 'components', 'Shell.tsx'),
+    join(SRC, 'lib', 'validation.ts'),
+  ];
+  const BANNED = /d[ée]clar|justificatif/i;
+
+  it('aucune chaîne affichable ne dit « déclar… » ni « justificatif »', () => {
+    const offenders: string[] = [];
+    for (const file of MEMBER_FILES) {
+      for (const text of visibleStrings(stripComments(readFileSync(file, 'utf8')))) {
+        if (BANNED.test(text)) offenders.push(`${relative(process.cwd(), file)} → ${text}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('le scan lit bien les textes de l’écran', () => {
+    const texts = MEMBER_FILES.flatMap((f) => visibleStrings(stripComments(readFileSync(f, 'utf8'))));
+    expect(texts.some((t) => t.includes('J’ai payé'))).toBe(true);
+    expect(texts.some((t) => t.includes('Ajouter une capture d’écran (facultatif)'))).toBe(true);
+    expect(texts.some((t) => t.includes('Le bureau confirmera votre paiement'))).toBe(true);
+  });
+
+  it('contre-épreuve : le scan voit une chaîne et un texte JSX fautifs', () => {
+    const hit = (code: string) => visibleStrings(code).some((t) => BANNED.test(t));
+    expect(hit("setMessage('Votre déclaration est enregistrée.');")).toBe(true);
+    expect(hit('<p>Ajouter un justificatif</p>')).toBe(true);
+    expect(hit('<h2 className="title">Déclarer mon paiement</h2>')).toBe(true);
+    // Un code d'API, un identifiant : invisibles pour le membre.
+    expect(hit("if (error.code === 'declaration_pending') {}")).toBe(false);
+    expect(hit('const declared = pending_declaration;')).toBe(false);
+  });
+});
+
+/** Étape 1 — prénom et nom sont deux champs : jamais de « nom complet ». */
+describe('noms — aucun champ « nom complet » pour une personne', () => {
+  it('aucune chaîne de /bureau ne parle de « nom complet »', () => {
+    const { offenders } = scan(BUREAU_DIRS, [
+      { label: 'nom complet', pattern: /nom complet/i },
+    ]);
+    expect(offenders).toEqual([]);
+  });
+
+  it('contre-épreuve', () => {
+    expect(/nom complet/i.test(stripComments('<Field label="Nom complet" />'))).toBe(true);
+  });
+});
+
+/**
+ * Le registre arrive trié par nom de famille, organisations intercalées
+ * (v3.5.7) : le serveur voit l'ensemble, le client non. Aucun retri.
+ */
+describe('registre — aucun tri côté client', () => {
+  const FILES = [
+    join(SRC, 'app', 'bureau', 'membres', 'page.tsx'),
+    join(SRC, 'app', 'bureau', 'encaisser', 'page.tsx'),
+  ];
+  const SORTS = /\.sort\(|\.toSorted\(|localeCompare|Intl\.Collator/;
+
+  it('ni le registre ni la recherche d’« Encaisser » ne retrient', () => {
+    const offenders = FILES.filter((f) => SORTS.test(stripComments(readFileSync(f, 'utf8'))));
+    expect(offenders.map((f) => relative(process.cwd(), f))).toEqual([]);
+  });
+
+  it('contre-épreuve', () => {
+    expect(SORTS.test('members.sort((a, b) => a.name.localeCompare(b.name))')).toBe(true);
+    expect(SORTS.test('[...members].toSorted(byName)')).toBe(true);
+    expect(SORTS.test('members.slice(0, 50)')).toBe(false);
   });
 });

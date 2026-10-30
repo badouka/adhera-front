@@ -8,7 +8,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ReglagesPage from '@/app/bureau/reglages/page';
 import { resetSessionCache, saveSession } from '@/lib/bureau/session';
-import { CATEGORIES, calls, fakeServer, renderInBureau, SESSION, settings } from './fixtures';
+import { CATEGORIES, calls, fakeServer, fullText, renderInBureau, SESSION, settings } from './fixtures';
 
 beforeEach(() => {
   window.sessionStorage.clear();
@@ -75,7 +75,7 @@ describe('B11 — les catégories', () => {
     await user.type(screen.getByLabelText(/^Montant/), '10000');
     await user.click(screen.getByRole('button', { name: 'Ajouter la catégorie' }));
 
-    await screen.findByText('Forfait — 10 000 FCFA');
+    await screen.findByText(fullText('Forfait — 10 000 FCFA'));
     expect(JSON.parse(calls(fetchMock, 'POST')[0]?.init.body as string)).toEqual({
       label: 'Jeune', mode: 'forfait', amount: 10000, sort_order: 0,
     });
