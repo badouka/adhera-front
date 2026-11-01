@@ -415,7 +415,7 @@ function DuesPanel({ dues }: { dues: MemberDue[] }) {
                 </Pastille>
               </div>
               {/* R1 : *_formatted seulement ; null = inconnu → « — ». */}
-              <dl className="small tnum m-0 grid grid-cols-3 gap-2">
+              <dl className="small tnum m-0 flex flex-wrap gap-x-6 gap-y-2">
                 <div className="flex flex-col">
                   <dt className="text-ink-muted">Cotisation</dt>
                   <dd className="money m-0 font-semibold">{due.amount_due_formatted ?? '—'}</dd>

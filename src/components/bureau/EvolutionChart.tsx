@@ -57,6 +57,11 @@ export function EvolutionChart({ months }: { months: Month[] }) {
   const barWidth = Math.max(4, Math.min(48, slot - GAP));
   const plot = HEIGHT - LABEL_BAND - TOP;
   const current = months[selected] ?? months[months.length - 1];
+  // Sous 36 px par mois (un téléphone), une étiquette sur deux, en partant du
+  // mois le plus récent ; celle du mois touché s'affiche toujours.
+  const sparse = slot < 36;
+  const labelled = (index: number) =>
+    !sparse || index === selected || (months.length - 1 - index) % 2 === 0;
 
   return (
     <div className="flex flex-col gap-2">
@@ -117,6 +122,7 @@ export function EvolutionChart({ months }: { months: Month[] }) {
                     className={active ? 'fill-indigo' : 'fill-indigo/55'}
                   />
                 ) : null}
+                {labelled(index) ? (
                 <text
                   x={index * slot + slot / 2}
                   y={HEIGHT - 6}
@@ -125,6 +131,7 @@ export function EvolutionChart({ months }: { months: Month[] }) {
                 >
                   {shortMonth(month.month)}
                 </text>
+                ) : null}
               </g>
             );
           })}

@@ -289,7 +289,9 @@ function Figures({ data }: { data: Dashboard }) {
 
         {/* 2. Combien est entré, combien reste à entrer. */}
         <Panel title="Argent">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {/* Deux montants sur une ligne quand ils tiennent, l'un sous l'autre sinon :
+              un montant ne se coupe jamais. */}
+          <div className="flex flex-wrap gap-x-8 gap-y-3">
             <div className="flex flex-col">
               <span className="text-ink-muted">Encaissé sur la période</span>
               <BigFigure>
@@ -352,22 +354,25 @@ function Figures({ data }: { data: Dashboard }) {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Panel title="Par catégorie">
+          {/* Deux colonnes seulement : à 360 px, quatre ne tiennent pas avec un
+              montant qui ne se coupe pas. Les effectifs passent sous le libellé. */}
           <table className="w-full border-collapse text-left">
             <thead>
               <tr className="small text-ink-muted">
                 <th scope="col" className="py-1 font-semibold">Catégorie</th>
-                <th scope="col" className="py-1 text-right font-semibold">Membres</th>
-                <th scope="col" className="py-1 text-right font-semibold">À jour</th>
                 <th scope="col" className="py-1 text-right font-semibold">Encaissé</th>
               </tr>
             </thead>
             <tbody className="tnum">
               {data.by_category.map((row) => (
                 <tr key={row.category_id ?? 'none'} className="border-t border-line">
-                  <th scope="row" className="py-2 pr-2 font-semibold break-words">{row.label}</th>
-                  <td className="py-2 text-right">{row.members}</td>
-                  <td className="py-2 text-right">{row.up_to_date}</td>
-                  <td className="money py-2 pl-2 text-right">{row.collected_formatted}</td>
+                  <th scope="row" className="py-2 pr-2 text-left align-top font-normal">
+                    <span className="block font-semibold break-words">{row.label}</span>
+                    <span className="small block text-ink-muted">
+                      {plural(row.members, 'membre', 'membres')}, {row.up_to_date} à jour
+                    </span>
+                  </th>
+                  <td className="money py-2 text-right align-top">{row.collected_formatted}</td>
                 </tr>
               ))}
             </tbody>
