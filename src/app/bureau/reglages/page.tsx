@@ -15,7 +15,13 @@ import {
   Panel,
   Row,
 } from '@/components/bureau/ui';
-import { deleteLogo, isSessionError, updateSettings, uploadLogo } from '@/lib/bureau/api';
+import {
+  deleteLogo,
+  isSessionError,
+  setWeeklyReport,
+  updateSettings,
+  uploadLogo,
+} from '@/lib/bureau/api';
 import { errorMessage, invalidFields } from '@/lib/bureau/messages';
 import {
   MEMBER_TYPES_LABELS,
@@ -36,11 +42,63 @@ export default function ReglagesPage() {
         <AssociationPanel />
         <div className="flex flex-col gap-4">
           <LogoPanel />
+          <WeeklyReportPanel />
           <ModePanel />
         </div>
       </div>
       <CategoriesPanel />
     </>
+  );
+}
+
+/**
+ * Le rapport du lundi (§10) : c'est le SEUL moyen de l'arrêter — ses e-mails
+ * n'ont aucun lien de désabonnement, à dessein. La case s'enregistre d'un
+ * toucher ; la charge renvoyée fait foi.
+ */
+function WeeklyReportPanel() {
+  const { settings, setSettings } = useBureau();
+  const enabled = settings.weekly_report_enabled ?? true;
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function toggle(next: boolean) {
+    if (busy) return;
+    setBusy(true);
+    setStatus(null);
+    try {
+      const updated = await setWeeklyReport(next);
+      setSettings(updated);
+      setStatus({ ok: true, text: 'Enregistré.' });
+    } catch (cause) {
+      if (isSessionError(cause)) return;
+      setStatus({ ok: false, text: errorMessage(cause, 'Le réglage n’a pas pu être enregistré.') });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Panel title="Rapport hebdomadaire">
+      <label className="flex min-h-11 cursor-pointer items-start gap-3">
+        <input
+          type="checkbox"
+          checked={enabled}
+          disabled={busy}
+          onChange={(e) => void toggle(e.target.checked)}
+          className="mt-[3px] size-5 shrink-0 accent-[var(--indigo)]"
+        />
+        <span>Recevoir chaque lundi le rapport par e-mail (président et trésorier)</span>
+      </label>
+      {status ? (
+        <span
+          role={status.ok ? 'status' : 'alert'}
+          className={`small font-semibold ${status.ok ? 'text-paid' : 'text-late'}`}
+        >
+          {status.text}
+        </span>
+      ) : null}
+    </Panel>
   );
 }
 

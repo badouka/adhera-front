@@ -139,3 +139,29 @@ describe('B11 — l’association', () => {
     expect(value.setSettings).toHaveBeenCalled();
   });
 });
+
+describe('F3 — le rapport du lundi', () => {
+  it('coché par défaut (absent = true) ; décocher envoie weekly_report_enabled: false, seul', async () => {
+    const fetchMock = fakeServer([
+      { method: 'PUT', match: 'membership/settings', body: settings({ weekly_report_enabled: false }) },
+      { match: 'membership/categories', body: CATEGORIES },
+    ]);
+    const user = userEvent.setup();
+    const { value } = renderInBureau(<ReglagesPage />);
+    const box = screen.getByRole('checkbox', {
+      name: 'Recevoir chaque lundi le rapport par e-mail (président et trésorier)',
+    });
+    expect(box).toBeChecked();
+    await user.click(box);
+    await screen.findByText('Enregistré.');
+    const [put] = calls(fetchMock, 'PUT');
+    expect(JSON.parse(put?.init.body as string)).toEqual({ weekly_report_enabled: false });
+    expect(value.setSettings).toHaveBeenCalledWith(expect.objectContaining({ weekly_report_enabled: false }));
+  });
+
+  it('suit la valeur servie', () => {
+    fakeServer([{ match: 'membership/categories', body: CATEGORIES }]);
+    renderInBureau(<ReglagesPage />, { settings: settings({ weekly_report_enabled: false }) });
+    expect(screen.getByRole('checkbox', { name: /rapport par e-mail/ })).not.toBeChecked();
+  });
+});
