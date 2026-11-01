@@ -63,6 +63,15 @@ const BY_CODE: Record<string, string> = {
 };
 
 /**
+ * Encaisser, réseau coupé : le trésorier ne sait pas si le serveur a reçu. La
+ * clé `Idempotency-Key` du panneau rend le réessai sans risque (§11.1) — il
+ * faut le lui DIRE, sinon il n'ose pas retoucher « Encaisser ». Réservé aux
+ * deux gestes qui envoient cette clé : ailleurs, la phrase serait fausse.
+ */
+export const PAYMENT_NETWORK_MESSAGE =
+  'Connexion impossible. Vous pouvez réessayer sans risque : un même encaissement n’est jamais enregistré deux fois.';
+
+/**
  * Le message à afficher pour un échec. `fallback` dit ce qui a échoué, dans
  * les mots de l'écran (« Le versement n’a pas pu être validé. »).
  */

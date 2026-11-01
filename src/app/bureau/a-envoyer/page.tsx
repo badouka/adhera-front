@@ -377,6 +377,12 @@ function OutreachCard({
               {step === 'opened' ? 'Rouvrir WhatsApp' : 'Ouvrir WhatsApp'}
             </a>
           ) : null}
+          {canOpen ? (
+            // Le retour depuis WhatsApp est le geste le plus fragile de la file.
+            <p className="small m-0 text-center text-ink-muted" data-testid="return-hint">
+              Après l’envoi, revenez sur cette page pour passer au suivant.
+            </p>
+          ) : null}
           <Button tone="ghost" onClick={() => setStep('skipping')} disabled={busy}>
             Passer
           </Button>

@@ -6,7 +6,7 @@
 import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import TableauDeBordPage, { rateLabel } from '@/app/bureau/page';
+import TableauDeBordPage, { rateCountLabel, rateLabel } from '@/app/bureau/page';
 import { resetSessionCache, saveSession } from '@/lib/bureau/session';
 import { calls, dashboard, fakeResponse, fakeServer, renderInBureau, SESSION } from './fixtures';
 
@@ -63,6 +63,18 @@ describe('Tableau de bord — les chiffres', () => {
     expect(screen.getByTestId('outstanding')).toHaveTextContent('650 000 FCFA');
   });
 
+  it('§3 — le taux dit aussi les personnes : « 13 % — 1 membre sur 8 »', async () => {
+    expect(rateCountLabel(1, 8)).toBe('1 membre sur 8');
+    expect(rateCountLabel(3, 8)).toBe('3 membres sur 8');
+    expect(rateCountLabel(0, 8)).toBe('0 membre sur 8');
+    const data = dashboard();
+    data.members = { active: 8, up_to_date: 1, not_up_to_date: 7, pending: 0, former: 0 };
+    data.money = { ...data.money, recovery_rate: 13 };
+    fakeServer([{ match: 'membership/dashboard', body: data }]);
+    renderInBureau(<TableauDeBordPage />);
+    expect(await screen.findByTestId('rate-line')).toHaveTextContent(/^13 % — 1 membre sur 8$/);
+  });
+
   it('le taux à jour en grand ; `null` s’affiche « — », jamais « 0 % »', async () => {
     expect(rateLabel(60)).toBe('60 %');
     expect(rateLabel(0)).toBe('0 %');
@@ -74,6 +86,7 @@ describe('Tableau de bord — les chiffres', () => {
     fakeServer([{ match: 'membership/dashboard', body: empty }]);
     renderInBureau(<TableauDeBordPage />);
     expect(await screen.findByTestId('rate')).toHaveTextContent(/^—$/);
+    expect(screen.getByTestId('rate-line')).not.toHaveTextContent(/sur/);
     expect(document.body.textContent).not.toMatch(/0\s%/);
     expect(screen.getByText('Aucun membre actif pour le moment.')).toBeInTheDocument();
   });

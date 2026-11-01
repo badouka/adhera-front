@@ -425,6 +425,11 @@ export type LaunchedCampaign = Campaign & {
   emails_queued: number;
   /** Ni e-mail ni téléphone : à joindre autrement. */
   unreachable: number;
+  /**
+   * Avaient déjà un message WhatsApp en attente (§12.5) : ils SERONT servis.
+   * Jamais additionnés à `unreachable`. Absent d'un serveur antérieur à S3d.
+   */
+  already_queued?: number;
 };
 
 export type CampaignInput = {

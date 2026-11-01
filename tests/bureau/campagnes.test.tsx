@@ -106,6 +106,23 @@ describe('Campagnes — nouvelle campagne', () => {
     expect(screen.getByRole('link', { name: 'Commencer les envois WhatsApp' })).toHaveAttribute('href', '/bureau/a-envoyer');
   });
 
+  it('§3 — « n déjà dans votre file », distinct des injoignables (§12.5)', async () => {
+    fakeServer([
+      { method: 'POST', match: 'membership/campaigns', status: 201, body: { ...LAUNCHED, whatsapp_queued: 0, already_queued: 3 } },
+      { match: 'membership/campaigns', body: [] },
+    ]);
+    const user = userEvent.setup();
+    renderInBureau(<CampagnesPage />);
+    await user.click(await screen.findByRole('button', { name: 'Nouvelle campagne' }));
+    await user.click(screen.getByRole('button', { name: 'Lancer la campagne' }));
+    expect((await screen.findByTestId('already-queued')).textContent).toBe('3 déjà dans votre file');
+    // Les injoignables restent 2 : jamais 2 + 3.
+    expect(screen.getByTestId('launch-counts')).toHaveTextContent('2 membres injoignables');
+    expect(screen.getByTestId('launch-counts')).not.toHaveTextContent(/\b5\b/);
+    // Leur message attend dans la file : le chemin reste proposé.
+    expect(screen.getByRole('link', { name: 'Commencer les envois WhatsApp' })).toBeInTheDocument();
+  });
+
   it('programmée, tous les actifs, sans e-mail : l’instant envoyé et le récapitulatif', async () => {
     const fetchMock = fakeServer([
       { method: 'POST', match: 'membership/campaigns', status: 201, body: { ...PLANNED, launched: false, whatsapp_queued: 0, emails_queued: 0, unreachable: 0 } },

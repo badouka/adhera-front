@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useId, useRef, useState } from 'react';
 import { ApiError } from '@/lib/api';
 import { BureauApiError, createDirectPayment, isSessionError } from '@/lib/bureau/api';
-import { errorMessage, invalidFields } from '@/lib/bureau/messages';
+import { errorMessage, invalidFields, PAYMENT_NETWORK_MESSAGE } from '@/lib/bureau/messages';
 import type { MemberDetail, MemberDue, Payment } from '@/lib/bureau/types';
 import { todayInDakar } from '@/lib/dates';
 import { useIdempotencyKey } from '@/lib/idempotency';
@@ -169,6 +169,9 @@ export function DirectPaymentPanel({
         for (const f of fields) mapped[f] = FIELD_ERRORS[f];
         setErrors(mapped);
         if (mapped.reference) setReferenceOpen(true);
+      } else if (cause instanceof ApiError && cause.status === 0) {
+        // La même clé repart au prochain toucher : réessayer est sans risque.
+        setError(PAYMENT_NETWORK_MESSAGE);
       } else {
         setError(errorMessage(cause, 'Le paiement n’a pas pu être encaissé.'));
       }

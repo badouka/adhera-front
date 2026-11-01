@@ -208,6 +208,15 @@ describe('« À envoyer » — la file WhatsApp, un membre à la fois', () => {
     expect(await screen.findByText('Aucun message à envoyer.')).toBeInTheDocument();
   });
 
+  it('§3 — sous « Ouvrir WhatsApp » : revenir ici après l’envoi', async () => {
+    server([[A, B]]);
+    renderInBureau(<AEnvoyerPage />);
+    const open = await screen.findByRole('link', { name: 'Ouvrir WhatsApp' });
+    const hint = screen.getByTestId('return-hint');
+    expect(hint.textContent).toBe('Après l’envoi, revenez sur cette page pour passer au suivant.');
+    expect(open.compareDocumentPosition(hint) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('wa_url null : la copie du message, jamais un lien deviné', async () => {
     server([[outreachItem({ id: 'o-9', wa_url: null, phone_is_usable: false })]]);
     renderInBureau(<AEnvoyerPage />);
@@ -216,6 +225,8 @@ describe('« À envoyer » — la file WhatsApp, un membre à la fois', () => {
     expect(copy.compareDocumentPosition(screen.getByRole('button', { name: 'Envoyé ✓' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByRole('link', { name: /WhatsApp/ })).toBeNull();
     expect(screen.getByRole('button', { name: 'Envoyé ✓' })).toBeInTheDocument();
+    // Pas de lien à ouvrir : pas de consigne de retour non plus.
+    expect(screen.queryByTestId('return-hint')).toBeNull();
   });
 
   it('touchers comptés : « Ouvrir WhatsApp », puis « Envoyé ✓ » (le retour est le geste du téléphone)', async () => {

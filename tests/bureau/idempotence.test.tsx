@@ -84,7 +84,11 @@ describe('Idempotency-Key — une clé par intention d’encaisser', () => {
     const button = await openPanel(user);
 
     await user.click(button);
-    expect(await screen.findByRole('alert')).toHaveTextContent('Connexion impossible');
+    // §3 : l'écran dit que réessayer est sans risque — sinon on n'ose pas.
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /^Connexion impossible\. Vous pouvez réessayer sans risque : un même encaissement n’est jamais enregistré deux fois\.$/,
+    );
+    expect(screen.queryByText(/Vérifiez votre réseau/)).toBeNull();
     // Le trésorier retouche le même bouton.
     await user.click(screen.getByRole('button', { name: 'Encaisser 150 000 FCFA' }));
     await screen.findByText('Reçu REC-2026-AAAA0001 émis');

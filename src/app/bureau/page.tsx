@@ -45,6 +45,14 @@ export function rateLabel(rate: number | null): string {
 }
 
 /**
+ * « 1 membre sur 8 » : le taux dit en personnes. Un pourcentage seul ne parle
+ * pas à une trésorière qui connaît ses membres par leur nom.
+ */
+export function rateCountLabel(upToDate: number, active: number): string {
+  return `${upToDate} ${upToDate > 1 ? 'membres' : 'membre'} sur ${active}`;
+}
+
+/**
  * L'accueil du bureau — le tableau de bord. Il répond à trois questions, dans
  * cet ordre : qui est à jour, combien est entré, combien reste à entrer.
  *
@@ -265,9 +273,16 @@ function Figures({ data }: { data: Dashboard }) {
         {/* 1. Qui est à jour. */}
         <Panel title="Membres">
           <div className="flex flex-col">
-            <BigFigure>
-              <span data-testid="rate">{rateLabel(money.recovery_rate)}</span>
-            </BigFigure>
+            <p className="m-0 flex flex-wrap items-baseline gap-x-2" data-testid="rate-line">
+              <BigFigure>
+                <span data-testid="rate">{rateLabel(money.recovery_rate)}</span>
+              </BigFigure>{' '}
+              {money.recovery_rate === null ? null : (
+                <span className="tnum text-[20px] font-bold">
+                  — {rateCountLabel(members.up_to_date, members.active)}
+                </span>
+              )}
+            </p>
             <span className="text-ink-muted">
               {money.recovery_rate === null
                 ? 'Aucun membre actif pour le moment.'

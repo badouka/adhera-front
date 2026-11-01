@@ -367,6 +367,7 @@ function LaunchOutcome({
     );
   }
   const n = campaign;
+  const queued = n.already_queued ?? 0;
   return (
     <Notice tone="paid">
       <span className="title">Campagne lancée.</span>
@@ -382,9 +383,15 @@ function LaunchOutcome({
           {n.unreachable > 1 ? 'membres injoignables' : 'membre injoignable'} (ni téléphone ni
           e-mail){n.unreachable > 0 ? ' : à prévenir autrement' : ''}
         </li>
+        {/* « Déjà dans la file » n'est PAS « injoignable » (§12.5) : leur message attend. */}
+        {queued > 0 ? (
+          <li data-testid="already-queued">
+            <strong>{queued}</strong> déjà dans votre file
+          </li>
+        ) : null}
       </ul>
       <span className="flex flex-col gap-2 sm:flex-row">
-        {n.whatsapp_queued > 0 ? (
+        {n.whatsapp_queued + queued > 0 ? (
           <Link href="/bureau/a-envoyer" className={buttonClass('primary', 'min-h-12 no-underline')}>
             <SendIcon />
             Commencer les envois WhatsApp

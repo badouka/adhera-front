@@ -15,8 +15,10 @@ export const MIN_CANCEL_LENGTH = 10;
  * « Annuler cet encaissement » — sur un versement VALIDÉ seulement (un
  * versement signalé se refuse, il ne s'annule pas).
  *
- * Le récapitulatif R9 dit les conséquences : la cotisation redevient due, le
- * reçu est marqué annulé, rien n'est supprimé. Irréversible : une erreur se
+ * Le récapitulatif R9 dit les conséquences : la cotisation redevient à régler
+ * (en tout ou en partie, s'il reste un autre versement), le reçu est marqué
+ * annulé, rien n'est supprimé. Les boutons ne disent jamais « Annuler » seul :
+ * le mot se lit aussi « renoncer ». Irréversible : une erreur se
  * corrige en ressaisissant le versement.
  */
 export function CancelPaymentPanel({
@@ -83,7 +85,7 @@ export function CancelPaymentPanel({
     >
       <p id={`${ids}-recap`} className="m-0 font-semibold break-words" data-testid="cancel-recap">
         Annuler <span className="money">{payment.amount_formatted}</span>
-        {details ? ` (${details})` : ''} de {memberName} ? Sa cotisation redeviendra due
+        {details ? ` (${details})` : ''} de {memberName} ? Sa cotisation redeviendra à régler
         {payment.receipt ? ` et le reçu ${payment.receipt.reference} sera marqué annulé` : ''}.
         Rien n’est supprimé.
       </p>
@@ -112,10 +114,10 @@ export function CancelPaymentPanel({
       ) : null}
       <div className="flex flex-col gap-2 sm:flex-row">
         <Button tone="danger" onClick={() => void confirm()} disabled={busy}>
-          {busy ? 'Envoi…' : 'Annuler l’encaissement'}
+          {busy ? 'Envoi…' : 'Oui, annuler cet encaissement'}
         </Button>
         <Button tone="ghost" onClick={onClose} disabled={busy}>
-          Ne rien changer
+          Garder l’encaissement
         </Button>
       </div>
     </div>

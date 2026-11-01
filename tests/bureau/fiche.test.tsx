@@ -493,18 +493,18 @@ describe('§11 — annuler un encaissement, sans rien perdre', () => {
     await user.click(await screen.findByRole('button', { name: 'Annuler cet encaissement' }));
 
     expect(screen.getByTestId('cancel-recap').textContent).toBe(
-      'Annuler 100 000 FCFA (Wave, 29/10/2026) de Moussa Ndiaye (test) ? Sa cotisation redeviendra due et le reçu REC-2026-CB4A73AE sera marqué annulé. Rien n’est supprimé.',
+      'Annuler 100 000 FCFA (Wave, 29/10/2026) de Moussa Ndiaye (test) ? Sa cotisation redeviendra à régler et le reçu REC-2026-CB4A73AE sera marqué annulé. Rien n’est supprimé.',
     );
 
     const reason = screen.getByLabelText(/Motif de l’annulation/);
     await user.type(reason, '   court  ');
-    await user.click(screen.getByRole('button', { name: 'Annuler l’encaissement' }));
+    await user.click(screen.getByRole('button', { name: 'Oui, annuler cet encaissement' }));
     expect(screen.getByText('Expliquez le motif en 10 caractères au moins.')).toBeInTheDocument();
     expect(calls(fetchMock, 'POST')).toHaveLength(0);
 
     await user.clear(reason);
     await user.type(reason, '  Chèque revenu impayé par la banque ');
-    await user.click(screen.getByRole('button', { name: 'Annuler l’encaissement' }));
+    await user.click(screen.getByRole('button', { name: 'Oui, annuler cet encaissement' }));
 
     const line = await screen.findByTestId('cancelled-line');
     expect(line.textContent).toMatch(/^Annulé le 1er novembre 2026 par Fatou Sow — motif : Chèque revenu impayé par la banque$/);
@@ -518,6 +518,28 @@ describe('§11 — annuler un encaissement, sans rien perdre', () => {
     const dues = screen.getByRole('heading', { name: 'Cotisations' }).closest('section') as HTMLElement;
     await waitFor(() => expect(within(dues).getByText('Annulé')).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: 'Annuler cet encaissement' })).toBeNull();
+  });
+
+  it('§3 — les boutons disent ce qu’ils font : « Oui, annuler cet encaissement » / « Garder l’encaissement »', async () => {
+    server(MOUSSA);
+    const user = userEvent.setup();
+    renderInBureau(<FicheMembrePage />);
+    await user.click(await screen.findByRole('button', { name: 'Annuler cet encaissement' }));
+    expect(screen.getByRole('button', { name: 'Oui, annuler cet encaissement' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Annuler l’encaissement' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Ne rien changer' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Garder l’encaissement' }));
+    expect(screen.queryByTestId('cancel-recap')).toBeNull();
+  });
+
+  it('§3 — le récapitulatif dit « à régler », vrai aussi quand la cotisation redevient partielle', async () => {
+    server(MOUSSA);
+    const user = userEvent.setup();
+    renderInBureau(<FicheMembrePage />);
+    await user.click(await screen.findByRole('button', { name: 'Annuler cet encaissement' }));
+    const recap = screen.getByTestId('cancel-recap').textContent ?? '';
+    expect(recap).toContain('Sa cotisation redeviendra à régler');
+    expect(recap).not.toMatch(/redeviendra due/);
   });
 
   it('§12.4 — le reçu d’une cotisation est marqué depuis `cancelled_at` servi, jamais déduit', async () => {
@@ -545,7 +567,7 @@ describe('§11 — annuler un encaissement, sans rien perdre', () => {
     renderInBureau(<FicheMembrePage />);
     await user.click(await screen.findByRole('button', { name: 'Annuler cet encaissement' }));
     await user.type(screen.getByLabelText(/Motif de l’annulation/), 'Erreur de saisie du montant');
-    await user.click(screen.getByRole('button', { name: 'Annuler l’encaissement' }));
+    await user.click(screen.getByRole('button', { name: 'Oui, annuler cet encaissement' }));
     expect(await screen.findByText(/ne peut plus être annulé/)).toBeInTheDocument();
     await waitFor(() =>
       expect(calls(fetchMock).filter((c) => c.url.includes(`members/${MOUSSA.id}`)).length).toBeGreaterThan(1),
