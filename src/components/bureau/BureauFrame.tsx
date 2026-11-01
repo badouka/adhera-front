@@ -22,10 +22,13 @@ import {
 } from './BureauContext';
 import {
   CashIcon,
+  ChartIcon,
   CloseIcon,
   InboxIcon,
   LogoutIcon,
+  MegaphoneIcon,
   MenuIcon,
+  SendIcon,
   SettingsIcon,
   UsersIcon,
 } from './Icons';
@@ -36,7 +39,10 @@ const ENCAISSER = { href: '/bureau/encaisser', label: 'Encaisser', icon: CashIco
 
 const NAV = [
   ENCAISSER,
-  { href: '/bureau', label: 'À valider', icon: InboxIcon },
+  { href: '/bureau', label: 'Tableau de bord', icon: ChartIcon },
+  { href: '/bureau/a-valider', label: 'À valider', icon: InboxIcon },
+  { href: '/bureau/a-envoyer', label: 'À envoyer', icon: SendIcon },
+  { href: '/bureau/campagnes', label: 'Campagnes', icon: MegaphoneIcon },
   { href: '/bureau/membres', label: 'Membres', icon: UsersIcon },
   { href: '/bureau/reglages', label: 'Réglages', icon: SettingsIcon },
 ] as const;

@@ -7,9 +7,12 @@ import {
 } from '@/components/bureau/BureauContext';
 import type { BureauSession } from '@/lib/bureau/session';
 import type {
+  Campaign,
   Category,
+  Dashboard,
   MemberDetail,
   MemberListItem,
+  OutreachItem,
   Payment,
   Settings,
 } from '@/lib/bureau/types';
@@ -224,4 +227,97 @@ export function renderInBureau(
     ...overrides,
   };
   return { value, ...render(<BureauContext.Provider value={value}>{ui}</BureauContext.Provider>) };
+}
+
+/* ───────────────────────────── F3 (§9 à §11) ───────────────────────────── */
+
+const MONTHS = [
+  ['2025-12', 'décembre 2025'], ['2026-01', 'janvier 2026'], ['2026-02', 'février 2026'],
+  ['2026-03', 'mars 2026'], ['2026-04', 'avril 2026'], ['2026-05', 'mai 2026'],
+  ['2026-06', 'juin 2026'], ['2026-07', 'juillet 2026'], ['2026-08', 'août 2026'],
+  ['2026-09', 'septembre 2026'], ['2026-10', 'octobre 2026'], ['2026-11', 'novembre 2026'],
+] as const;
+
+/**
+ * La charge de `GET dashboard` (§10). Les nombres bruts sont VOLONTAIREMENT
+ * différents de leurs `*_formatted` : un écran qui afficherait le nombre brut,
+ * ou le reformaterait, se verrait.
+ */
+export function dashboard(overrides: Partial<Dashboard> = {}): Dashboard {
+  return {
+    period: { from: '2026-01-01', to: '2026-11-01' },
+    members: { active: 5, up_to_date: 3, not_up_to_date: 2, pending: 1, former: 1 },
+    money: {
+      collected: 350001,
+      collected_formatted: '350 000 FCFA',
+      declared_pending: 50001,
+      declared_pending_formatted: '50 000 FCFA',
+      declared_pending_count: 1,
+      outstanding: 650001,
+      outstanding_formatted: '650 000 FCFA',
+      outstanding_unknown_count: 0,
+      recovery_rate: 60,
+    },
+    by_category: [
+      { category_id: 1, label: 'Membre actif', members: 4, up_to_date: 2, collected: 350001, collected_formatted: '350 000 FCFA' },
+      { category_id: null, label: 'Sans catégorie', members: 1, up_to_date: 1, collected: 0, collected_formatted: '0 FCFA' },
+    ],
+    by_method: [
+      { method: 'om', label: 'Orange Money', collected: 0, collected_formatted: '0 FCFA' },
+      { method: 'wave', label: 'Wave', collected: 250001, collected_formatted: '250 000 FCFA' },
+      { method: 'virement', label: 'Virement bancaire', collected: 0, collected_formatted: '0 FCFA' },
+      { method: 'cheque', label: 'Chèque', collected: 0, collected_formatted: '0 FCFA' },
+      { method: 'especes', label: 'Espèces', collected: 100001, collected_formatted: '100 000 FCFA' },
+    ],
+    evolution: MONTHS.map(([month, label]) =>
+      month === '2026-03'
+        ? { month, label, collected: 250001, collected_formatted: '250 000 FCFA' }
+        : month === '2026-10'
+          ? { month, label, collected: 100001, collected_formatted: '100 000 FCFA' }
+          : { month, label, collected: 0, collected_formatted: '0 FCFA' },
+    ),
+    upcoming: { days: 30, count: 2 },
+    outreach: { pending: { 'j-30': 0, 'j-7': 0, 'j+1': 0, campagne: 0 }, total: 0 },
+    ...overrides,
+  };
+}
+
+export function outreachItem(overrides: Partial<OutreachItem> & { id: string }): OutreachItem {
+  return {
+    member: {
+      id: `m-${overrides.id}`,
+      first_name: 'Aminata',
+      last_name: 'Diop',
+      name: 'Aminata Diop',
+      phone: '771234567',
+    },
+    step: 'j+1',
+    due_on: '2026-10-02',
+    campaign: { id: 'c-auto', segment: 'auto:j+1', automatic: true },
+    // Les espaces insécables du serveur, à garder telles quelles.
+    message: 'Bonjour Aminata Diop,\nVotre cotisation de 250 000 FCFA est attendue depuis le 02/10/2026.',
+    wa_url: 'https://wa.me/221771234567?text=Bonjour',
+    phone_is_usable: true,
+    url: 'https://demo-asso.adhera.africa/m/jeton',
+    ...overrides,
+  };
+}
+
+export function campaign(overrides: Partial<Campaign> & { id: string }): Campaign {
+  return {
+    type: 'relance',
+    segment: 'non_a_jour',
+    status: 'sent',
+    automatic: false,
+    step: null,
+    send_email: true,
+    scheduled_at: null,
+    created_at: '2027-01-02T09:00:00+00:00',
+    channels: {
+      whatsapp: { total: 12, sent: 5, pending: 7, skipped: 0, failed: 0 },
+      email: { total: 7, sent: 7, pending: 0, skipped: 0, failed: 0 },
+    },
+    cancellable: false,
+    ...overrides,
+  };
 }

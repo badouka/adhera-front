@@ -18,16 +18,18 @@ import {
 } from '@/components/bureau/ui';
 import { isSessionError, listPayments } from '@/lib/bureau/api';
 import { errorMessage } from '@/lib/bureau/messages';
-import type { Payment, PaymentStatus } from '@/lib/bureau/types';
+import type { Payment, PaymentFilterStatus } from '@/lib/bureau/types';
 import { formatDate, formatDateTime } from '@/lib/dates';
 
-const TABS: ReadonlyArray<{ value: PaymentStatus; label: string }> = [
+type Tab = Exclude<PaymentFilterStatus, 'all'>;
+
+const TABS: ReadonlyArray<{ value: Tab; label: string }> = [
   { value: 'declared', label: 'À valider' },
   { value: 'validated', label: 'Validés' },
   { value: 'rejected', label: 'Refusés' },
 ];
 
-const EMPTY: Record<PaymentStatus, string> = {
+const EMPTY: Record<Tab, string> = {
   declared: 'Aucun versement à valider.',
   validated: 'Aucun versement validé.',
   rejected: 'Aucun paiement refusé.',
@@ -43,15 +45,16 @@ type Outcome =
   | { kind: 'rejected'; payment: Payment };
 
 /**
- * B2 — l'accueil du bureau : « Encaisser » en tête, puis « À valider ».
+ * B2 — « À valider » : les paiements signalés par les membres.
  *
  * Un membre a signalé un paiement depuis son lien : le trésorier regarde la
  * capture ou son relevé, touche « Reçu ✓ » puis « Confirmer » — ce qui émet le
  * reçu — ou refuse avec un motif que le membre lira. Le plus ancien d'abord.
+ * L'accueil est devenu le tableau de bord (F3), qui y conduit par son bouton.
  */
 export default function AValiderPage() {
   const { modeSupported, markModeUnsupported } = useBureau();
-  const [tab, setTab] = useState<PaymentStatus>('declared');
+  const [tab, setTab] = useState<Tab>('declared');
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
   const [action, setAction] = useState<

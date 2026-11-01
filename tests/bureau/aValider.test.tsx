@@ -6,7 +6,7 @@
 import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import AValiderPage from '@/app/bureau/page';
+import AValiderPage from '@/app/bureau/a-valider/page';
 import { resetSessionCache, saveSession } from '@/lib/bureau/session';
 import { calls, fakeServer, fullText, payment, renderInBureau, SESSION } from './fixtures';
 

@@ -190,7 +190,7 @@ describe('B1 — la connexion', () => {
     await screen.findByText('Trop de tentatives. Réessayez dans 1 minute.');
   });
 
-  it('un succès garde le jeton dans l’onglet et ouvre « À valider »', async () => {
+  it('un succès garde le jeton dans l’onglet et ouvre le tableau de bord', async () => {
     fakeServer([{ method: 'POST', match: 'login', body: { success: true, message: 'Login successful.', data: { token: 'jeton-neuf', admin: SESSION.admin } } }]);
     await fill('tresorier@demo-asso.test', 'bon');
     await waitFor(() => expect(nav.router.replace).toHaveBeenCalledWith('/bureau'));
