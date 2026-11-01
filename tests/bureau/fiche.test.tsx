@@ -769,6 +769,26 @@ describe('§1 — l’échéance : lue, comparée à aujourd’hui, jamais calcu
     expect(dueDateLine(memberDetail({ next_due_date: null }), TODAY)).toBeNull();
   });
 
+  it('un ancien membre : aucune échéance, ni dans la fonction ni à l’écran', async () => {
+    const cheikh = memberDetail({
+      status: 'former',
+      left_at: '2026-10-20',
+      left_reason: 'resigned',
+      is_up_to_date: false,
+      next_due_date: '2026-03-01',
+      balance_due: 0,
+      balance_due_formatted: '0 FCFA',
+      dues: [],
+    });
+    expect(dueDateLine(cheikh, TODAY)).toBeNull();
+    server(cheikh, [{ match: /payments\?member_id=/, body: [] }]);
+    renderInBureau(<FicheMembrePage />);
+    await screen.findByText(/Ancien membre depuis le 20 octobre 2026/);
+    expect(screen.queryByTestId('echeance')).toBeNull();
+    expect(within(situation()).queryByText(/échéance/i)).toBeNull();
+    expect(situation().textContent).not.toMatch(/1er mars 2026|En retard/);
+  });
+
   it('à l’écran : la date servie, telle quelle', async () => {
     server(memberDetail({ next_due_date: '2020-10-01' }));
     const { unmount } = renderInBureau(<FicheMembrePage />);

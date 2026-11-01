@@ -70,11 +70,16 @@ export function standingDetail(member: MemberListItem): ReactNode {
  * L'échéance d'une fiche (§12.7). `next_due_date` est l'échéance RÉCLAMÉE, celle
  * que nomment la relance et la file WhatsApp : on ne la calcule jamais, on la
  * lit, on la compare à aujourd'hui (à Dakar), et on choisit le libellé.
+ *
+ * Un ANCIEN membre n'a pas d'échéance : son `next_due_date` est le début de la
+ * période qui le couvrait encore, alors qu'il ne doit rien et que son lien est
+ * clos (décor f31, §8.3). On n'affiche rien pour lui.
  */
 export function dueDateLine(
   member: MemberListItem,
   today: string = todayInDakar(),
 ): { late: boolean; label: string; value: string } | null {
+  if (member.status === 'former') return null;
   const date = formatDate(member.next_due_date);
   if (!date || !member.next_due_date) return null;
   const late =

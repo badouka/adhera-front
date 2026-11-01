@@ -325,12 +325,14 @@ export default function FicheMembrePage() {
                 )}
               </Row>
               <Row label="Couvert jusqu’au">{formatDate(m.covered_until) || '—'}</Row>
-              {/* L'échéance RÉCLAMÉE (§12.7) : lue, jamais calculée. */}
-              <Row label={echeance?.label ?? 'Prochaine échéance'}>
-                <span className={echeance?.late ? 'text-late' : undefined} data-testid="echeance">
-                  {echeance?.value ?? '—'}
-                </span>
-              </Row>
+              {/* L'échéance RÉCLAMÉE (§12.7) : lue, jamais calculée. Aucune pour un ancien. */}
+              {former ? null : (
+                <Row label={echeance?.label ?? 'Prochaine échéance'}>
+                  <span className={echeance?.late ? 'text-late' : undefined} data-testid="echeance">
+                    {echeance?.value ?? '—'}
+                  </span>
+                </Row>
+              )}
               {/* null = INCONNU, jamais « 0 FCFA » (piège 4). */}
               <Row label="Reste à payer">
                 <span className="money">{m.balance_due_formatted ?? '—'}</span>
