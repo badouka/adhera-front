@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { ApiError, declarePayment } from '@/lib/api';
+import { useIdempotencyKey } from '@/lib/idempotency';
 import { formatTypedAmount } from '@/lib/typedAmount';
 import {
   PAYMENT_METHODS,
@@ -112,6 +113,9 @@ export function PaymentSheet({
   const [errors, setErrors] = useState<DeclarationErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  // Tirée à l'OUVERTURE de la feuille, gardée tant que l'envoi n'a pas réussi :
+  // un second « Confirmer » sur un réseau lent ne signale pas deux fois (§11).
+  const [idempotencyKey, renewKey] = useIdempotencyKey();
 
   const amountRef = useRef<HTMLInputElement>(null);
   const methodRef = useRef<HTMLInputElement>(null);
@@ -172,6 +176,17 @@ export function PaymentSheet({
       return;
     }
 
+    if (error.status === 409 && error.code === 'duplicate_payment') {
+      onNeedsReload('Votre paiement vient d’être signalé. Le bureau va le confirmer.');
+      return;
+    }
+
+    if (error.status === 422 && error.code === 'idempotency_key_reused') {
+      renewKey();
+      setFormError('Le formulaire a changé : vérifiez puis confirmez à nouveau.');
+      return;
+    }
+
     if (error.status === 422) {
       if (error.code && error.code in PROOF_CODES) {
         showFieldErrors({ proof: PROOF_CODES[error.code] });
@@ -221,12 +236,19 @@ export function PaymentSheet({
 
     setSending(true);
     try {
-      await declarePayment(token, tenant, {
-        amount: value,
-        method,
-        reference,
-        proof,
-      });
+      await declarePayment(
+        token,
+        tenant,
+        {
+          amount: value,
+          method,
+          reference,
+          proof,
+        },
+        undefined,
+        idempotencyKey,
+      );
+      renewKey();
       onDeclared();
     } catch (error) {
       handleServerError(error);

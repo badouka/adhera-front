@@ -396,3 +396,50 @@ describe('§ D — formatTypedAmount', () => {
     expect(formatTypedAmount(500)).toBe('500 FCFA');
   });
 });
+
+describe('Idempotency-Key — « J’ai payé » ne signale pas deux fois (§11)', () => {
+  const keyOf = (call: unknown[] | undefined) =>
+    ((call?.[1] as RequestInit).headers as Record<string, string>)['Idempotency-Key'];
+
+  it('une coupure, puis « Confirmer » à nouveau : la MÊME clé', async () => {
+    const user = await openSheet();
+    fetchMock
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce(fakeResponse(201, CREATED))
+      .mockResolvedValueOnce(fakeResponse(200, PENDING_PAYLOAD));
+
+    await user.click(confirmButton());
+    await screen.findByText(/n’a pas pu être signalé/);
+    await user.click(confirmButton());
+    await waitFor(() => expect(posts()).toHaveLength(2));
+
+    expect(keyOf(posts()[0])).toMatch(/^[0-9a-f-]{36}$/);
+    expect(keyOf(posts()[1])).toBe(keyOf(posts()[0]));
+  });
+
+  it('une feuille rouverte : une NOUVELLE clé', async () => {
+    const user = await openSheet();
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await user.click(confirmButton());
+    await screen.findByText(/n’a pas pu être signalé/);
+    await user.click(screen.getByRole('button', { name: 'Annuler' }));
+    await user.click(screen.getByRole('button', { name: 'J’ai payé' }));
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await user.click(confirmButton());
+    await waitFor(() => expect(posts()).toHaveLength(2));
+    expect(keyOf(posts()[1])).not.toBe(keyOf(posts()[0]));
+  });
+
+  it('422 idempotency_key_reused : nouvelle clé et « vérifiez puis confirmez à nouveau »', async () => {
+    const user = await openSheet();
+    fetchMock.mockResolvedValueOnce(
+      fakeResponse(422, { message: 'x', code: 'idempotency_key_reused' }),
+    );
+    await user.click(confirmButton());
+    await screen.findByText('Le formulaire a changé : vérifiez puis confirmez à nouveau.');
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await user.click(confirmButton());
+    await waitFor(() => expect(posts()).toHaveLength(2));
+    expect(keyOf(posts()[1])).not.toBe(keyOf(posts()[0]));
+  });
+});

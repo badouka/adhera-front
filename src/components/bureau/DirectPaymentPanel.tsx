@@ -1,10 +1,13 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useId, useRef, useState } from 'react';
-import { createDirectPayment, isSessionError } from '@/lib/bureau/api';
+import { ApiError } from '@/lib/api';
+import { BureauApiError, createDirectPayment, isSessionError } from '@/lib/bureau/api';
 import { errorMessage, invalidFields } from '@/lib/bureau/messages';
 import type { MemberDetail, MemberDue, Payment } from '@/lib/bureau/types';
 import { todayInDakar } from '@/lib/dates';
+import { useIdempotencyKey } from '@/lib/idempotency';
 import { formatTypedAmount } from '@/lib/typedAmount';
 import { PAYMENT_METHODS, type PaymentMethod } from '@/lib/types';
 import { parseAmount } from '@/lib/validation';
@@ -43,18 +46,26 @@ const FIELD_ERRORS: Required<Errors> = {
  *
  * R9 tient dans le panneau : le récapitulatif est la ligne posée au-dessus du
  * bouton, et le bouton dit le montant. Pas de seconde fenêtre.
+ *
+ * Sans doublon (§11) : la clé `Idempotency-Key` naît à l'OUVERTURE du panneau
+ * et le suit tant que l'envoi n'a pas réussi — toucher « Encaisser » une
+ * seconde fois sur un réseau qui hésite rejoue la même clé, et le serveur rend
+ * le premier versement sans en créer un autre.
  */
 export function DirectPaymentPanel({
   member,
   onDone,
   onClose,
   onModeUnsupported,
+  onDuplicate,
   closeLabel = 'Fermer',
 }: {
   member: MemberDetail;
   onDone: (payment: Payment) => void;
   onClose: () => void;
   onModeUnsupported: () => void;
+  /** Un `409 duplicate_payment` : la fiche recharge ses versements. */
+  onDuplicate?: () => void;
   closeLabel?: string;
 }) {
   const ids = useId();
@@ -72,6 +83,10 @@ export function DirectPaymentPanel({
   const [errors, setErrors] = useState<Errors>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // `409 duplicate_payment` : le versement existe déjà. On y conduit, et on ne
+  // propose PAS de recommencer (piège 32).
+  const [duplicate, setDuplicate] = useState<string | null>(null);
+  const [idempotencyKey, renewKey] = useIdempotencyKey();
   const errorRef = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
@@ -117,16 +132,37 @@ export function DirectPaymentPanel({
     setBusy(true);
     setError(null);
     try {
-      const payment = await createDirectPayment(member.id, {
-        amount: typed,
-        method,
-        paid_on: paidOn,
-        reference: reference.trim() || null,
-      });
+      const payment = await createDirectPayment(
+        member.id,
+        {
+          amount: typed,
+          method,
+          paid_on: paidOn,
+          reference: reference.trim() || null,
+        },
+        idempotencyKey,
+      );
+      // Un succès clôt l'intention : le prochain encaissement aura sa clé.
+      renewKey();
       onDone(payment);
     } catch (cause) {
       if (isSessionError(cause)) return;
       if (isModeUnsupported(cause)) onModeUnsupported();
+      if (cause instanceof ApiError && cause.code === 'duplicate_payment') {
+        const existing = cause instanceof BureauApiError ? cause.body.payment_id : null;
+        setDuplicate(typeof existing === 'string' ? existing : '');
+        onDuplicate?.();
+        setBusy(false);
+        return;
+      }
+      if (cause instanceof ApiError && cause.code === 'idempotency_key_reused') {
+        // Le contenu a changé depuis un envoi dont on n'a pas eu la réponse :
+        // nouvelle intention, nouvelle clé, et le trésorier relit.
+        renewKey();
+        setError(errorMessage(cause, ''));
+        setBusy(false);
+        return;
+      }
       const fields = invalidFields(cause).filter((f): f is keyof Errors => f in FIELD_ERRORS);
       if (fields.length > 0) {
         const mapped: Errors = {};
@@ -278,6 +314,20 @@ export function DirectPaymentPanel({
           </p>
         ) : null}
 
+        {duplicate !== null ? (
+          <div
+            role="alert"
+            className="flex flex-col gap-2 rounded-[var(--radius-sm)] bg-due-soft p-3 font-semibold text-due"
+          >
+            <span>Ce versement vient d’être enregistré.</span>
+            <Link
+              href={`/bureau/membres/${encodeURIComponent(member.id)}${duplicate ? `#versement-${encodeURIComponent(duplicate)}` : ''}`}
+              className="font-semibold"
+            >
+              Voir le versement sur la fiche du membre
+            </Link>
+          </div>
+        ) : (
         <div className="flex flex-col gap-2">
           {/* R9 : le récapitulatif, sur une ligne, juste au-dessus du bouton. */}
           <p className="m-0 font-semibold break-words" data-testid="recap">
@@ -297,6 +347,7 @@ export function DirectPaymentPanel({
             )}
           </Button>
         </div>
+        )}
       </form>
     </Panel>
   );
