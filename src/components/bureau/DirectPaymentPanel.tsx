@@ -21,9 +21,15 @@ import { Button, Field, inputClass, Panel } from './ui';
  * de période n'existe. On affiche la plus ancienne période encore ouverte, qui
  * est celle que le membre doit d'abord ; la réponse dira laquelle a été
  * réellement créditée.
+ *
+ * Un arriéré NON RÉCLAMÉ (§12.3) n'est jamais la cible : le serveur ne le
+ * crédite pas, et le montrer ferait encaisser l'année que l'association a
+ * choisi de ne pas réclamer.
  */
 export function openDue(member: MemberDetail): MemberDue | null {
-  const open = member.dues.filter((d) => d.status === 'due' || d.status === 'partielle');
+  const open = member.dues.filter(
+    (d) => (d.status === 'due' || d.status === 'partielle') && !d.is_unclaimed_arrears,
+  );
   if (open.length === 0) return null;
   return [...open].sort((a, b) => a.period_start.localeCompare(b.period_start))[0] ?? null;
 }

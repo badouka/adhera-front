@@ -119,8 +119,17 @@ describe('Tableau de bord — les chiffres', () => {
     fakeServer([{ match: 'membership/dashboard', body: d }]);
     renderInBureau(<TableauDeBordPage />);
     expect(await screen.findByTestId('unknown')).toHaveTextContent(
-      /Total partiel : 2 cotisations n’ont pas de montant fixé .* ne sont pas comptées/,
+      /Total partiel : 2 membres au montant inconnu .* n’est pas comptée dans le reste à encaisser/,
     );
+  });
+
+  it('§12.6 — des MEMBRES, au singulier pour un seul', async () => {
+    const d = dashboard();
+    d.money = { ...d.money, outstanding_unknown_count: 1 };
+    fakeServer([{ match: 'membership/dashboard', body: d }]);
+    renderInBureau(<TableauDeBordPage />);
+    expect(await screen.findByTestId('unknown')).toHaveTextContent(/Total partiel : 1 membre au montant inconnu/);
+    expect(screen.getByTestId('unknown')).not.toHaveTextContent(/cotisation.* fixé/);
   });
 
   it('les 12 barres sont là, mois vides compris, avec un libellé au toucher', async () => {

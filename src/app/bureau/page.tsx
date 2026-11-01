@@ -326,12 +326,11 @@ function Figures({ data }: { data: Dashboard }) {
           </div>
           {money.outstanding_unknown_count > 0 ? (
             <p className="small m-0 rounded-[var(--radius-sm)] bg-due-soft p-3 font-semibold text-due" data-testid="unknown">
+              {/* Des MEMBRES depuis S3d, plus des périodes (§12.6). */}
               Total partiel :{' '}
-              {money.outstanding_unknown_count > 1
-                ? `${money.outstanding_unknown_count} cotisations n’ont pas de montant fixé`
-                : '1 cotisation n’a pas de montant fixé'}{' '}
-              (catégorie sans montant fixe, ou reprise d’un ancien fichier). Elles
-              ne sont pas comptées dans le reste à encaisser.
+              {plural(money.outstanding_unknown_count, 'membre', 'membres')} au montant
+              inconnu (catégorie sans montant fixe, ou reprise d’un ancien fichier).
+              Leur cotisation n’est pas comptée dans le reste à encaisser.
             </p>
           ) : null}
           {/* Signalé ≠ encaissé : une ligne à part, jamais additionnée. */}

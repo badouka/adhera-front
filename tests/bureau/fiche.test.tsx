@@ -3,10 +3,18 @@
  * @vitest-environment-options { "url": "https://demo-asso.adhera.africa/bureau/membres/x" }
  */
 
-import { cleanup, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import FicheMembrePage from '@/app/bureau/membres/[id]/page';
+import { openDue } from '@/components/bureau/DirectPaymentPanel';
+import {
+  dueDateLine,
+  StandingPastille,
+  standingDetail,
+  upToDateWithArrears,
+} from '@/components/bureau/Standing';
+import type { MemberDetail } from '@/lib/bureau/types';
 import { resetSessionCache, saveSession } from '@/lib/bureau/session';
 import {
   CATEGORIES,
@@ -572,5 +580,205 @@ describe('§11 — annuler un encaissement, sans rien perdre', () => {
     await waitFor(() =>
       expect(calls(fetchMock).filter((c) => c.url.includes(`members/${MOUSSA.id}`)).length).toBeGreaterThan(1),
     );
+  });
+});
+
+/* ───────────────────── F3.1 — arriérés et échéance (§12) ───────────────────── */
+
+function due(
+  id: string,
+  start: string,
+  end: string,
+  extra: Partial<MemberDetail['dues'][number]> = {},
+): MemberDetail['dues'][number] {
+  return {
+    id,
+    period_start: start,
+    period_end: end,
+    due_date: start,
+    status: 'due',
+    origin: 'platform',
+    amount_due: 250000,
+    amount_due_formatted: '250 000 FCFA',
+    amount_paid: 0,
+    amount_paid_formatted: '0 FCFA',
+    balance_due: 250000,
+    balance_due_formatted: '250 000 FCFA',
+    settled_at: null,
+    receipts: [],
+    receipt_available: false,
+    is_unclaimed_arrears: false,
+    ...extra,
+  };
+}
+
+/** Absente depuis deux ans, sous `current_only` : seule l'année en cours est réclamée. */
+const AWA_CURRENT_ONLY = memberDetail({
+  id: 'm-awa',
+  name: 'Awa Diouf',
+  balance_due: 250000,
+  balance_due_formatted: '250 000 FCFA',
+  next_due_date: '2026-10-01',
+  dues: [
+    due('d-2026', '2026-10-01', '2027-09-30'),
+    due('d-2025', '2025-10-01', '2026-09-30', { is_unclaimed_arrears: true }),
+    due('d-2024', '2024-10-01', '2025-09-30', { is_unclaimed_arrears: true }),
+  ],
+});
+
+/** La même membre sous `all`, l'année en cours réglée : à jour ET deux arriérés. */
+const AWA_ALL = memberDetail({
+  id: 'm-awa',
+  name: 'Awa Diouf',
+  is_up_to_date: true,
+  covered_until: '2027-09-30',
+  next_due_date: '2027-10-01',
+  balance_due: 500000,
+  balance_due_formatted: '500 000 FCFA',
+  dues: [
+    due('d-2026', '2026-10-01', '2027-09-30', {
+      status: 'reglee',
+      amount_paid: 250000,
+      amount_paid_formatted: '250 000 FCFA',
+      balance_due: 0,
+      balance_due_formatted: '0 FCFA',
+    }),
+    due('d-2025', '2025-10-01', '2026-09-30'),
+    due('d-2024', '2024-10-01', '2025-09-30'),
+  ],
+});
+
+function duesSection() {
+  return screen.getByRole('heading', { name: 'Cotisations' }).closest('section') as HTMLElement;
+}
+
+function situation() {
+  return screen.getByRole('heading', { name: 'Situation' }).closest('section') as HTMLElement;
+}
+
+describe('§1 — l’historique et le reste à payer', () => {
+  it('une cotisation non réclamée : listée, grisée, pastille « Non réclamée », hors du reste à payer', async () => {
+    server(AWA_CURRENT_ONLY, [{ match: /payments\?member_id=/, body: [] }]);
+    renderInBureau(<FicheMembrePage />);
+    await screen.findByRole('heading', { name: 'Awa Diouf' });
+
+    const cards = within(duesSection()).getAllByRole('listitem').filter((li) => li.querySelector('dl'));
+    expect(cards).toHaveLength(3);
+    const [current, y2025, y2024] = cards as [HTMLElement, HTMLElement, HTMLElement];
+    expect(current).not.toHaveAttribute('data-unclaimed');
+    expect(within(current).getByText('À régler')).toBeInTheDocument();
+    for (const card of [y2025, y2024]) {
+      expect(card).toHaveAttribute('data-unclaimed', 'true');
+      expect(card.className).toContain('text-ink-muted');
+      expect(within(card).getByText('Non réclamée')).toBeInTheDocument();
+      expect(within(card).queryByText('À régler')).toBeNull();
+      // Rien n'est caché : le montant reste là.
+      expect(within(card).getAllByText('250 000 FCFA').length).toBeGreaterThan(0);
+    }
+    // Le reste à payer est celui du serveur : l'année en cours, pas 3 × 250 000.
+    expect(within(situation()).getByText(fullText('250 000 FCFA'))).toBeInTheDocument();
+    expect(situation().textContent).not.toMatch(/750 000/);
+  });
+
+  it('la ligne d’explication n’apparaît qu’une fois, sous la première non réclamée, avec le lien vers le réglage', async () => {
+    server(AWA_CURRENT_ONLY, [{ match: /payments\?member_id=/, body: [] }]);
+    renderInBureau(<FicheMembrePage />);
+    await screen.findByRole('heading', { name: 'Awa Diouf' });
+    const notes = screen.getAllByTestId('unclaimed-note');
+    expect(notes).toHaveLength(1);
+    expect(notes[0]?.textContent?.replace(/\s+/g, ' ')).toBe(
+      'L’association repart de l’année en cours. Les années précédentes ne sont pas réclamées. (Réglages)',
+    );
+    expect(within(notes[0] as HTMLElement).getByRole('link', { name: 'Réglages' })).toHaveAttribute(
+      'href',
+      '/bureau/reglages#arrieres',
+    );
+    expect((notes[0] as HTMLElement).closest('li')).toHaveAttribute('data-unclaimed', 'true');
+    expect((notes[0] as HTMLElement).closest('li')).toHaveTextContent('Du 1er octobre 2025 au 30 septembre 2026');
+  });
+
+  it('sans arriéré non réclamé : aucune ligne d’explication', async () => {
+    server();
+    renderInBureau(<FicheMembrePage />);
+    await screen.findByRole('heading', { name: 'Cotisations' });
+    expect(screen.queryByTestId('unclaimed-note')).toBeNull();
+  });
+
+  it('« Encaisser » vise l’année réclamée, jamais un arriéré non réclamé', async () => {
+    server(AWA_CURRENT_ONLY, [{ match: /payments\?member_id=/, body: [] }]);
+    const user = userEvent.setup();
+    renderInBureau(<FicheMembrePage />);
+    await user.click(await screen.findByRole('button', { name: 'Encaisser' }));
+    expect(
+      screen.getByText(fullText('Cotisation du 1er octobre 2026 au 30 septembre 2027 — reste 250 000 FCFA')),
+    ).toBeInTheDocument();
+    expect(openDue(AWA_CURRENT_ONLY)?.id).toBe('d-2026');
+  });
+
+  it('sous `all` : jamais « À jour » seul à côté d’un dû — « À jour pour l’année en cours — arriérés : 500 000 FCFA »', async () => {
+    server(AWA_ALL, [{ match: /payments\?member_id=/, body: [] }]);
+    renderInBureau(<FicheMembrePage />);
+    await screen.findByRole('heading', { name: 'Awa Diouf' });
+
+    expect(
+      within(situation()).getByText(fullText('À jour pour l’année en cours — arriérés : 500 000 FCFA')),
+    ).toBeInTheDocument();
+    // Ni dans la Situation, ni dans la pastille du titre.
+    expect(screen.queryByText(/^À jour$/)).toBeNull();
+    expect(screen.getByText('Arriérés à régler')).toBeInTheDocument();
+    // Sous `all`, rien n'est marqué non réclamé.
+    expect(screen.queryByText('Non réclamée')).toBeNull();
+    expect(screen.queryByTestId('unclaimed-note')).toBeNull();
+  });
+
+  it('le registre aussi : pastille et détail, jamais « À jour » seul', () => {
+    const { container } = render(
+      <>
+        <StandingPastille member={AWA_ALL} />
+        <span>{standingDetail(AWA_ALL)}</span>
+      </>,
+    );
+    expect(container.textContent).toBe('Arriérés à régler' + 'À jour pour l’année en cours — arriérés : 500 000 FCFA');
+    // Un membre à jour sans dû reste « À jour ».
+    const clean = memberDetail({ is_up_to_date: true, balance_due: 0, balance_due_formatted: '0 FCFA' });
+    expect(upToDateWithArrears(clean)).toBe(false);
+    // Montant inconnu : ce n'est pas un arriéré qu'on sait dire.
+    expect(upToDateWithArrears({ ...AWA_ALL, balance_due: null, balance_due_formatted: null })).toBe(false);
+  });
+});
+
+describe('§1 — l’échéance : lue, comparée à aujourd’hui, jamais calculée', () => {
+  const TODAY = '2026-11-01';
+
+  it('passée et pas à jour → « En retard depuis le … »', () => {
+    expect(dueDateLine(memberDetail({ next_due_date: '2026-10-01' }), TODAY)).toEqual({
+      late: true,
+      label: 'Échéance',
+      value: 'En retard depuis le 1er octobre 2026',
+    });
+  });
+
+  it('sinon → « Prochaine échéance » : à venir, aujourd’hui, ou passée mais à jour', () => {
+    expect(dueDateLine(memberDetail({ next_due_date: '2027-10-01' }), TODAY)).toEqual({
+      late: false,
+      label: 'Prochaine échéance',
+      value: '1er octobre 2027',
+    });
+    expect(dueDateLine(memberDetail({ next_due_date: TODAY }), TODAY)?.late).toBe(false);
+    expect(dueDateLine(memberDetail({ next_due_date: '2026-10-01', is_up_to_date: true }), TODAY)?.late).toBe(false);
+    expect(dueDateLine(memberDetail({ next_due_date: null }), TODAY)).toBeNull();
+  });
+
+  it('à l’écran : la date servie, telle quelle', async () => {
+    server(memberDetail({ next_due_date: '2020-10-01' }));
+    const { unmount } = renderInBureau(<FicheMembrePage />);
+    expect(await screen.findByTestId('echeance')).toHaveTextContent(/^En retard depuis le 1er octobre 2020$/);
+    expect(within(situation()).getByText('Échéance')).toBeInTheDocument();
+    unmount();
+
+    server(memberDetail({ next_due_date: '2099-10-01', is_up_to_date: true, balance_due: 0, balance_due_formatted: '0 FCFA' }));
+    renderInBureau(<FicheMembrePage />);
+    expect(await screen.findByTestId('echeance')).toHaveTextContent(/^1er octobre 2099$/);
+    expect(within(situation()).getByText('Prochaine échéance')).toBeInTheDocument();
   });
 });

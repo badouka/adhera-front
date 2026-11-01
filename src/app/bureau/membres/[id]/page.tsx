@@ -13,7 +13,12 @@ import { CashIcon, ChatIcon, ChevronLeftIcon } from '@/components/bureau/Icons';
 import { LeavePanel } from '@/components/bureau/LeavePanel';
 import { MemberForm } from '@/components/bureau/MemberForm';
 import { MemberLinkPanel } from '@/components/bureau/MemberLinkPanel';
-import { StandingPastille } from '@/components/bureau/Standing';
+import {
+  ArrearsLine,
+  dueDateLine,
+  StandingPastille,
+  upToDateWithArrears,
+} from '@/components/bureau/Standing';
 import {
   Button,
   EmptyState,
@@ -152,6 +157,7 @@ export default function FicheMembrePage() {
 
   const m = member.value;
   const former = m.status === 'former';
+  const echeance = dueDateLine(m);
 
   return (
     <>
@@ -307,10 +313,24 @@ export default function FicheMembrePage() {
           {modeSupported ? (
             <dl className="m-0 flex flex-col gap-2">
               <Row label="Situation">
-                {m.status === 'pending' ? 'Candidature' : m.is_up_to_date ? 'À jour' : 'Pas à jour'}
+                {m.status === 'pending' ? (
+                  'Candidature'
+                ) : upToDateWithArrears(m) ? (
+                  // Jamais « À jour » seul à côté d'un montant dû (§12.1, `all`).
+                  <ArrearsLine member={m} />
+                ) : m.is_up_to_date ? (
+                  'À jour'
+                ) : (
+                  'Pas à jour'
+                )}
               </Row>
               <Row label="Couvert jusqu’au">{formatDate(m.covered_until) || '—'}</Row>
-              <Row label="Prochaine échéance">{formatDate(m.next_due_date) || '—'}</Row>
+              {/* L'échéance RÉCLAMÉE (§12.7) : lue, jamais calculée. */}
+              <Row label={echeance?.label ?? 'Prochaine échéance'}>
+                <span className={echeance?.late ? 'text-late' : undefined} data-testid="echeance">
+                  {echeance?.value ?? '—'}
+                </span>
+              </Row>
               {/* null = INCONNU, jamais « 0 FCFA » (piège 4). */}
               <Row label="Reste à payer">
                 <span className="money">{m.balance_due_formatted ?? '—'}</span>
@@ -396,11 +416,16 @@ const DUE_TONE: Record<MemberDue['status'], 'paid' | 'due' | 'late' | 'info'> = 
 /**
  * Les cotisations, avec les reçus téléchargeables de chaque période.
  *
+ * Une cotisation NON RÉCLAMÉE (§12.3) reste listée, grisée, pastille « Non
+ * réclamée » : son montant n'est pas dans le reste à payer de la fiche, et une
+ * seule ligne, sous la première, dit pourquoi et où se règle la politique.
+ *
  * Un reçu annulé reste listé, marqué (piège 33). `cancelled_at` est servi sur
  * chaque reçu d'une période depuis S3d (§12.4) : la fiche le LIT, elle ne le
  * déduit plus de ses versements.
  */
 function DuesPanel({ dues }: { dues: MemberDue[] }) {
+  const firstUnclaimed = dues.find((d) => d.is_unclaimed_arrears)?.id;
   return (
     <Panel title="Cotisations">
       {dues.length === 0 ? (
@@ -410,7 +435,10 @@ function DuesPanel({ dues }: { dues: MemberDue[] }) {
           {dues.map((due) => (
             <li
               key={due.id}
-              className="flex flex-col gap-2 rounded-[var(--radius-sm)] border border-line p-3"
+              data-unclaimed={due.is_unclaimed_arrears ? 'true' : undefined}
+              className={`flex flex-col gap-2 rounded-[var(--radius-sm)] border border-line p-3 ${
+                due.is_unclaimed_arrears ? 'border-dashed bg-surface text-ink-muted' : ''
+              }`}
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="font-semibold">
@@ -418,9 +446,13 @@ function DuesPanel({ dues }: { dues: MemberDue[] }) {
                     ? `Du ${formatDate(due.period_start)} au ${formatDate(due.period_end)}`
                     : '—'}
                 </span>
-                <Pastille tone={DUE_TONE[due.status] ?? 'info'}>
-                  {DUE_STATUS_LABELS[due.status] ?? due.status}
-                </Pastille>
+                {due.is_unclaimed_arrears ? (
+                  <Pastille tone="muted">Non réclamée</Pastille>
+                ) : (
+                  <Pastille tone={DUE_TONE[due.status] ?? 'info'}>
+                    {DUE_STATUS_LABELS[due.status] ?? due.status}
+                  </Pastille>
+                )}
               </div>
               {/* R1 : *_formatted seulement ; null = inconnu → « — ». */}
               <dl className="small tnum m-0 flex flex-wrap gap-x-6 gap-y-2">
@@ -461,6 +493,16 @@ function DuesPanel({ dues }: { dues: MemberDue[] }) {
                     ))}
                   </ul>
                 </div>
+              ) : null}
+              {due.id === firstUnclaimed ? (
+                <p className="small m-0" data-testid="unclaimed-note">
+                  L’association repart de l’année en cours. Les années précédentes
+                  ne sont pas réclamées. (
+                  <Link href="/bureau/reglages#arrieres" className="font-semibold">
+                    Réglages
+                  </Link>
+                  )
+                </p>
               ) : null}
             </li>
           ))}

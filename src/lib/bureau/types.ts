@@ -171,6 +171,12 @@ export type MemberDue = {
   /** Le plus récent d'abord (v3.5.6). */
   receipts: DueReceipt[];
   receipt_available: boolean;
+  /**
+   * §12.3 — une période `due` / `partielle` que la politique d'arriérés écarte :
+   * visible, jamais réclamée, hors du reste à payer. Toujours `false` sous `all`.
+   * Absent d'un serveur antérieur à S3d, lu alors comme `false`.
+   */
+  is_unclaimed_arrears?: boolean;
 };
 
 export type ContactRole = 'principal' | 'billing' | 'delegate';
