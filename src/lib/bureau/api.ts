@@ -23,11 +23,15 @@ import {
   navigation,
 } from './session';
 import type {
+  Campaign,
+  CampaignInput,
   Category,
   CategoryInput,
   Contact,
   ContactInput,
+  Dashboard,
   DirectPaymentInput,
+  LaunchedCampaign,
   LeftReason,
   LoginData,
   MemberDetail,
@@ -35,6 +39,8 @@ import type {
   MemberInput,
   MemberLink,
   MemberListItem,
+  OutreachDecision,
+  OutreachItem,
   Payment,
   PaymentFilterStatus,
   ProofUrl,
@@ -175,8 +181,31 @@ type RequestOptions = {
   json?: unknown;
   form?: FormData;
   signal?: AbortSignal;
-  as?: 'json' | 'blob';
+  headers?: Record<string, string>;
+  as?: 'json' | 'blob' | 'file';
 };
+
+/** Un fichier téléchargé : le nom vient du `Content-Disposition`, s'il est lisible. */
+export type DownloadedFile = { blob: Blob; filename: string | null };
+
+/**
+ * Le nom d'un `Content-Disposition: attachment; filename="…"` (ou `filename*`).
+ * ⚠️ L'API n'expose pas cet en-tête en CORS (constaté le 2026-11-01) : dans le
+ * navigateur il est presque toujours illisible, et l'écran compose le nom.
+ */
+export function filenameFromDisposition(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const star = /filename\*\s*=\s*(?:UTF-8'')?([^;]+)/i.exec(value);
+  if (star?.[1]) {
+    try {
+      return decodeURIComponent(star[1].trim().replace(/^"|"$/g, ''));
+    } catch {
+      // On retombe sur `filename=`.
+    }
+  }
+  const plain = /filename\s*=\s*"?([^";]+)"?/i.exec(value);
+  return plain?.[1]?.trim() || null;
+}
 
 /**
  * Une route authentifiée. `path` est relatif à `/api/v1/admin`.
@@ -198,6 +227,7 @@ export async function request<T>(
   }
 
   const headers: Record<string, string> = {
+    ...options.headers,
     Accept: 'application/json',
     'X-Tenant-Slug': tenant,
     Authorization: `Bearer ${session.token}`,
@@ -237,6 +267,13 @@ export async function request<T>(
   if (!response.ok) throw await toError(response);
 
   if (options.as === 'blob') return (await response.blob()) as T;
+  if (options.as === 'file') {
+    const file: DownloadedFile = {
+      blob: await response.blob(),
+      filename: filenameFromDisposition(response.headers?.get('Content-Disposition')),
+    };
+    return file as T;
+  }
   return (await readJson(response)) as T;
 }
 
@@ -469,11 +506,22 @@ export async function getProofUrl(id: string): Promise<string> {
       if (typeof value === 'string' && value.startsWith('https://')) return value;
     }
   }
-  throw new BureauApiError(200, null, 'Lien du justificatif absent');
+  throw new BureauApiError(200, null, 'Lien de la capture absent');
 }
 
-/** La saisie directe : enregistrée ET validée, sur la période de `payableDue()`. */
-export function createDirectPayment(memberId: string, input: DirectPaymentInput) {
+/**
+ * La saisie directe : enregistrée ET validée, sur la période de `payableDue()`.
+ *
+ * `idempotencyKey` est la clé du PANNEAU (§11.1) : la même tant que l'envoi
+ * n'a pas réussi. Un rejeu rend `201` et le versement d'origine ; un contenu
+ * différent sous la même clé, `422 idempotency_key_reused` ; un doublon sans
+ * clé, `409 duplicate_payment`.
+ */
+export function createDirectPayment(
+  memberId: string,
+  input: DirectPaymentInput,
+  idempotencyKey?: string,
+) {
   const json: Record<string, unknown> = {
     amount: input.amount,
     method: input.method,
@@ -483,6 +531,19 @@ export function createDirectPayment(memberId: string, input: DirectPaymentInput)
   return request<Payment>(`membership/members/${seg(memberId)}/payments`, {
     method: 'POST',
     json,
+    headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+  });
+}
+
+/**
+ * Annuler un encaissement VALIDÉ (§11.3). Motif de 10 caractères au moins,
+ * espaces de bord non comptées. Rien n'est supprimé ; un `declared` se
+ * REJETTE, il ne s'annule pas.
+ */
+export function cancelPayment(id: string, reason: string) {
+  return request<Payment>(`membership/payments/${seg(id)}/cancel`, {
+    method: 'POST',
+    json: { reason },
   });
 }
 
@@ -494,4 +555,70 @@ export function createDirectPayment(memberId: string, input: DirectPaymentInput)
  */
 export function fetchDocument(id: string) {
   return request<Blob>(`membership/documents/${seg(id)}/pdf`, { as: 'blob' });
+}
+
+/* ─────────────────────── Tableau de bord et exports ───────────────── */
+
+/** Bornes `YYYY-MM-DD` incluses ; absentes = du 1er janvier à aujourd'hui. */
+export type PeriodQuery = { from?: string | null; to?: string | null };
+
+export function getDashboard(period: PeriodQuery, signal?: AbortSignal) {
+  return request<Dashboard>('membership/dashboard', { query: period, signal });
+}
+
+/** Le registre en Excel (§10) : des BLOBS, jamais du JSON (piège 29). */
+export function downloadMembersExport() {
+  return request<DownloadedFile>('membership/exports/members.xlsx', { as: 'file' });
+}
+
+export function downloadPaymentsExport(period: PeriodQuery) {
+  return request<DownloadedFile>('membership/exports/payments.xlsx', {
+    query: period,
+    as: 'file',
+  });
+}
+
+/* ─────────────────────── Relances et campagnes (§9) ───────────────── */
+
+/**
+ * La file WhatsApp, la plus urgente d'abord. Elle peut RÉTRÉCIR d'un appel à
+ * l'autre (un membre qui a réglé est écarté) ; son ordre est celui du serveur.
+ */
+export function listOutreach(signal?: AbortSignal) {
+  return request<OutreachItem[]>('membership/outreach', { signal });
+}
+
+/** Une DÉCLARATION du bureau : le produit ne sait pas si le message est parti. */
+export function markOutreachSent(id: string) {
+  return request<OutreachDecision>(`membership/outreach/${seg(id)}/sent`, { method: 'POST' });
+}
+
+export function skipOutreach(id: string, reason: string) {
+  return request<OutreachDecision>(`membership/outreach/${seg(id)}/skip`, {
+    method: 'POST',
+    json: { reason },
+  });
+}
+
+export function listCampaigns(signal?: AbortSignal) {
+  return request<Campaign[]>('membership/campaigns', { signal });
+}
+
+export function createCampaign(input: CampaignInput) {
+  const json: Record<string, unknown> = { segment: input.segment, send_email: input.send_email };
+  if (input.scheduled_at) json.scheduled_at = input.scheduled_at;
+  return request<LaunchedCampaign>('membership/campaigns', { method: 'POST', json });
+}
+
+/** `422 campaign_already_sent` : le cron l'a lancée entre-temps — recharger. */
+export function cancelCampaign(id: string) {
+  return request<Campaign>(`membership/campaigns/${seg(id)}/cancel`, { method: 'POST' });
+}
+
+/** Le seul moyen d'arrêter le rapport du lundi (§10). */
+export function setWeeklyReport(enabled: boolean) {
+  return request<Settings>('membership/settings', {
+    method: 'PUT',
+    json: { weekly_report_enabled: enabled },
+  });
 }

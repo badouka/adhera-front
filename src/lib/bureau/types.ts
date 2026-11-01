@@ -1,6 +1,6 @@
 /**
  * Le contrat de l'API bureau, recopié de `_handoff/adhera-api-bureau.md`
- * (v3.5.7-adhera-etape1).
+ * (v3.7.2-adhera-S3c : relances §9, tableau de bord §10, encaissements §11).
  *
  * R1 : les champs `*_formatted` sont les SEULS montants affichables. Les champs
  * numériques ne servent qu'au calcul (borne d'un formulaire), jamais au rendu.
@@ -52,6 +52,11 @@ export type Settings = {
   metadata: unknown;
   /** À lire avant tout affichage de cotisation (§3). */
   mode_is_supported: boolean;
+  /**
+   * Le rapport du lundi au président et au trésorier (§10). `true` par défaut ;
+   * absent d'un serveur antérieur à v3.7.1, lu alors comme `true`.
+   */
+  weekly_report_enabled?: boolean;
 };
 
 /** Les seuls champs que `PUT settings` laisse modifier depuis F2. */
@@ -132,6 +137,8 @@ export type DueReceipt = {
   /** ISO 8601 */
   issued_at: string;
   amount_formatted: string;
+  /** Renseigné si le versement a été annulé (§11.4) : le reçu reste listé. */
+  cancelled_at?: string | null;
 };
 
 export type MemberDue = {
@@ -228,10 +235,10 @@ export type WhatsappMessage = {
 
 /* ───────────────────────────── Versements ─────────────────────────── */
 
-export type PaymentStatus = 'declared' | 'validated' | 'rejected';
+export type PaymentStatus = 'declared' | 'validated' | 'rejected' | 'cancelled';
 
 /** `all` est un mot du FILTRE, jamais une valeur stockée (piège 14). */
-export type PaymentFilterStatus = PaymentStatus | 'all';
+export type PaymentFilterStatus = Exclude<PaymentStatus, 'cancelled'> | 'all';
 
 export type PaymentDue = {
   period_start: string;
@@ -262,6 +269,11 @@ export type Payment = {
   /** Le reçu émis POUR CE VERSEMENT, ou null (§6). */
   receipt: { id: string; reference: string } | null;
   due: PaymentDue | null;
+  /** L'annulation d'un encaissement validé (§11.3) : rien n'est supprimé. */
+  cancelled_at?: string | null;
+  cancelled_by_user_id?: number | null;
+  cancelled_by_name?: string | null;
+  cancel_reason?: string | null;
 };
 
 export type DirectPaymentInput = {
@@ -279,6 +291,144 @@ export type ProofUrl = {
   size?: number;
   /** Ancienne clé supposée par F2 : gardée en repli. */
   url?: string;
+};
+
+/* ─────────────────────── Tableau de bord (§10) ─────────────────────── */
+
+export type Dashboard = {
+  /** Bornes INCLUSES, `YYYY-MM-DD`. */
+  period: { from: string; to: string };
+  members: {
+    /** `active = up_to_date + not_up_to_date`, toujours. */
+    active: number;
+    /** Un exonéré y est compté. */
+    up_to_date: number;
+    not_up_to_date: number;
+    pending: number;
+    former: number;
+  };
+  money: {
+    /** Versements VALIDÉS, datés par leur paiement, sur la fenêtre. */
+    collected: number;
+    collected_formatted: string;
+    /** SIGNALÉS : jamais additionnés à l'encaissé, non bornés par la fenêtre. */
+    declared_pending: number;
+    declared_pending_formatted: string;
+    declared_pending_count: number;
+    outstanding: number;
+    outstanding_formatted: string;
+    /** Non nul ⇒ `outstanding` est partiel (piège 28). */
+    outstanding_unknown_count: number;
+    /** Le taux à jour, entier. `null` s'il n'y a aucun membre actif — jamais 0. */
+    recovery_rate: number | null;
+  };
+  by_category: Array<{
+    category_id: number | null;
+    label: string;
+    members: number;
+    up_to_date: number;
+    collected: number;
+    collected_formatted: string;
+  }>;
+  /** Toujours les 5 moyens, à 0 s'il n'y a rien. */
+  by_method: Array<{
+    method: PaymentMethod | string;
+    label: string;
+    collected: number;
+    collected_formatted: string;
+  }>;
+  /** 12 mois glissants, mois vides compris. Ne retombe PAS sur `collected`. */
+  evolution: Array<{
+    /** `YYYY-MM` */
+    month: string;
+    label: string;
+    collected: number;
+    collected_formatted: string;
+  }>;
+  upcoming: { days: number; count: number };
+  outreach: OutreachSummary;
+};
+
+/* ─────────────────────── Relances et file WhatsApp (§9) ─────────────── */
+
+export type OutreachStep = 'j-30' | 'j-7' | 'j+1';
+
+export type OutreachSummary = {
+  pending: { 'j-30': number; 'j-7': number; 'j+1': number; campagne: number };
+  /** Un comptage SANS écartement : il peut dépasser la file servie. */
+  total: number;
+};
+
+export type OutreachItem = {
+  id: string;
+  member: {
+    id: string;
+    first_name: string | null;
+    last_name: string | null;
+    name: string;
+    phone: string | null;
+  };
+  /** `null` pour une campagne du bureau. */
+  step: OutreachStep | null;
+  /** `YYYY-MM-DD`, ou null. */
+  due_on: string | null;
+  campaign: { id: string; segment: string; automatic: boolean } | null;
+  /** Composé À LA LECTURE par le serveur : jamais mis en cache, jamais recomposé. */
+  message: string;
+  /** `null` ⇒ numéro non reconnu : proposer la copie, jamais un lien deviné. */
+  wa_url: string | null;
+  phone_is_usable: boolean;
+  url: string;
+};
+
+export type OutreachDecision = {
+  id: string;
+  status: string;
+  sent_at: string | null;
+  skip_reason: string | null;
+};
+
+export type CampaignSegment = 'non_a_jour' | 'tous_actifs';
+
+export type ChannelProgress = {
+  total: number;
+  sent: number;
+  pending: number;
+  skipped: number;
+  failed: number;
+};
+
+export type Campaign = {
+  id: string;
+  type: string;
+  /** `non_a_jour`, `tous_actifs`, ou `auto:j-30` / `auto:j-7` / `auto:j+1`. */
+  segment: string;
+  /** `draft` (programmée), `sent`, `cancelled`. */
+  status: string;
+  automatic: boolean;
+  step: OutreachStep | null;
+  send_email: boolean;
+  scheduled_at: string | null;
+  created_at: string;
+  channels: { whatsapp: ChannelProgress; email: ChannelProgress };
+  /** INDICATIF : on branche sur la réponse, jamais sur ce drapeau (piège 30). */
+  cancellable?: boolean;
+};
+
+/** La réponse de `POST campaigns` : la campagne, plus quatre clés de lancement. */
+export type LaunchedCampaign = Campaign & {
+  launched: boolean;
+  whatsapp_queued: number;
+  emails_queued: number;
+  /** Ni e-mail ni téléphone : à joindre autrement. */
+  unreachable: number;
+};
+
+export type CampaignInput = {
+  segment: CampaignSegment;
+  send_email: boolean;
+  /** ISO 8601, dans le futur ; `null` = maintenant. */
+  scheduled_at: string | null;
 };
 
 /* ───────────────────────────── Libellés ───────────────────────────── */
@@ -325,4 +475,5 @@ export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
   declared: 'À valider',
   validated: 'Validé',
   rejected: 'Refusé',
+  cancelled: 'Annulé',
 };

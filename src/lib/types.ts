@@ -80,6 +80,11 @@ export type Receipt = {
   amount_formatted: string;
   /** ISO 8601 */
   issued_at: string;
+  /**
+   * Renseigné si le bureau a annulé l'encaissement (§11.4) : le reçu reste
+   * LISTÉ et téléchargeable, et son PDF dit « ANNULÉ ». Jamais caché.
+   */
+  cancelled_at?: string | null;
 };
 
 export type MemberPayload = {

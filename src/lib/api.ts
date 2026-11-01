@@ -113,12 +113,18 @@ export type DeclarationInput = {
   proof: File | null;
 };
 
-/** `POST /m/{token}/payments` — la déclaration de paiement du membre. */
+/**
+ * `POST /m/{token}/payments` — la déclaration de paiement du membre.
+ *
+ * `idempotencyKey` est celle de la feuille « J'ai payé », tirée à son
+ * ouverture (§11.1) : un réessai après une coupure ne crée pas de doublon.
+ */
 export async function declarePayment(
   token: string,
   tenant: string,
   input: DeclarationInput,
   signal?: AbortSignal,
+  idempotencyKey?: string,
 ): Promise<DeclarationResult> {
   const form = new FormData();
   form.set('amount', String(input.amount));
@@ -134,7 +140,9 @@ export async function declarePayment(
       `${API_BASE}/m/${encodeURIComponent(token)}/payments`,
       {
         method: 'POST',
-        headers: headers(tenant),
+        headers: idempotencyKey
+          ? { ...headers(tenant), 'Idempotency-Key': idempotencyKey }
+          : headers(tenant),
         body: form,
         cache: 'no-store',
         signal,

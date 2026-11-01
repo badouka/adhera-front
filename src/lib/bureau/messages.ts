@@ -48,6 +48,18 @@ const BY_CODE: Record<string, string> = {
   amount_exceeds_balance: 'Le montant dépasse ce qui reste à payer.',
   amount_due_unknown:
     'Le montant de la cotisation de ce membre n’est pas fixé : vérifiez sa catégorie.',
+  // F3 — tableau de bord, relances, campagnes, encaissements (§9 à §11).
+  invalid_period: 'Les dates de la période ne sont pas valides.',
+  adhera_domain_missing:
+    'Le lien des membres n’est pas encore configuré pour votre association. Contactez DIGISSOL.',
+  message_not_pending: 'Ce message a déjà été traité, peut-être depuis un autre téléphone.',
+  campaign_already_sent: 'Cette campagne est déjà partie : elle ne peut plus être annulée.',
+  invalid_campaign: 'Vérifiez la campagne : la date doit être à venir.',
+  duplicate_payment: 'Ce versement vient d’être enregistré.',
+  idempotency_key_reused: 'Le formulaire a changé : vérifiez puis confirmez à nouveau.',
+  payment_not_cancellable:
+    'Ce versement ne peut plus être annulé : il l’a peut-être déjà été. La fiche a été rechargée.',
+  reason_required: 'Indiquez un motif de 10 caractères au moins.',
 };
 
 /**
