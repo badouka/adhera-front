@@ -97,7 +97,7 @@ le reçu) ou refuse avec un motif **que le membre lira sur sa page**. Autour :
 le registre, la fiche membre (lien WhatsApp, encaissement, sortie) et les
 réglages.
 
-Le contrat est `_handoff/adhera-api-bureau.md` (v3.5.7), hors dépôt.
+Le contrat est `_handoff/adhera-api-bureau.md`, hors dépôt.
 
 - **Un seul client HTTP** : `src/lib/bureau/api.ts`. Il lit les DEUX
   enveloppes (`{success, message, data}` pour `login`, réponse nue pour
@@ -120,6 +120,37 @@ Le contrat est `_handoff/adhera-api-bureau.md` (v3.5.7), hors dépôt.
   la borne du limiteur reconnu à son `code` (1 minute par IP, 1 heure par
   compte).
 - Les rôles ne cachent rien : le serveur ne les lit pas (contrat §2).
+
+## F3 — tableau de bord, relances, campagnes, annulation
+
+Le contrat est `_handoff/adhera-api-bureau.md` (v3.7.2-adhera-S3c, §9 à §11).
+
+- **L'accueil `/bureau` est le tableau de bord** : trois boutons (« Encaisser »,
+  « À valider (n) », « À envoyer (n) » — un zéro reste visible, grisé), puis
+  qui est à jour, combien est entré, combien reste à entrer. « Signalé » est
+  une ligne à part, **jamais additionnée** à « encaissé » ; un taux `null`
+  s'affiche « — ». Le graphique des 12 mois est un SVG écrit à la main
+  (`EvolutionChart.tsx`) : aucune bibliothèque, garde-fou à l'appui. Les deux
+  exports Excel sont tirés en blob avec le jeton.
+- **« À valider »** a sa route : `/bureau/a-valider`.
+- **« À envoyer »** (`/bureau/a-envoyer`) : la file WhatsApp, un membre à la
+  fois. « Ouvrir WhatsApp » ne marque RIEN ; « Envoyé ✓ » déclare l'envoi et
+  affiche la carte suivante ; « Passer » exige un motif. Le message est celui
+  du serveur, et la file est relue après chaque geste (un membre qui a réglé
+  disparaît sans bruit).
+- **Campagnes** (`/bureau/campagnes`) : à qui, quand, avec ou sans e-mail, un
+  récapitulatif d'une ligne, puis les nombres du serveur. Une campagne
+  programmée s'annule ; `422 campaign_already_sent` recharge la liste.
+- **Idempotency-Key** (`src/lib/idempotency.ts`) sur « Encaisser » et
+  « J'ai payé » : une clé tirée à l'ouverture du panneau, gardée tant que
+  l'envoi n'a pas réussi, renouvelée après un succès. `409 duplicate_payment`
+  conduit au versement existant, sans proposer de recommencer.
+- **Annuler un encaissement** (fiche membre, versement validé seulement) :
+  motif de 10 caractères, récapitulatif des conséquences ; rien n'est
+  supprimé, le reçu reste téléchargeable et marqué annulé — chez le membre
+  aussi.
+- **Vocabulaire** : « déclarer » et « justificatif » sont bannis de l'écran du
+  bureau comme de celui du membre (« Enregistrer une sortie »).
 
 En local, le tenant passe en query sur la page de connexion
 (`/bureau/connexion?tenant=demo-asso`), puis voyage avec la session.

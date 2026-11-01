@@ -414,6 +414,59 @@ describe('vocabulaire — l’écran du membre', () => {
   });
 });
 
+/**
+ * F3 — le vocabulaire du membre s'étend au bureau : « signaler », « capture »,
+ * « refuser » ; jamais « déclarer » ni « justificatif » sur un écran.
+ */
+describe('vocabulaire — l’espace du bureau', () => {
+  const BANNED = /d[ée]clar|justificatif/i;
+  // Un `${declaredOn}` ou un `'declared'` (code d'API) n'est pas un mot affiché.
+  const words = (text: string) => text.replace(/\$\{[^}]*\}/g, '').replace(/'[\w-]*'/g, '');
+
+  it('aucune chaîne affichable de /bureau ne dit « déclar… » ni « justificatif »', () => {
+    const offenders: string[] = [];
+    let texts = 0;
+    for (const dir of BUREAU_DIRS) {
+      for (const file of walk(dir, ['.ts', '.tsx'])) {
+        for (const text of visibleStrings(stripComments(readFileSync(file, 'utf8')))) {
+          texts += 1;
+          if (BANNED.test(words(text))) offenders.push(`${relative(process.cwd(), file)} → ${text}`);
+        }
+      }
+    }
+    expect(texts).toBeGreaterThan(200);
+    expect(offenders).toEqual([]);
+  });
+
+  it('contre-épreuve : l’ancien « Déclarer une sortie » serait vu', () => {
+    const hit = (code: string) =>
+      visibleStrings(stripComments(code)).some((t) => BANNED.test(words(t)));
+    expect(hit('<Button>Déclarer une sortie</Button>')).toBe(true);
+    expect(hit("setError('Lien du justificatif absent');")).toBe(true);
+    expect(hit("{ value: 'declared', label: 'À valider' }")).toBe(false);
+    expect(hit('const s = `signalé le ${declaredOn}`;')).toBe(false);
+  });
+});
+
+/** F3 — le graphique est dessiné à la main : aucune bibliothèque, ni graphique ni autre. */
+describe('dépendances — aucune bibliothèque ajoutée au bundle', () => {
+  it('les dépendances livrées sont next, react et react-dom, et rien d’autre', () => {
+    const pkg = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')) as {
+      dependencies: Record<string, string>;
+    };
+    expect(Object.keys(pkg.dependencies).sort()).toEqual(['next', 'react', 'react-dom']);
+  });
+
+  it('le graphique du tableau de bord est un SVG écrit ici', () => {
+    const chart = stripComments(
+      readFileSync(join(SRC, 'components', 'bureau', 'EvolutionChart.tsx'), 'utf8'),
+    );
+    expect(chart).toContain('<svg');
+    // React, et nos propres modules : rien d'autre.
+    expect(chart).not.toMatch(/from\s+['"](?!react['"]|[@./])/);
+  });
+});
+
 /** Étape 1 — prénom et nom sont deux champs : jamais de « nom complet ». */
 describe('noms — aucun champ « nom complet » pour une personne', () => {
   it('aucune chaîne de /bureau ne parle de « nom complet »', () => {
@@ -436,10 +489,14 @@ describe('registre — aucun tri côté client', () => {
   const FILES = [
     join(SRC, 'app', 'bureau', 'membres', 'page.tsx'),
     join(SRC, 'app', 'bureau', 'encaisser', 'page.tsx'),
+    // F3 : la file WhatsApp (urgence puis nom de famille) et les campagnes
+    // (la plus récente en tête) arrivent ordonnées par le serveur.
+    join(SRC, 'app', 'bureau', 'a-envoyer', 'page.tsx'),
+    join(SRC, 'app', 'bureau', 'campagnes', 'page.tsx'),
   ];
   const SORTS = /\.sort\(|\.toSorted\(|localeCompare|Intl\.Collator/;
 
-  it('ni le registre ni la recherche d’« Encaisser » ne retrient', () => {
+  it('ni le registre, ni la recherche d’« Encaisser », ni la file, ni les campagnes ne retrient', () => {
     const offenders = FILES.filter((f) => SORTS.test(stripComments(readFileSync(f, 'utf8'))));
     expect(offenders.map((f) => relative(process.cwd(), f))).toEqual([]);
   });
