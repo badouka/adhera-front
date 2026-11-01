@@ -135,6 +135,7 @@ export function memberDetail(overrides: Partial<MemberDetail> = {}): MemberDetai
             id: '01a18940-c9a5-71ec-970d-9d7510492173',
             reference: 'REC-2026-CB4A73AE',
             issued_at: '2026-10-29T20:01:26+00:00',
+            cancelled_at: null,
             amount_formatted: '100 000 FCFA',
           },
         ],

@@ -183,8 +183,20 @@ describe('B1 — la connexion', () => {
     await screen.findByText('Trop de tentatives. Réessayez dans 56 minutes.');
   });
 
+  it('§4 — un 429 du limiteur par IP : le délai réel, lu dans `Retry-After`', async () => {
+    // Le limiteur par IP ne met rien dans le corps ; l'en-tête est exposé en
+    // CORS depuis S3d — le délai affiché est enfin le sien, pas une borne.
+    fakeServer([{
+      method: 'POST', match: 'login', status: 429,
+      body: { message: 'Too Many Attempts.' },
+      headers: { 'Retry-After': '170' },
+    }]);
+    await fill('tresorier@demo-asso.test', 'x');
+    await screen.findByText('Trop de tentatives. Réessayez dans 3 minutes.');
+  });
+
   it('un 429 du limiteur IP, sans délai lisible : sa borne, 1 minute', async () => {
-    // En production, l'en-tête n'est pas exposé en CORS : c'est ce cas-là.
+    // Un serveur qui ne servirait pas l'en-tête : le repli tient encore.
     fakeServer([{ method: 'POST', match: 'login', status: 429, body: { message: 'Too Many Attempts.' } }]);
     await fill('tresorier@demo-asso.test', 'x');
     await screen.findByText('Trop de tentatives. Réessayez dans 1 minute.');

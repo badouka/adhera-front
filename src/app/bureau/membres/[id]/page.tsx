@@ -326,18 +326,7 @@ export default function FicheMembrePage() {
       </div>
 
       {modeSupported ? (
-        <DuesPanel
-          dues={m.dues}
-          cancelledReceipts={
-            new Set(
-              payments.kind === 'ready'
-                ? payments.value
-                    .filter((p) => p.status === 'cancelled' && p.receipt)
-                    .map((p) => p.receipt?.id as string)
-                : [],
-            )
-          }
-        />
+        <DuesPanel dues={m.dues} />
       ) : null}
 
       <PaymentsPanel
@@ -407,17 +396,11 @@ const DUE_TONE: Record<MemberDue['status'], 'paid' | 'due' | 'late' | 'info'> = 
 /**
  * Les cotisations, avec les reçus téléchargeables de chaque période.
  *
- * Un reçu annulé reste listé, marqué. ⚠️ Les reçus d'une période ne portent pas
- * `cancelled_at` côté bureau (constaté en recette F3, seule la page du membre
- * le sert) : la fiche le déduit aussi de ses versements annulés.
+ * Un reçu annulé reste listé, marqué (piège 33). `cancelled_at` est servi sur
+ * chaque reçu d'une période depuis S3d (§12.4) : la fiche le LIT, elle ne le
+ * déduit plus de ses versements.
  */
-function DuesPanel({
-  dues,
-  cancelledReceipts,
-}: {
-  dues: MemberDue[];
-  cancelledReceipts: ReadonlySet<string>;
-}) {
+function DuesPanel({ dues }: { dues: MemberDue[] }) {
   return (
     <Panel title="Cotisations">
       {dues.length === 0 ? (
@@ -465,7 +448,7 @@ function DuesPanel({
                           reference={receipt.reference}
                           compact
                         />
-                        {receipt.cancelled_at || cancelledReceipts.has(receipt.id) ? (
+                        {receipt.cancelled_at ? (
                           <span className="small font-semibold text-late">Annulé</span>
                         ) : null}
                         <span className="small tnum text-ink-muted">

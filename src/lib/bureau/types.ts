@@ -137,8 +137,11 @@ export type DueReceipt = {
   /** ISO 8601 */
   issued_at: string;
   amount_formatted: string;
-  /** Renseigné si le versement a été annulé (§11.4) : le reçu reste listé. */
-  cancelled_at?: string | null;
+  /**
+   * Renseigné si le versement a été annulé (§11.4) : le reçu reste listé.
+   * Toujours présent sur la fiche du bureau depuis S3d (§12.4), `null` sinon.
+   */
+  cancelled_at: string | null;
 };
 
 export type MemberDue = {

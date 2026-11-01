@@ -238,6 +238,34 @@ describe('Tableau de bord — les exports', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Les dates de la période ne sont pas valides.');
   });
 
+  it('§4 — le bouton nomme le fichier comme le serveur, et compose le nom seulement si l’en-tête manque', async () => {
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:x'), revokeObjectURL: vi.fn() }));
+    const names: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      names.push(this.download);
+    });
+    fakeServer([
+      { match: 'membership/dashboard', body: dashboard() },
+      {
+        match: 'membership/exports/members.xlsx',
+        body: null,
+        headers: { 'Content-Disposition': 'attachment; filename="registre-association-f31-2026-11-01.xlsx"' },
+      },
+      // Sans en-tête : le nom de repli, bâti sur la période servie.
+      { match: 'membership/exports/payments.xlsx', body: null },
+    ]);
+    const user = userEvent.setup();
+    renderInBureau(<TableauDeBordPage />);
+    await screen.findByTestId('collected');
+    await user.click(screen.getByRole('button', { name: 'Registre des membres (Excel)' }));
+    await user.click(screen.getByRole('button', { name: 'Versements de la période (Excel)' }));
+    await waitFor(() => expect(names).toHaveLength(2));
+    expect(names).toEqual([
+      'registre-association-f31-2026-11-01.xlsx',
+      'versements-2026-01-01_2026-11-01.xlsx',
+    ]);
+  });
+
   it('le nom du fichier : celui du serveur s’il est lisible', async () => {
     const { request } = await import('@/lib/bureau/api');
     vi.stubGlobal('fetch', vi.fn(async () =>

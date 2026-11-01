@@ -18,8 +18,8 @@ import { buttonClass } from './ui';
  * Un export Excel. Les routes exigent le Bearer : le fichier est tiré par
  * `fetch`, lu en BLOB (jamais en JSON, piège 29), puis remis au navigateur.
  *
- * Le nom vient du `Content-Disposition` quand le navigateur peut le lire ; l'API
- * ne l'expose pas en CORS aujourd'hui, d'où le nom composé ici en repli.
+ * Le nom vient du `Content-Disposition`, exposé en CORS depuis S3d ; le nom
+ * composé ici ne sert qu'en repli, si l'en-tête manque.
  */
 function ExportButton({
   label,

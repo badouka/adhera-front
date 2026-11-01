@@ -507,3 +507,35 @@ describe('registre — aucun tri côté client', () => {
     expect(SORTS.test('members.slice(0, 50)')).toBe(false);
   });
 });
+
+/**
+ * §12.4 — `cancelled_at` est servi sur les reçus d'une période : la fiche le lit.
+ * La déduction depuis les versements annulés (commit d2345c4, recette F3) est
+ * retirée et ne doit pas revenir — elle travaillerait contre le contrat.
+ */
+const FICHE = join(SRC, 'app', 'bureau', 'membres', '[id]', 'page.tsx');
+
+/** Vrai si le code marque un reçu de cotisation à partir des versements. */
+export function deducesCancelledReceipts(code: string): boolean {
+  return (
+    /cancelledReceipts/.test(code) ||
+    /status\s*===\s*['"]cancelled['"]\s*&&\s*\w+\.receipt\b/.test(code)
+  );
+}
+
+describe('§12.4 — le reçu annulé se lit, il ne se déduit pas', () => {
+  it('la fiche lit `receipt.cancelled_at` et ne déduit rien des versements', () => {
+    const code = stripComments(readFileSync(FICHE, 'utf8'));
+    expect(code).toContain('receipt.cancelled_at');
+    expect(deducesCancelledReceipts(code)).toBe(false);
+  });
+
+  it('contre-épreuve : la déduction de d2345c4 serait vue', () => {
+    expect(
+      deducesCancelledReceipts(
+        "payments.value.filter((p) => p.status === 'cancelled' && p.receipt).map((p) => p.receipt?.id)",
+      ),
+    ).toBe(true);
+    expect(deducesCancelledReceipts('<DuesPanel cancelledReceipts={ids} />')).toBe(true);
+  });
+});

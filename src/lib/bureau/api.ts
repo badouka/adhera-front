@@ -80,9 +80,9 @@ export class BureauApiError extends ApiError {
  * Le délai d'un `429`, en secondes : `retry_after` du corps d'abord (ce que le
  * contrat destine à l'écran, §2), l'en-tête `Retry-After` à défaut.
  *
- * ⚠️ En production, l'en-tête n'est PAS lisible depuis le navigateur : l'API
- * ne l'expose pas en CORS (`Access-Control-Expose-Headers` absent, constaté le
- * 2026-10-30). Le repli ne sert donc que si nginx l'expose un jour.
+ * L'en-tête est exposé en CORS depuis S3d (`Access-Control-Expose-Headers:
+ * Content-Disposition, Retry-After`, vérifié le 2026-11-01) : c'est lui qui
+ * donne son délai réel au `429` du limiteur par IP, dont le corps est muet.
  */
 export function readRetryAfter(
   body: Record<string, unknown>,
@@ -190,8 +190,8 @@ export type DownloadedFile = { blob: Blob; filename: string | null };
 
 /**
  * Le nom d'un `Content-Disposition: attachment; filename="…"` (ou `filename*`).
- * ⚠️ L'API n'expose pas cet en-tête en CORS (constaté le 2026-11-01) : dans le
- * navigateur il est presque toujours illisible, et l'écran compose le nom.
+ * Exposé en CORS depuis S3d : le fichier porte le nom que le serveur lui donne,
+ * et l'écran ne compose un nom que si l'en-tête manque.
  */
 export function filenameFromDisposition(value: string | null | undefined): string | null {
   if (!value) return null;

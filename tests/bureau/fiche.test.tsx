@@ -438,6 +438,12 @@ describe('B10 — la sortie (R9)', () => {
 });
 
 describe('§11 — annuler un encaissement, sans rien perdre', () => {
+  const WITH_CANCELLED_RECEIPT = memberDetail({
+    dues: MOUSSA.dues.map((due) => ({
+      ...due,
+      receipts: due.receipts.map((r) => ({ ...r, cancelled_at: '2026-11-01T14:32:11+00:00' })),
+    })),
+  });
   const CANCELLED = {
     ...VALIDATED,
     status: 'cancelled' as const,
@@ -475,6 +481,12 @@ describe('§11 — annuler un encaissement, sans rien perdre', () => {
           return [cancelled ? CANCELLED : VALIDATED];
         },
       },
+      {
+        match: `membership/members/${MOUSSA.id}`,
+        get body() {
+          return cancelled ? WITH_CANCELLED_RECEIPT : MOUSSA;
+        },
+      },
     ]);
     const user = userEvent.setup();
     renderInBureau(<FicheMembrePage />);
@@ -502,11 +514,27 @@ describe('§11 — annuler un encaissement, sans rien perdre', () => {
     // Le reçu reste téléchargeable, marqué annulé.
     expect(screen.getAllByRole('button', { name: /REC-2026-CB4A73AE/ }).length).toBeGreaterThan(0);
     expect(screen.getByText('Reçu annulé')).toBeInTheDocument();
-    // La cotisation marque aussi le reçu, même si l'API bureau n'y sert pas
-    // `cancelled_at` (recette F3) : déduit du versement annulé.
+    // La cotisation marque aussi le reçu : `cancelled_at` servi par la fiche (§12.4).
     const dues = screen.getByRole('heading', { name: 'Cotisations' }).closest('section') as HTMLElement;
     await waitFor(() => expect(within(dues).getByText('Annulé')).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: 'Annuler cet encaissement' })).toBeNull();
+  });
+
+  it('§12.4 — le reçu d’une cotisation est marqué depuis `cancelled_at` servi, jamais déduit', async () => {
+    // Servi annulé, sans aucun versement annulé dans la liste : marqué.
+    server(WITH_CANCELLED_RECEIPT, [{ match: /payments\?member_id=/, body: [] }]);
+    const { unmount } = renderInBureau(<FicheMembrePage />);
+    let dues = (await screen.findByRole('heading', { name: 'Cotisations' })).closest('section') as HTMLElement;
+    expect(within(dues).getByText('Annulé')).toBeInTheDocument();
+    unmount();
+
+    // Versement annulé, mais reçu servi `cancelled_at: null` : la fiche ne
+    // devine plus rien — c'est le serveur qui fait foi.
+    server(MOUSSA, [{ match: /payments\?member_id=/, body: [CANCELLED] }]);
+    renderInBureau(<FicheMembrePage />);
+    await screen.findByText('Reçu annulé');
+    dues = screen.getByRole('heading', { name: 'Cotisations' }).closest('section') as HTMLElement;
+    expect(within(dues).queryByText('Annulé')).toBeNull();
   });
 
   it('422 payment_not_cancellable : la fiche le dit et se recharge', async () => {
