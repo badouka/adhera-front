@@ -502,6 +502,10 @@ describe('§11 — annuler un encaissement, sans rien perdre', () => {
     // Le reçu reste téléchargeable, marqué annulé.
     expect(screen.getAllByRole('button', { name: /REC-2026-CB4A73AE/ }).length).toBeGreaterThan(0);
     expect(screen.getByText('Reçu annulé')).toBeInTheDocument();
+    // La cotisation marque aussi le reçu, même si l'API bureau n'y sert pas
+    // `cancelled_at` (recette F3) : déduit du versement annulé.
+    const dues = screen.getByRole('heading', { name: 'Cotisations' }).closest('section') as HTMLElement;
+    await waitFor(() => expect(within(dues).getByText('Annulé')).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: 'Annuler cet encaissement' })).toBeNull();
   });
 

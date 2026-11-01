@@ -278,15 +278,10 @@ function OutreachCard({
       </div>
 
       {canOpen ? null : (
-        <Notice tone="due">
-          <span>
-            Le numéro n’est pas reconnu avec certitude : copiez le message et
-            envoyez-le vous-même.
-          </span>
-          <span>
-            <CopyAction value={item.message} label="Copier le message" />
-          </span>
-        </Notice>
+        <p className="m-0 rounded-[var(--radius-sm)] bg-due-soft p-3 font-semibold text-due">
+          Le numéro n’est pas reconnu avec certitude : copiez le message et
+          envoyez-le vous-même.
+        </p>
       )}
 
       {error ? (
@@ -352,6 +347,9 @@ function OutreachCard({
         </div>
       ) : (
         <div className="sticky bottom-0 flex flex-col gap-2 bg-surface-raised pt-2">
+          {/* Sans lien WhatsApp, la copie est le premier geste : elle doit être
+              sous le pouce, pas sous la barre. */}
+          {canOpen ? null : <CopyAction value={item.message} label="Copier le message" />}
           {step === 'opened' || !canOpen ? (
             <Button
               ref={sentRef}

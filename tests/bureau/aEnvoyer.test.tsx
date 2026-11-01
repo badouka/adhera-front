@@ -211,7 +211,9 @@ describe('« À envoyer » — la file WhatsApp, un membre à la fois', () => {
   it('wa_url null : la copie du message, jamais un lien deviné', async () => {
     server([[outreachItem({ id: 'o-9', wa_url: null, phone_is_usable: false })]]);
     renderInBureau(<AEnvoyerPage />);
-    expect(await screen.findByRole('button', { name: 'Copier le message' })).toBeInTheDocument();
+    const copy = await screen.findByRole('button', { name: 'Copier le message' });
+    // La copie précède « Envoyé ✓ », dans la barre d'action.
+    expect(copy.compareDocumentPosition(screen.getByRole('button', { name: 'Envoyé ✓' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByRole('link', { name: /WhatsApp/ })).toBeNull();
     expect(screen.getByRole('button', { name: 'Envoyé ✓' })).toBeInTheDocument();
   });
