@@ -165,3 +165,98 @@ describe('F3 — le rapport du lundi', () => {
     expect(screen.getByRole('checkbox', { name: /rapport par e-mail/ })).not.toBeChecked();
   });
 });
+
+describe('§12.1 — années de cotisation manquées', () => {
+  const RECAP =
+    'Les montants à encaisser et les relances vont changer. Rien n’est effacé ; vous pourrez revenir en arrière à tout moment.';
+
+  function panel() {
+    return screen.getByRole('heading', { name: 'Années de cotisation manquées' }).closest('section') as HTMLElement;
+  }
+
+  it('deux choix, chacun expliqué ; le réglage servi est coché (le défaut si absent)', async () => {
+    fakeServer([{ match: 'membership/categories', body: CATEGORIES }]);
+    renderInBureau(<ReglagesPage />, { settings: settings() });
+    await screen.findByText('Membre actif');
+    const recommended = within(panel()).getByRole('radio', { name: 'Repartir de l’année en cours (recommandé)' });
+    const all = within(panel()).getByRole('radio', { name: 'Réclamer toutes les années manquées' });
+    expect(recommended).toBeChecked();
+    expect(all).not.toBeChecked();
+    expect(recommended).toHaveAccessibleDescription(
+      'Un membre se remet à jour en un paiement. Les années manquées restent visibles dans son historique, sans être réclamées.',
+    );
+    expect(all).toHaveAccessibleDescription('Le membre règle chaque année, de la plus ancienne à la plus récente.');
+    // Rien à enregistrer tant que le choix est celui du serveur.
+    expect(within(panel()).queryByRole('button', { name: 'Enregistrer ce choix' })).toBeNull();
+  });
+
+  it('aller : récapitulatif R9 AVANT le PUT, puis `{ arrears_policy: "all" }` seul', async () => {
+    const fetchMock = fakeServer([
+      { method: 'PUT', match: 'membership/settings', body: settings({ arrears_policy: 'all' }) },
+      { match: 'membership/categories', body: CATEGORIES },
+    ]);
+    const user = userEvent.setup();
+    const { value } = renderInBureau(<ReglagesPage />, { settings: settings({ arrears_policy: 'current_only' }) });
+    await screen.findByText('Membre actif');
+    await user.click(within(panel()).getByRole('radio', { name: 'Réclamer toutes les années manquées' }));
+    await user.click(within(panel()).getByRole('button', { name: 'Enregistrer ce choix' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Changer ce que l’association réclame ?' });
+    expect(within(dialog).getByText('Réclamer toutes les années manquées')).toBeInTheDocument();
+    expect(within(dialog).getByTestId('arrears-recap').textContent?.replace(/\s+/g, ' ').trim()).toBe(RECAP);
+    expect(calls(fetchMock, 'PUT')).toHaveLength(0);
+
+    await user.click(within(dialog).getByRole('button', { name: 'Enregistrer ce choix' }));
+    await waitFor(() => expect(calls(fetchMock, 'PUT')).toHaveLength(1));
+    expect(JSON.parse(calls(fetchMock, 'PUT')[0]?.init.body as string)).toEqual({ arrears_policy: 'all' });
+    expect(value.setSettings).toHaveBeenCalledWith(expect.objectContaining({ arrears_policy: 'all' }));
+    await screen.findByText('Enregistré. Les fiches et les relances suivent ce choix.');
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('retour : de `all` à l’année en cours, même récapitulatif ; « Ne pas changer » n’envoie rien', async () => {
+    const fetchMock = fakeServer([
+      { method: 'PUT', match: 'membership/settings', body: settings({ arrears_policy: 'current_only' }) },
+      { match: 'membership/categories', body: CATEGORIES },
+    ]);
+    const user = userEvent.setup();
+    renderInBureau(<ReglagesPage />, { settings: settings({ arrears_policy: 'all' }) });
+    await screen.findByText('Membre actif');
+    expect(within(panel()).getByRole('radio', { name: 'Réclamer toutes les années manquées' })).toBeChecked();
+    await user.click(within(panel()).getByRole('radio', { name: 'Repartir de l’année en cours (recommandé)' }));
+    await user.click(within(panel()).getByRole('button', { name: 'Enregistrer ce choix' }));
+    await user.click(screen.getByRole('button', { name: 'Ne pas changer' }));
+    expect(calls(fetchMock, 'PUT')).toHaveLength(0);
+
+    await user.click(within(panel()).getByRole('button', { name: 'Enregistrer ce choix' }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByTestId('arrears-recap').textContent?.replace(/\s+/g, ' ').trim()).toBe(RECAP);
+    await user.click(within(dialog).getByRole('button', { name: 'Enregistrer ce choix' }));
+    await waitFor(() => expect(calls(fetchMock, 'PUT')).toHaveLength(1));
+    expect(JSON.parse(calls(fetchMock, 'PUT')[0]?.init.body as string)).toEqual({ arrears_policy: 'current_only' });
+  });
+
+  it('422 : le message du serveur, en français, dans la confirmation', async () => {
+    fakeServer([
+      {
+        method: 'PUT',
+        match: 'membership/settings',
+        status: 422,
+        body: {
+          message: 'Certains réglages sont invalides.',
+          errors: { arrears_policy: ['La politique d’arriérés doit valoir « current_only » ou « all ».'] },
+        },
+      },
+      { match: 'membership/categories', body: CATEGORIES },
+    ]);
+    const user = userEvent.setup();
+    renderInBureau(<ReglagesPage />, { settings: settings({ arrears_policy: 'current_only' }) });
+    await screen.findByText('Membre actif');
+    await user.click(within(panel()).getByRole('radio', { name: 'Réclamer toutes les années manquées' }));
+    await user.click(within(panel()).getByRole('button', { name: 'Enregistrer ce choix' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Enregistrer ce choix' }));
+    expect(await within(screen.getByRole('dialog')).findByRole('alert')).toHaveTextContent(
+      'La politique d’arriérés doit valoir « current_only » ou « all ».',
+    );
+  });
+});

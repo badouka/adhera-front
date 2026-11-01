@@ -1,6 +1,7 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
+import { ApiError } from '@/lib/api';
 import { useBureau } from '@/components/bureau/BureauContext';
 import { CategoriesPanel } from '@/components/bureau/CategoriesPanel';
 import { ConfirmDialog } from '@/components/bureau/ConfirmDialog';
@@ -18,6 +19,7 @@ import {
 import {
   deleteLogo,
   isSessionError,
+  setArrearsPolicy,
   setWeeklyReport,
   updateSettings,
   uploadLogo,
@@ -26,6 +28,7 @@ import { errorMessage, invalidFields } from '@/lib/bureau/messages';
 import {
   MEMBER_TYPES_LABELS,
   MODE_COTISATION_LABELS,
+  type ArrearsPolicy,
   type Settings,
 } from '@/lib/bureau/types';
 
@@ -44,6 +47,7 @@ export default function ReglagesPage() {
           <LogoPanel />
           <WeeklyReportPanel />
           <ModePanel />
+          <ArrearsPanel />
         </div>
       </div>
       <CategoriesPanel />
@@ -306,6 +310,140 @@ function LogoPanel() {
         </ConfirmDialog>
       ) : null}
     </Panel>
+  );
+}
+
+export const ARREARS_CHOICES: ReadonlyArray<{
+  value: ArrearsPolicy;
+  label: string;
+  detail: string;
+}> = [
+  {
+    value: 'current_only',
+    label: 'Repartir de l’année en cours (recommandé)',
+    detail:
+      'Un membre se remet à jour en un paiement. Les années manquées restent visibles dans son historique, sans être réclamées.',
+  },
+  {
+    value: 'all',
+    label: 'Réclamer toutes les années manquées',
+    detail: 'Le membre règle chaque année, de la plus ancienne à la plus récente.',
+  },
+];
+
+/** Le libellé FRANÇAIS du `422` (§12.1, ligne Y) : `errors` d'abord, `message` sinon. */
+function arrearsError(cause: unknown): string {
+  if (cause instanceof ApiError && cause.status === 422) {
+    const specific = cause.errors.arrears_policy?.[0];
+    if (specific) return specific;
+    if (cause.message) return cause.message;
+  }
+  return errorMessage(cause, 'Le réglage n’a pas pu être enregistré.');
+}
+
+/**
+ * §12.1 — ce que l'association réclame. Sans ce bloc, un trésorier voit des
+ * montants baisser sans paiement et conclut à une erreur (piège 36, 37).
+ *
+ * Le choix ne part qu'après un récapitulatif R9. Rien n'est effacé dans un
+ * sens comme dans l'autre : le serveur ne change que la lecture.
+ */
+function ArrearsPanel() {
+  const { settings, setSettings } = useBureau();
+  const ids = useId();
+  const current: ArrearsPolicy = settings.arrears_policy ?? 'current_only';
+  const [choice, setChoice] = useState<ArrearsPolicy>(current);
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const chosen = ARREARS_CHOICES.find((c) => c.value === choice);
+
+  async function save() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await setArrearsPolicy(choice);
+      setSettings(updated);
+      setChoice(updated.arrears_policy ?? choice);
+      setConfirming(false);
+      setSaved(true);
+    } catch (cause) {
+      if (isSessionError(cause)) return;
+      setError(arrearsError(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div id="arrieres" className="scroll-mt-20">
+      <Panel title="Années de cotisation manquées">
+        <fieldset className="m-0 flex flex-col gap-3 border-0 p-0">
+          <legend className="sr-only">Années de cotisation manquées</legend>
+          {ARREARS_CHOICES.map((c) => (
+            <label key={c.value} className="flex cursor-pointer items-start gap-3">
+              <input
+                type="radio"
+                name={`${ids}-arrears`}
+                value={c.value}
+                checked={choice === c.value}
+                disabled={busy}
+                aria-labelledby={`${ids}-${c.value}-label`}
+                aria-describedby={`${ids}-${c.value}`}
+                onChange={() => {
+                  setChoice(c.value);
+                  setSaved(false);
+                }}
+                className="mt-[3px] size-5 shrink-0 accent-[var(--indigo)]"
+              />
+              <span className="flex flex-col">
+                <span id={`${ids}-${c.value}-label`} className="font-semibold">
+                  {c.label}
+                </span>
+                <span id={`${ids}-${c.value}`} className="small text-ink-muted">
+                  {c.detail}
+                </span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+        {choice !== current ? (
+          <div className="flex justify-end">
+            <Button tone="primary" onClick={() => setConfirming(true)}>
+              Enregistrer ce choix
+            </Button>
+          </div>
+        ) : null}
+        {saved ? (
+          <span role="status" className="small font-semibold text-paid">
+            Enregistré. Les fiches et les relances suivent ce choix.
+          </span>
+        ) : null}
+      </Panel>
+
+      {confirming && chosen ? (
+        <ConfirmDialog
+          title="Changer ce que l’association réclame ?"
+          confirmLabel="Enregistrer ce choix"
+          cancelLabel="Ne pas changer"
+          busy={busy}
+          error={error}
+          onConfirm={() => void save()}
+          onCancel={() => {
+            setConfirming(false);
+            setError(null);
+          }}
+        >
+          <p className="m-0 font-semibold">{chosen.label}</p>
+          <p className="m-0" data-testid="arrears-recap">
+            Les montants à encaisser et les relances vont changer. Rien n’est
+            effacé ; vous pourrez revenir en arrière à tout moment.
+          </p>
+        </ConfirmDialog>
+      ) : null}
+    </div>
   );
 }
 

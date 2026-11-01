@@ -1,6 +1,7 @@
 /**
  * Le contrat de l'API bureau, recopié de `_handoff/adhera-api-bureau.md`
- * (v3.7.2-adhera-S3c : relances §9, tableau de bord §10, encaissements §11).
+ * (v3.7.3-adhera-S3d : relances §9, tableau de bord §10, encaissements §11,
+ * arriérés §12).
  *
  * R1 : les champs `*_formatted` sont les SEULS montants affichables. Les champs
  * numériques ne servent qu'au calcul (borne d'un formulaire), jamais au rendu.
@@ -36,6 +37,12 @@ export type LoginData = {
 /* ───────────────────────────── Réglages ───────────────────────────── */
 
 export type MemberTypes = 'personnes' | 'organisations' | 'mixte';
+
+/**
+ * Ce que l'association réclame (§12.1) : l'année en cours seulement (défaut),
+ * ou toutes les années impayées. Change la LECTURE, jamais les données.
+ */
+export type ArrearsPolicy = 'current_only' | 'all';
 export type ModeCotisation = 'anniversaire' | 'exercice_civil';
 
 export type Settings = {
@@ -57,6 +64,8 @@ export type Settings = {
    * absent d'un serveur antérieur à v3.7.1, lu alors comme `true`.
    */
   weekly_report_enabled?: boolean;
+  /** §12.1 — absent d'un serveur antérieur à S3d, lu alors comme le défaut. */
+  arrears_policy?: ArrearsPolicy;
 };
 
 /** Les seuls champs que `PUT settings` laisse modifier depuis F2. */

@@ -23,6 +23,7 @@ import {
   navigation,
 } from './session';
 import type {
+  ArrearsPolicy,
   Campaign,
   CampaignInput,
   Category,
@@ -613,6 +614,17 @@ export function createCampaign(input: CampaignInput) {
 /** `422 campaign_already_sent` : le cron l'a lancée entre-temps — recharger. */
 export function cancelCampaign(id: string) {
   return request<Campaign>(`membership/campaigns/${seg(id)}/cancel`, { method: 'POST' });
+}
+
+/**
+ * Ce que l'association réclame (§12.1). Un `422` porte son libellé FRANÇAIS
+ * dans `errors.arrears_policy` (ligne Y du §0), sans `code`.
+ */
+export function setArrearsPolicy(policy: ArrearsPolicy) {
+  return request<Settings>('membership/settings', {
+    method: 'PUT',
+    json: { arrears_policy: policy },
+  });
 }
 
 /** Le seul moyen d'arrêter le rapport du lundi (§10). */
