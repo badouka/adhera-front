@@ -406,7 +406,7 @@ describe('B10 — la sortie (R9)', () => {
     ]);
     const user = userEvent.setup();
     renderInBureau(<FicheMembrePage />);
-    await user.click(await screen.findByRole('button', { name: 'Déclarer une sortie' }));
+    await user.click(await screen.findByRole('button', { name: 'Enregistrer une sortie' }));
 
     await user.click(screen.getByRole('button', { name: 'Vérifier la sortie' }));
     expect(screen.getByText('Choisissez le motif de la sortie.')).toBeInTheDocument();
@@ -415,14 +415,14 @@ describe('B10 — la sortie (R9)', () => {
     await user.selectOptions(screen.getByLabelText(/Motif/), 'resigned');
     await user.click(screen.getByRole('button', { name: 'Vérifier la sortie' }));
 
-    const dialog = screen.getByRole('dialog', { name: 'Déclarer la sortie de ce membre ?' });
+    const dialog = screen.getByRole('dialog', { name: 'Enregistrer la sortie de ce membre ?' });
     expect(within(dialog).getByText('Démission')).toBeInTheDocument();
     expect(
       within(dialog).getByText('Le membre passera dans les anciens membres. Son historique est conservé.'),
     ).toBeInTheDocument();
     expect(calls(fetchMock, 'POST')).toHaveLength(0);
 
-    await user.click(within(dialog).getByRole('button', { name: 'Déclarer la sortie' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Enregistrer la sortie' }));
     await waitFor(() => expect(calls(fetchMock, 'POST')).toHaveLength(1));
     const body = JSON.parse(calls(fetchMock, 'POST')[0]?.init.body as string);
     expect(body.left_reason).toBe('resigned');
@@ -434,5 +434,89 @@ describe('B10 — la sortie (R9)', () => {
     renderInBureau(<FicheMembrePage />);
     await screen.findByRole('heading', { name: 'Moussa Ndiaye (test)' });
     expect(screen.queryByRole('button', { name: /supprimer/i })).not.toBeInTheDocument();
+  });
+});
+
+describe('§11 — annuler un encaissement, sans rien perdre', () => {
+  const CANCELLED = {
+    ...VALIDATED,
+    status: 'cancelled' as const,
+    cancelled_at: '2026-11-01T14:32:11+00:00',
+    cancelled_by_user_id: 7,
+    cancelled_by_name: 'Fatou Sow',
+    cancel_reason: 'Chèque revenu impayé par la banque',
+  };
+
+  it('seulement sur un versement validé ; un signalé n’a pas ce bouton', async () => {
+    nav.params = { id: MOUSSA.id };
+    fakeServer([
+      { match: /payments\?member_id=/, body: [VALIDATED, payment({ id: 'p-declared' })] },
+      { match: `membership/members/${MOUSSA.id}`, body: MOUSSA },
+    ]);
+    renderInBureau(<FicheMembrePage />);
+    expect(await screen.findAllByRole('button', { name: 'Annuler cet encaissement' })).toHaveLength(1);
+  });
+
+  it('motif obligatoire (10 caractères), récapitulatif complet, puis l’affichage après annulation', async () => {
+    // Après l'annulation, la relecture sert le versement annulé, comme le serveur.
+    let cancelled = false;
+    const fetchMock = server(MOUSSA, [
+      {
+        method: 'POST',
+        match: /payments\/[^/]+\/cancel$/,
+        get body() {
+          cancelled = true;
+          return CANCELLED;
+        },
+      },
+      {
+        match: /payments\?member_id=/,
+        get body() {
+          return [cancelled ? CANCELLED : VALIDATED];
+        },
+      },
+    ]);
+    const user = userEvent.setup();
+    renderInBureau(<FicheMembrePage />);
+    await user.click(await screen.findByRole('button', { name: 'Annuler cet encaissement' }));
+
+    expect(screen.getByTestId('cancel-recap').textContent).toBe(
+      'Annuler 100 000 FCFA (Wave, 29/10/2026) de Moussa Ndiaye (test) ? Sa cotisation redeviendra due et le reçu REC-2026-CB4A73AE sera marqué annulé. Rien n’est supprimé.',
+    );
+
+    const reason = screen.getByLabelText(/Motif de l’annulation/);
+    await user.type(reason, '   court  ');
+    await user.click(screen.getByRole('button', { name: 'Annuler l’encaissement' }));
+    expect(screen.getByText('Expliquez le motif en 10 caractères au moins.')).toBeInTheDocument();
+    expect(calls(fetchMock, 'POST')).toHaveLength(0);
+
+    await user.clear(reason);
+    await user.type(reason, '  Chèque revenu impayé par la banque ');
+    await user.click(screen.getByRole('button', { name: 'Annuler l’encaissement' }));
+
+    const line = await screen.findByTestId('cancelled-line');
+    expect(line.textContent).toMatch(/^Annulé le 1er novembre 2026 par Fatou Sow — motif : Chèque revenu impayé par la banque$/);
+    const [post] = calls(fetchMock, 'POST');
+    expect(post?.url).toBe(`https://api.eventflow.africa/api/v1/admin/membership/payments/${VALIDATED.id}/cancel`);
+    expect(JSON.parse(post?.init.body as string)).toEqual({ reason: 'Chèque revenu impayé par la banque' });
+    // Le reçu reste téléchargeable, marqué annulé.
+    expect(screen.getAllByRole('button', { name: /REC-2026-CB4A73AE/ }).length).toBeGreaterThan(0);
+    expect(screen.getByText('Reçu annulé')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Annuler cet encaissement' })).toBeNull();
+  });
+
+  it('422 payment_not_cancellable : la fiche le dit et se recharge', async () => {
+    const fetchMock = server(MOUSSA, [
+      { method: 'POST', match: /payments\/[^/]+\/cancel$/, status: 422, body: { code: 'payment_not_cancellable', message: 'x' } },
+    ]);
+    const user = userEvent.setup();
+    renderInBureau(<FicheMembrePage />);
+    await user.click(await screen.findByRole('button', { name: 'Annuler cet encaissement' }));
+    await user.type(screen.getByLabelText(/Motif de l’annulation/), 'Erreur de saisie du montant');
+    await user.click(screen.getByRole('button', { name: 'Annuler l’encaissement' }));
+    expect(await screen.findByText(/ne peut plus être annulé/)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(calls(fetchMock).filter((c) => c.url.includes(`members/${MOUSSA.id}`)).length).toBeGreaterThan(1),
+    );
   });
 });

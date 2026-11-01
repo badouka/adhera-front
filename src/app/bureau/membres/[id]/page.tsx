@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useBureau } from '@/components/bureau/BureauContext';
+import { CancelPaymentPanel } from '@/components/bureau/CancelPaymentPanel';
 import { ContactsPanel } from '@/components/bureau/ContactsPanel';
 import { DirectPaymentPanel } from '@/components/bureau/DirectPaymentPanel';
 import { ReceiptButton } from '@/components/bureau/Documents';
@@ -71,6 +72,15 @@ export default function FicheMembrePage() {
   }, []);
 
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
+
+  // `#versement-{id}` (depuis un `409 duplicate_payment`) : la ligne est
+  // amenée à l'écran une fois les versements chargés.
+  useEffect(() => {
+    if (payments.kind !== 'ready') return;
+    const hash = window.location.hash;
+    if (!hash.startsWith('#versement-')) return;
+    document.getElementById(hash.slice(1))?.scrollIntoView?.({ block: 'center' });
+  }, [payments]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -209,7 +219,7 @@ export default function FicheMembrePage() {
             onClick={() => setAction(action === 'leave' ? null : 'leave')}
             aria-expanded={action === 'leave'}
           >
-            Déclarer une sortie
+            Enregistrer une sortie
           </Button>
         </div>
       )}
@@ -223,6 +233,7 @@ export default function FicheMembrePage() {
           member={m}
           onClose={() => setAction(null)}
           onModeUnsupported={markModeUnsupported}
+          onDuplicate={reload}
           onDone={(payment) => {
             setAction(null);
             const period = periodLabel(payment.due?.period_start, payment.due?.period_end);
@@ -316,7 +327,34 @@ export default function FicheMembrePage() {
 
       {modeSupported ? <DuesPanel dues={m.dues} /> : null}
 
-      <PaymentsPanel payments={payments} onRetry={reload} />
+      <PaymentsPanel
+        payments={payments}
+        onRetry={reload}
+        memberName={m.name}
+        canCancel={modeSupported}
+        onCancelled={(cancelled) => {
+          setPayments((prev) =>
+            prev.kind === 'ready'
+              ? { ...prev, value: prev.value.map((p) => (p.id === cancelled.id ? cancelled : p)) }
+              : prev,
+          );
+          setNotice({
+            tone: 'info',
+            text: (
+              <>
+                Encaissement de <span className="money">{cancelled.amount_formatted}</span> annulé.
+                {cancelled.receipt ? ` Le reçu ${cancelled.receipt.reference} est marqué annulé.` : ''}{' '}
+                Rien n’a été supprimé.
+              </>
+            ),
+          });
+          reload();
+        }}
+        onStale={(message) => {
+          setNotice({ tone: 'info', text: message });
+          reload();
+        }}
+      />
 
       {m.type === 'organisation' ? (
         <ContactsPanel
@@ -402,6 +440,9 @@ function DuesPanel({ dues }: { dues: MemberDue[] }) {
                           reference={receipt.reference}
                           compact
                         />
+                        {receipt.cancelled_at ? (
+                          <span className="small font-semibold text-late">Annulé</span>
+                        ) : null}
                         <span className="small tnum text-ink-muted">
                           <span className="money">{receipt.amount_formatted}</span>
                           {formatDateTime(receipt.issued_at)
@@ -421,19 +462,31 @@ function DuesPanel({ dues }: { dues: MemberDue[] }) {
   );
 }
 
-const PAYMENT_TONE: Record<Payment['status'], 'paid' | 'late' | 'info'> = {
+const PAYMENT_TONE: Record<Payment['status'], 'paid' | 'late' | 'info' | 'due'> = {
   declared: 'info',
   validated: 'paid',
   rejected: 'late',
+  cancelled: 'due',
 };
 
 function PaymentsPanel({
   payments,
   onRetry,
+  memberName,
+  canCancel,
+  onCancelled,
+  onStale,
 }: {
   payments: Load<Payment[]>;
   onRetry: () => void;
+  memberName: string;
+  /** Faux si le mode de cotisation n'est pas pris en charge (l'annulation recalcule la période). */
+  canCancel: boolean;
+  onCancelled: (payment: Payment) => void;
+  onStale: (message: string) => void;
 }) {
+  const [cancelling, setCancelling] = useState<string | null>(null);
+
   return (
     <Panel title="Versements">
       {payments.kind === 'loading' ? (
@@ -456,7 +509,8 @@ function PaymentsPanel({
           {[...payments.value].reverse().map((payment) => (
             <li
               key={payment.id}
-              className="flex flex-col gap-1 rounded-[var(--radius-sm)] border border-line p-3"
+              id={`versement-${payment.id}`}
+              className="flex scroll-mt-20 flex-col gap-1 rounded-[var(--radius-sm)] border border-line p-3 target:border-2 target:border-indigo"
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="money tnum font-bold">{payment.amount_formatted}</span>
@@ -484,19 +538,55 @@ function PaymentsPanel({
                   {payment.rejection_reason ? ` — ${payment.rejection_reason}` : ''}
                 </span>
               ) : null}
+              {payment.status === 'cancelled' ? (
+                <span className="small font-semibold text-late" data-testid="cancelled-line">
+                  {decisionLabel('Annulé', payment.cancelled_at ?? null, payment.cancelled_by_name ?? null)}
+                  {payment.cancel_reason ? ` — motif : ${payment.cancel_reason}` : ''}
+                </span>
+              ) : null}
               {payment.status === 'declared' ? (
-                <Link href="/bureau" className="small font-semibold">
-                  À valider depuis l’accueil
+                <Link href="/bureau/a-valider" className="small font-semibold">
+                  À valider dans « À valider »
                 </Link>
               ) : null}
               {payment.receipt ? (
-                <span>
+                <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <ReceiptButton
                     receiptId={payment.receipt.id}
                     reference={payment.receipt.reference}
                     compact
                   />
+                  {payment.status === 'cancelled' ? (
+                    <span className="small font-semibold text-late">Reçu annulé</span>
+                  ) : null}
                 </span>
+              ) : null}
+              {/* Un VALIDÉ s'annule ; un signalé se refuse depuis « À valider ». */}
+              {payment.status === 'validated' && canCancel && cancelling !== payment.id ? (
+                <span>
+                  <Button
+                    tone="ghost"
+                    className="px-0 text-late!"
+                    onClick={() => setCancelling(payment.id)}
+                  >
+                    Annuler cet encaissement
+                  </Button>
+                </span>
+              ) : null}
+              {payment.status === 'validated' && cancelling === payment.id ? (
+                <CancelPaymentPanel
+                  payment={payment}
+                  memberName={memberName}
+                  onClose={() => setCancelling(null)}
+                  onDone={(cancelled) => {
+                    setCancelling(null);
+                    onCancelled(cancelled);
+                  }}
+                  onStale={(message) => {
+                    setCancelling(null);
+                    onStale(message);
+                  }}
+                />
               ) : null}
             </li>
           ))}

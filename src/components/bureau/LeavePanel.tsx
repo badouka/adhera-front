@@ -60,7 +60,7 @@ export function LeavePanel({
 
   return (
     <Panel
-      title="Déclarer une sortie"
+      title="Enregistrer une sortie"
       actions={
         <Button tone="ghost" onClick={onClose}>
           Fermer
@@ -108,8 +108,8 @@ export function LeavePanel({
 
       {confirming ? (
         <ConfirmDialog
-          title="Déclarer la sortie de ce membre ?"
-          confirmLabel="Déclarer la sortie"
+          title="Enregistrer la sortie de ce membre ?"
+          confirmLabel="Enregistrer la sortie"
           confirmTone="danger"
           busy={busy}
           error={error}

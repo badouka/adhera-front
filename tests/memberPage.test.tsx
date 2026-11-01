@@ -144,6 +144,40 @@ describe('E2 — à jour', () => {
     expect(link).toHaveAttribute('rel', 'noreferrer');
   });
 
+  it('un reçu annulé reste listé, téléchargeable, et marqué « Annulé » (§11.4)', async () => {
+    renderWith(
+      fakeResponse(
+        200,
+        payload({
+          receipts: [
+            {
+              id: 'r-2',
+              reference: 'REC-2026-0013',
+              amount_formatted: '100 000 FCFA',
+              issued_at: '2026-11-13T09:00:00Z',
+              cancelled_at: '2026-11-14T10:00:00Z',
+            },
+            {
+              id: 'r-1',
+              reference: 'REC-2026-0012',
+              amount_formatted: '250 000 FCFA',
+              issued_at: '2026-11-13T09:00:00Z',
+              cancelled_at: null,
+            },
+          ],
+        }),
+      ),
+    );
+
+    await screen.findByText('Mes reçus');
+    const links = screen.getAllByRole('link');
+    expect(links).toHaveLength(2);
+    expect(links[0]).toHaveTextContent('Annulé');
+    expect(links[0]).toHaveTextContent('Reçu REC-2026-0013');
+    expect(links[0]).toHaveAttribute('href', expect.stringContaining('/receipts/r-2'));
+    expect(links[1]).not.toHaveTextContent('Annulé');
+  });
+
   it('n’affiche rien plutôt qu’un « Aucun reçu » anxiogène', async () => {
     renderWith(fakeResponse(200, payload({ receipts: [] })));
 
