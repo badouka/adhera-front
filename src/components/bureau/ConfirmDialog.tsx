@@ -25,6 +25,7 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
   confirmDisabled = false,
+  cancelLabel = 'Annuler',
 }: {
   title: string;
   children: ReactNode;
@@ -35,6 +36,8 @@ export function ConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
   confirmDisabled?: boolean;
+  /** Quand le geste confirmé est lui-même une annulation, « Annuler » prête à confusion. */
+  cancelLabel?: string;
 }) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -105,7 +108,7 @@ export function ConfirmDialog({
 
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button tone="ghost" onClick={onCancel} disabled={busy}>
-            Annuler
+            {cancelLabel}
           </Button>
           <Button
             tone={confirmTone}
