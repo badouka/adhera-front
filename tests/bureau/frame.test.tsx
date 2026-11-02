@@ -91,6 +91,31 @@ describe('le cadre du bureau', () => {
     expect(order[0]).toBe('Encaisser');
   });
 
+  it('F3.2 — « Changer mon mot de passe » : dans le bloc « Connecté » de la barre latérale ET du menu mobile', async () => {
+    saveSession(SESSION);
+    fakeServer([{ match: 'membership/settings', body: settings() }]);
+    const user = userEvent.setup();
+    const { container } = render(<BureauFrame>contenu protégé</BureauFrame>);
+    await screen.findByText('contenu protégé');
+
+    // Barre latérale : sous « Connecté : Nom », avant « Se déconnecter ».
+    const sidebar = container.querySelector('aside') as HTMLElement;
+    const inSidebar = within(sidebar).getByRole('link', { name: 'Changer mon mot de passe' });
+    expect(inSidebar).toHaveAttribute('href', '/bureau/mon-mot-de-passe');
+    const block = inSidebar.parentElement as HTMLElement;
+    expect(within(block).getByText('Connecté :')).toBeInTheDocument();
+    expect(within(block).getByText('Trésorier Démo')).toBeInTheDocument();
+    expect(within(block).getByRole('button', { name: 'Se déconnecter' })).toBeInTheDocument();
+
+    // Menu mobile : fermé, il ne montre rien ; ouvert, le lien est au même endroit.
+    expect(screen.getAllByRole('link', { name: 'Changer mon mot de passe' })).toHaveLength(1);
+    await user.click(screen.getByRole('button', { name: 'Ouvrir le menu' }));
+    const menu = container.querySelector('#bureau-menu') as HTMLElement;
+    const inMenu = within(menu).getByRole('link', { name: 'Changer mon mot de passe' });
+    expect(inMenu).toHaveAttribute('href', '/bureau/mon-mot-de-passe');
+    expect(within(menu).getByText(/Connecté :/)).toBeInTheDocument();
+  });
+
   it('mode_is_supported: false → UNE bannière', async () => {
     saveSession(SESSION);
     fakeServer([{ match: 'membership/settings', body: settings({ mode_is_supported: false, mode_cotisation: 'exercice_civil' }) }]);

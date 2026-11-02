@@ -82,6 +82,18 @@ describe('B11 — les catégories', () => {
   });
 });
 
+describe('F3.2 — « Mon mot de passe » dans Réglages', () => {
+  it('une ligne « Mon mot de passe » mène au même écran que le bloc « Connecté »', async () => {
+    fakeServer([{ match: 'membership/categories', body: [] }]);
+    renderInBureau(<ReglagesPage />);
+    const panel = screen.getByRole('heading', { name: 'Mon mot de passe' }).closest('section') as HTMLElement;
+    expect(within(panel).getByRole('link', { name: 'Changer mon mot de passe' })).toHaveAttribute(
+      'href',
+      '/bureau/mon-mot-de-passe',
+    );
+  });
+});
+
 describe('B11 — l’association', () => {
   it('mode et types de membres en lecture seule', async () => {
     fakeServer([{ match: 'membership/categories', body: [] }]);

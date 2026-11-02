@@ -25,6 +25,7 @@ import {
   ChartIcon,
   CloseIcon,
   InboxIcon,
+  KeyIcon,
   LogoutIcon,
   MegaphoneIcon,
   MenuIcon,
@@ -48,6 +49,9 @@ const NAV = [
 ] as const;
 
 const LOGIN_PATH = '/bureau/connexion';
+
+/** « Mon mot de passe » (S3e) : depuis le bloc « Connecté », et depuis Réglages. */
+export const PASSWORD_PATH = '/bureau/mon-mot-de-passe';
 
 function isActive(pathname: string, href: string): boolean {
   if (href === '/bureau') return pathname === '/bureau';
@@ -268,6 +272,7 @@ function Sidebar({ pathname }: { pathname: string }) {
         <span className="font-semibold break-words text-on-indigo">
           {session.admin.name}
         </span>
+        <PasswordLink pathname={pathname} />
         <LogoutButton className="justify-start px-0 text-[var(--sidebar-text)]" />
       </div>
     </aside>
@@ -332,15 +337,30 @@ function TopBar({ pathname }: { pathname: string }) {
               );
             })}
           </nav>
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--sidebar-text)]/20 px-3 pt-3">
+          <div className="mt-2 flex flex-col items-start gap-1 border-t border-[var(--sidebar-text)]/20 px-3 pt-3">
             <span className="small min-w-0 break-words">
               Connecté : <span className="font-semibold text-on-indigo">{session.admin.name}</span>
             </span>
+            <PasswordLink pathname={pathname} onNavigate={() => setOpen(false)} />
             <LogoutButton className="px-0 text-[var(--sidebar-text)]" />
           </div>
         </div>
       ) : null}
     </header>
+  );
+}
+
+function PasswordLink({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
+  return (
+    <Link
+      href={PASSWORD_PATH}
+      onClick={onNavigate}
+      aria-current={isActive(pathname, PASSWORD_PATH) ? 'page' : undefined}
+      className="inline-flex min-h-11 items-center gap-2 font-semibold text-[var(--sidebar-text)]! no-underline hover:underline aria-[current=page]:text-on-indigo!"
+    >
+      <KeyIcon />
+      Changer mon mot de passe
+    </Link>
   );
 }
 

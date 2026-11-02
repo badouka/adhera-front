@@ -358,6 +358,30 @@ export async function logout(): Promise<void> {
   }
 }
 
+/* ───────────────────────── Mon mot de passe ───────────────────────── */
+
+export type PasswordChange = {
+  current_password: string;
+  password: string;
+  password_confirmation: string;
+};
+
+/**
+ * `PUT /admin/me/password` (S3e). Le jeton de CET onglet reste valide : la
+ * session courante reste ouverte, les autres appareils devront se reconnecter.
+ * Un `422` porte, par champ, des messages que l'écran affiche TELS QUELS.
+ */
+export async function changePassword(input: PasswordChange): Promise<void> {
+  await request<unknown>('me/password', {
+    method: 'PUT',
+    json: {
+      current_password: input.current_password,
+      password: input.password,
+      password_confirmation: input.password_confirmation,
+    },
+  });
+}
+
 /* ───────────────────────────── Réglages ───────────────────────────── */
 
 export function getSettings(signal?: AbortSignal) {

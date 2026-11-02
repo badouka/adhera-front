@@ -1,8 +1,10 @@
 'use client';
 
+import Link from 'next/link';
 import { useId, useRef, useState } from 'react';
 import { ApiError } from '@/lib/api';
 import { useBureau } from '@/components/bureau/BureauContext';
+import { PASSWORD_PATH } from '@/components/bureau/BureauFrame';
 import { CategoriesPanel } from '@/components/bureau/CategoriesPanel';
 import { ConfirmDialog } from '@/components/bureau/ConfirmDialog';
 import { UploadIcon } from '@/components/Icons';
@@ -48,10 +50,25 @@ export default function ReglagesPage() {
           <WeeklyReportPanel />
           <ModePanel />
           <ArrearsPanel />
+          <PasswordPanel />
         </div>
       </div>
       <CategoriesPanel />
     </>
+  );
+}
+
+/** « Mon mot de passe » : le même écran que depuis le bloc « Connecté ». */
+function PasswordPanel() {
+  return (
+    <Panel title="Mon mot de passe">
+      <p className="m-0 text-ink-muted">
+        Choisissez un mot de passe facile à retenir et à taper sur votre téléphone.
+      </p>
+      <Link href={PASSWORD_PATH} className={buttonClass('secondary', 'self-start no-underline')}>
+        Changer mon mot de passe
+      </Link>
+    </Panel>
   );
 }
 

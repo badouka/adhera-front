@@ -52,8 +52,9 @@ type FieldRender = {
 };
 
 /**
- * Un champ étiqueté. L'erreur affichée est TOUJOURS un libellé français écrit
- * par l'écran, jamais un message de l'API (piège 10).
+ * Un champ étiqueté. L'erreur affichée est un libellé français écrit par
+ * l'écran, jamais un message de l'API (piège 10) — sauf « Mon mot de passe »,
+ * dont les messages de `422` sont rédigés pour l'écran (S3e) et passent tels quels.
  */
 export function Field({
   label,
