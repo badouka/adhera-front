@@ -87,7 +87,7 @@ export function AttestationAction({
         rel="noreferrer"
         onClick={open}
         aria-disabled={busy || undefined}
-        className="flex h-14 w-full items-center justify-center gap-2 rounded-[var(--radius-md)] bg-indigo text-[18px] font-bold text-on-indigo no-underline"
+        className="flex h-14 w-full items-center justify-center gap-2 rounded-[var(--radius-md)] bg-indigo text-[18px] font-bold text-on-indigo! no-underline"
       >
         <DownloadIcon size={22} />
         {busy ? 'Préparation…' : 'Télécharger mon attestation'}

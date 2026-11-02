@@ -638,3 +638,40 @@ describe('marque — la carte ne nomme que l’association', () => {
     expect(visibleStrings('<p>Carte Adhera</p>').some((t) => BRANDS.test(t))).toBe(true);
   });
 });
+
+/**
+ * F4 — `a { color: var(--link) }` (globals.css) est hors couche : il l'emporte
+ * sur une classe Tailwind. Un lien PLEIN (`bg-indigo text-on-indigo`) prenait
+ * donc la couleur des liens, celle de son fond : le bouton « Télécharger mon
+ * attestation » est sorti bleu sur bleu, vu en recette. Sur un `<a>` ou un
+ * `<Link>`, une couleur de texte « sur fond » se pose en `!`, comme dans
+ * `bureau/ui.tsx`.
+ */
+export function anchorsWithWeakOnColor(code: string): string[] {
+  const found: string[] = [];
+  for (const m of code.matchAll(/<(a|Link)\b[^>]*?className=(?:"([^"]*)"|\{`([^`]*)`\})/gs)) {
+    for (const cls of (m[2] ?? m[3] ?? '').split(/\s+/)) {
+      if (/^text-on-[\w-]+$/.test(cls)) found.push(`<${m[1]}> ${cls}`);
+    }
+  }
+  return found;
+}
+
+describe('liens pleins — le texte ne prend pas la couleur du fond', () => {
+  it('aucun <a> ni <Link> ne pose text-on-… sans « ! »', () => {
+    const offenders: string[] = [];
+    for (const file of walk(SRC, ['.tsx'])) {
+      for (const hit of anchorsWithWeakOnColor(stripComments(readFileSync(file, 'utf8')))) {
+        offenders.push(`${relative(process.cwd(), file)} → ${hit}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('contre-épreuve : le bouton bleu sur bleu serait vu', () => {
+    expect(anchorsWithWeakOnColor('<a href="x" className="bg-indigo text-on-indigo">T</a>')).toEqual([
+      '<a> text-on-indigo',
+    ]);
+    expect(anchorsWithWeakOnColor('<a href="x" className="bg-indigo text-on-indigo!">T</a>')).toEqual([]);
+  });
+});
