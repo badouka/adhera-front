@@ -1,6 +1,6 @@
-import { render } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import type { ReactElement } from 'react';
-import { vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import {
   BureauContext,
   type BureauContextValue,
@@ -212,6 +212,14 @@ export function calls(fetchMock: ReturnType<typeof vi.fn>, method = 'GET') {
   return fetchMock.mock.calls
     .filter((c) => ((c[1] as RequestInit | undefined)?.method ?? 'GET') === method)
     .map((c) => ({ url: c[0] as string, init: c[1] as RequestInit }));
+}
+
+/**
+ * F4 — les panneaux d'un geste de la fiche sont chargés À LA DEMANDE : après
+ * le clic qui en ouvre un, on attend qu'il ait remplacé son « Chargement… ».
+ */
+export async function panelReady() {
+  await waitFor(() => expect(screen.queryByText('Chargement…')).not.toBeInTheDocument());
 }
 
 /** Rend un écran du bureau dans son contexte (session + réglages). */

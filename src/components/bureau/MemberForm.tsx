@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { ApiError } from '@/lib/api';
 import { isSessionError, listCategories } from '@/lib/bureau/api';
 import { errorMessage, invalidFields } from '@/lib/bureau/messages';
 import type {
@@ -31,6 +32,9 @@ export const MEMBER_FIELD_ERRORS: Record<FieldName, string> = {
   region: 'Vérifiez la région (255 caractères au plus).',
   category_id: 'Choisissez une catégorie active.',
   joined_at: 'Indiquez une date d’adhésion valide.',
+  // Repli seulement : le 422 de ce champ est rédigé en français par le serveur
+  // et nomme le porteur du numéro (§16.1) — il s'affiche tel quel.
+  member_number: 'Vérifiez le numéro de membre (32 caractères au plus).',
 };
 
 const FIELDS = Object.keys(MEMBER_FIELD_ERRORS) as FieldName[];
@@ -77,6 +81,10 @@ export function MemberForm({
     initial?.category_id != null ? String(initial.category_id) : '',
   );
   const [joinedAt, setJoinedAt] = useState(initial?.joined_at ?? (initial ? '' : todayInDakar()));
+  // §16.1 : modifiable par `PUT` seulement — à la création, le serveur numérote.
+  const numberEditable = !!initial && initial.member_number !== undefined;
+  const initialNumber = initial?.member_number ?? '';
+  const [memberNumber, setMemberNumber] = useState(initialNumber);
   const [categories, setCategories] = useState<Category[] | null>(null);
   const [errors, setErrors] = useState<Errors>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -155,6 +163,10 @@ export function MemberForm({
         region: emptyToNull(region),
         category_id: categoryId === '' ? null : Number(categoryId),
         joined_at: joinedAt === '' ? null : joinedAt,
+        // Envoyé seulement s'il a changé : rien ne se revalide pour rien.
+        ...(numberEditable && memberNumber.trim() !== initialNumber.trim()
+          ? { member_number: emptyToNull(memberNumber) }
+          : {}),
       });
     } catch (error) {
       if (isSessionError(error)) return;
@@ -165,6 +177,11 @@ export function MemberForm({
           mapped[field as FieldName] = MEMBER_FIELD_ERRORS[field as FieldName];
         }
       }
+      // Le refus d'un numéro NOMME son porteur, « (membre supprimé) » compris :
+      // `errors.member_number[0]`, tel quel.
+      const numberMessage =
+        error instanceof ApiError ? error.errors.member_number?.[0]?.trim() : undefined;
+      if (mapped.member_number && numberMessage) mapped.member_number = numberMessage;
       if (Object.keys(mapped).length > 0) {
         setErrors(mapped);
         focusFirst(mapped);
@@ -253,6 +270,13 @@ export function MemberForm({
             <input {...props} name="joined_at" type="date" max={todayInDakar()} value={joinedAt} onChange={(e) => setJoinedAt(e.target.value)} className={inputClass(!!errors.joined_at)} />
           )}
         </Field>
+        {numberEditable ? (
+          <Field label="Numéro de membre" optional error={errors.member_number}>
+            {(props) => (
+              <input {...props} name="member_number" autoComplete="off" maxLength={32} value={memberNumber} onChange={(e) => setMemberNumber(e.target.value)} className={inputClass(!!errors.member_number)} />
+            )}
+          </Field>
+        ) : null}
       </div>
 
       <Field

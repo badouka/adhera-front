@@ -66,7 +66,17 @@ export type Settings = {
   weekly_report_enabled?: boolean;
   /** §12.1 — absent d'un serveur antérieur à S3d, lu alors comme le défaut. */
   arrears_policy?: ArrearsPolicy;
+  /**
+   * Les options vendables allumées pour l'association (v3.8.1). Clé absente
+   * d'un serveur antérieur : chaque option est alors lue comme ÉTEINTE.
+   */
+  features?: { membership_card?: boolean };
 };
+
+/** `features.membership_card === true`, et rien d'autre. */
+export function hasMembershipCard(settings: Settings): boolean {
+  return settings.features?.membership_card === true;
+}
 
 /** Les seuls champs que `PUT settings` laisse modifier depuis F2. */
 export type SettingsInput = {
@@ -124,6 +134,12 @@ export type MemberListItem = {
   region: string | null;
   category_id: number | null;
   category_label: string | null;
+  /**
+   * §16.1 — format libre (`0001`, `A-14`, `2021/07`), 32 caractères au plus.
+   * `null` pour un candidat : la ligne reste VIDE, jamais `0000`. Absent d'un
+   * serveur antérieur à v3.8.
+   */
+  member_number?: string | null;
   /** `YYYY-MM-DD` */
   joined_at: string | null;
   status: MemberStatus;
@@ -205,9 +221,47 @@ export type ContactInput = {
   email: string | null;
 };
 
+/**
+ * §12.8 — une année que la base ne porte pas. Ni `id`, ni reçu, ni statut :
+ * aucune action ne s'y attache.
+ */
+export type MissingPeriod = {
+  period_start: string;
+  period_end: string;
+  period_label: string | null;
+  amount_due: number | null;
+  /** `null` si incalculable — jamais `0`. */
+  amount_due_formatted: string | null;
+  /** Même sens que sur une période de `dues`. */
+  is_unclaimed_arrears: boolean;
+};
+
+/** §16.4 — une attestation déjà délivrée. */
+export type MemberAttestation = {
+  document_id: string;
+  reference: string;
+  /** ISO 8601 */
+  issued_at: string;
+  /** `YYYY-MM-DD` */
+  valid_until: string | null;
+  /** RECALCULÉ à chaque lecture : une annulation d'encaissement l'éteint. */
+  is_valid: boolean;
+};
+
+/** La réponse de `POST members/{id}/attestation` : la pièce, pas le PDF. */
+export type IssuedAttestation = {
+  document_id: string;
+  reference: string;
+  valid_until: string | null;
+};
+
 export type MemberDetail = MemberListItem & {
   contacts: Contact[];
   dues: MemberDue[];
+  /** La plus ANCIENNE d'abord (l'inverse de `dues`). Absente avant v3.7.5. */
+  missing_periods?: MissingPeriod[];
+  /** La plus RÉCENTE d'abord. Absente avant v3.8. */
+  attestations?: MemberAttestation[];
 };
 
 /**
@@ -225,6 +279,8 @@ export type MemberInput = {
   region: string | null;
   category_id: number | null;
   joined_at: string | null;
+  /** §16.1 — envoyé seulement s'il a changé (`PUT` uniquement). */
+  member_number?: string | null;
 };
 
 export type MemberFilters = {

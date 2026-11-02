@@ -24,6 +24,7 @@ import {
   memberDetail,
   ORGANISATION,
   payment,
+  panelReady,
   renderInBureau,
   SESSION,
 } from './fixtures';
@@ -210,6 +211,7 @@ describe('B9 — « Encaisser » depuis la fiche (R9 dans le panneau)', () => {
     const user = userEvent.setup();
     renderInBureau(<FicheMembrePage />);
     await user.click(await screen.findByRole('button', { name: 'Encaisser' }));
+    await panelReady();
     return user;
   }
 
@@ -321,6 +323,7 @@ describe('B7 — prénom et nom à l’édition', () => {
     const user = userEvent.setup();
     renderInBureau(<FicheMembrePage />);
     await user.click(await screen.findByRole('button', { name: 'Modifier' }));
+    await panelReady();
     return { user, fetchMock };
   }
 
@@ -415,6 +418,7 @@ describe('B10 — la sortie (R9)', () => {
     const user = userEvent.setup();
     renderInBureau(<FicheMembrePage />);
     await user.click(await screen.findByRole('button', { name: 'Enregistrer une sortie' }));
+    await panelReady();
 
     await user.click(screen.getByRole('button', { name: 'Vérifier la sortie' }));
     expect(screen.getByText('Choisissez le motif de la sortie.')).toBeInTheDocument();
@@ -499,6 +503,7 @@ describe('§11 — annuler un encaissement, sans rien perdre', () => {
     const user = userEvent.setup();
     renderInBureau(<FicheMembrePage />);
     await user.click(await screen.findByRole('button', { name: 'Annuler cet encaissement' }));
+    await panelReady();
 
     expect(screen.getByTestId('cancel-recap').textContent).toBe(
       'Annuler 100 000 FCFA (Wave, 29/10/2026) de Moussa Ndiaye (test) ? Sa cotisation redeviendra à régler et le reçu REC-2026-CB4A73AE sera marqué annulé. Rien n’est supprimé.',
@@ -533,6 +538,7 @@ describe('§11 — annuler un encaissement, sans rien perdre', () => {
     const user = userEvent.setup();
     renderInBureau(<FicheMembrePage />);
     await user.click(await screen.findByRole('button', { name: 'Annuler cet encaissement' }));
+    await panelReady();
     expect(screen.getByRole('button', { name: 'Oui, annuler cet encaissement' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Annuler l’encaissement' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Ne rien changer' })).toBeNull();
@@ -545,6 +551,7 @@ describe('§11 — annuler un encaissement, sans rien perdre', () => {
     const user = userEvent.setup();
     renderInBureau(<FicheMembrePage />);
     await user.click(await screen.findByRole('button', { name: 'Annuler cet encaissement' }));
+    await panelReady();
     const recap = screen.getByTestId('cancel-recap').textContent ?? '';
     expect(recap).toContain('Sa cotisation redeviendra à régler');
     expect(recap).not.toMatch(/redeviendra due/);
@@ -574,6 +581,7 @@ describe('§11 — annuler un encaissement, sans rien perdre', () => {
     const user = userEvent.setup();
     renderInBureau(<FicheMembrePage />);
     await user.click(await screen.findByRole('button', { name: 'Annuler cet encaissement' }));
+    await panelReady();
     await user.type(screen.getByLabelText(/Motif de l’annulation/), 'Erreur de saisie du montant');
     await user.click(screen.getByRole('button', { name: 'Oui, annuler cet encaissement' }));
     expect(await screen.findByText(/ne peut plus être annulé/)).toBeInTheDocument();
@@ -709,6 +717,7 @@ describe('§1 — l’historique et le reste à payer', () => {
     const user = userEvent.setup();
     renderInBureau(<FicheMembrePage />);
     await user.click(await screen.findByRole('button', { name: 'Encaisser' }));
+    await panelReady();
     expect(
       screen.getByText(fullText('Cotisation du 1er octobre 2026 au 30 septembre 2027 — reste 250 000 FCFA')),
     ).toBeInTheDocument();

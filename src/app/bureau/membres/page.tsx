@@ -269,7 +269,14 @@ function MemberCards({ members }: { members: MemberListItem[] }) {
             <span className="flex items-start justify-between gap-2">
               <span className="flex min-w-0 flex-col">
                 <span className="font-semibold break-words text-indigo">{member.name}</span>
-                <span className="small text-ink-muted">{member.category_label ?? 'Sans catégorie'}</span>
+                <span className="small text-ink-muted">
+                  {member.member_number ? (
+                    <span className="tnum" data-testid="card-member-number">
+                      N° {member.member_number} ·{' '}
+                    </span>
+                  ) : null}
+                  {member.category_label ?? 'Sans catégorie'}
+                </span>
               </span>
               <StandingPastille member={member} />
             </span>
@@ -288,6 +295,7 @@ function MemberTable({ members }: { members: MemberListItem[] }) {
       <table className="w-full border-collapse text-left" data-testid="member-table">
         <thead>
           <tr className="small border-b border-line text-ink-muted">
+            <th className="px-4 py-3 font-semibold">N°</th>
             <th className="px-4 py-3 font-semibold">Nom</th>
             <th className="px-4 py-3 font-semibold">Catégorie</th>
             <th className="px-4 py-3 font-semibold">Situation</th>
@@ -298,6 +306,10 @@ function MemberTable({ members }: { members: MemberListItem[] }) {
         <tbody>
           {members.map((member) => (
             <tr key={member.id} className="border-b border-line last:border-b-0">
+              {/* Un candidat n'a pas de numéro : cellule vide, jamais « 0000 ». */}
+              <td className="tnum px-4 py-3 whitespace-nowrap" data-testid="member-number">
+                {member.member_number ?? ''}
+              </td>
               <td className="px-4 py-3">
                 <Link href={memberHref(member)} className="font-semibold break-words">
                   {member.name}

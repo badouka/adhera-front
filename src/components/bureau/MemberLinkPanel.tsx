@@ -27,13 +27,22 @@ type Load<T> =
  * Régénérer, c'est révoquer — l'ancien lien meurt aussitôt —, d'où la
  * confirmation R9.
  */
+export const ROTATE_CARD_WARNING =
+  'Sa carte et les QR codes de ses attestations déjà imprimées ne fonctionneront plus.';
+
 export function MemberLinkPanel({
   memberId,
   memberName,
+  cardEnabled = false,
   onClose,
 }: {
   memberId: string;
   memberName: string;
+  /**
+   * L'option `membership_card` : le code de vérification se renouvelle avec
+   * le lien (§16.5), et les QR déjà imprimés meurent avec l'ancien.
+   */
+  cardEnabled?: boolean;
   onClose: () => void;
 }) {
   const [link, setLink] = useState<Load<MemberLink>>({ kind: 'loading' });
@@ -198,6 +207,11 @@ export function MemberLinkPanel({
           <p className="m-0">
             L’ancien lien ne fonctionnera plus. Le membre devra recevoir le nouveau.
           </p>
+          {cardEnabled ? (
+            <p className="m-0 font-semibold" data-testid="rotate-card-warning">
+              {ROTATE_CARD_WARNING}
+            </p>
+          ) : null}
         </ConfirmDialog>
       ) : null}
     </Panel>

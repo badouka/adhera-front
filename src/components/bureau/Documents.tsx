@@ -26,7 +26,7 @@ export function saveBlob(blob: Blob, filename: string): void {
 }
 
 /** Un nom de fichier sûr, dérivé de la référence servie (`REC-2026-…`). */
-function pdfName(reference: string): string {
+export function pdfName(reference: string): string {
   const safe = reference.replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '');
   return `${safe || 'recu'}.pdf`;
 }
@@ -42,12 +42,15 @@ export function ReceiptButton({
   label = 'Télécharger le reçu',
   tone = 'secondary',
   compact = false,
+  failure = 'Le reçu n’a pas pu être téléchargé.',
 }: {
   receiptId: string;
   reference: string;
   label?: string;
   tone?: 'primary' | 'secondary' | 'ghost';
   compact?: boolean;
+  /** Ce qui a échoué, dans les mots de l'écran (une attestation n'est pas un reçu). */
+  failure?: string;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +64,7 @@ export function ReceiptButton({
       saveBlob(blob, pdfName(reference));
     } catch (cause) {
       if (!isSessionError(cause)) {
-        setError(errorMessage(cause, 'Le reçu n’a pas pu être téléchargé.'));
+        setError(errorMessage(cause, failure));
       }
     } finally {
       setBusy(false);

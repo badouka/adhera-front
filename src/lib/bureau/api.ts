@@ -32,6 +32,7 @@ import type {
   ContactInput,
   Dashboard,
   DirectPaymentInput,
+  IssuedAttestation,
   LaunchedCampaign,
   LeftReason,
   LoginData,
@@ -580,6 +581,17 @@ export function cancelPayment(id: string, reason: string) {
  */
 export function fetchDocument(id: string) {
   return request<Blob>(`membership/documents/${seg(id)}/pdf`, { as: 'blob' });
+}
+
+/**
+ * `POST members/{id}/attestation` (§16.4) : rend la PIÈCE ; son PDF passe par
+ * `documents/{document_id}/pdf`, la route des reçus. Aucun forçage : un membre
+ * pas à jour ou non actif est refusé (403), pour le bureau comme pour lui.
+ */
+export function issueAttestation(memberId: string) {
+  return request<IssuedAttestation>(`membership/members/${seg(memberId)}/attestation`, {
+    method: 'POST',
+  });
 }
 
 /* ─────────────────────── Tableau de bord et exports ───────────────── */

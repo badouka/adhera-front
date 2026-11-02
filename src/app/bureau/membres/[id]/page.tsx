@@ -1,18 +1,14 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useBureau } from '@/components/bureau/BureauContext';
-import { CancelPaymentPanel } from '@/components/bureau/CancelPaymentPanel';
 import { ContactsPanel } from '@/components/bureau/ContactsPanel';
-import { DirectPaymentPanel } from '@/components/bureau/DirectPaymentPanel';
 import { ReceiptButton } from '@/components/bureau/Documents';
 import { decisionLabel, isModeUnsupported, periodLabel } from '@/components/bureau/format';
 import { CashIcon, ChatIcon, ChevronLeftIcon } from '@/components/bureau/Icons';
-import { LeavePanel } from '@/components/bureau/LeavePanel';
-import { MemberForm } from '@/components/bureau/MemberForm';
-import { MemberLinkPanel } from '@/components/bureau/MemberLinkPanel';
 import {
   ArrearsLine,
   dueDateLine,
@@ -34,6 +30,7 @@ import { getMember, isSessionError, listPayments, updateMember } from '@/lib/bur
 import { errorMessage } from '@/lib/bureau/messages';
 import {
   DUE_STATUS_LABELS,
+  hasMembershipCard,
   LEFT_REASONS,
   PAYMENT_STATUS_LABELS,
   type MemberDetail,
@@ -41,6 +38,40 @@ import {
   type Payment,
 } from '@/lib/bureau/types';
 import { formatDate, formatDateTime } from '@/lib/dates';
+
+/**
+ * Chargés à la demande (F4 § 4) : la fiche pèse près du plafond de 200 Ko.
+ *
+ * - les panneaux d'un GESTE (modifier, envoyer le lien, encaisser, sortie,
+ *   annuler un encaissement) : ils ne s'ouvrent qu'au toucher d'un bouton ;
+ * - les attestations et les années manquantes : elles n'existent que pour une
+ *   partie des membres.
+ */
+const panelLoading = () => <p className="small m-0 text-ink-muted">Chargement…</p>;
+const MemberForm = dynamic(
+  () => import('@/components/bureau/MemberForm').then((m) => m.MemberForm),
+  { loading: panelLoading },
+);
+const MemberLinkPanel = dynamic(
+  () => import('@/components/bureau/MemberLinkPanel').then((m) => m.MemberLinkPanel),
+  { loading: panelLoading },
+);
+const DirectPaymentPanel = dynamic(
+  () => import('@/components/bureau/DirectPaymentPanel').then((m) => m.DirectPaymentPanel),
+  { loading: panelLoading },
+);
+const LeavePanel = dynamic(
+  () => import('@/components/bureau/LeavePanel').then((m) => m.LeavePanel),
+  { loading: panelLoading },
+);
+const CancelPaymentPanel = dynamic(
+  () => import('@/components/bureau/CancelPaymentPanel').then((m) => m.CancelPaymentPanel),
+  { loading: panelLoading },
+);
+const AttestationsPanel = dynamic(() => import('@/components/bureau/AttestationsPanel'), {
+  loading: () => <p className="small m-0 text-ink-muted">Chargement des attestations…</p>,
+});
+const MissingPeriodsPanel = dynamic(() => import('@/components/bureau/MissingPeriodsPanel'));
 
 type Load<T> =
   | { kind: 'loading' }
@@ -158,6 +189,8 @@ export default function FicheMembrePage() {
   const m = member.value;
   const former = m.status === 'former';
   const echeance = dueDateLine(m);
+  const cardEnabled = hasMembershipCard(settings);
+  const missing = m.missing_periods ?? [];
 
   return (
     <>
@@ -231,7 +264,12 @@ export default function FicheMembrePage() {
       )}
 
       {action === 'link' && !former ? (
-        <MemberLinkPanel memberId={m.id} memberName={m.name} onClose={() => setAction(null)} />
+        <MemberLinkPanel
+          memberId={m.id}
+          memberName={m.name}
+          cardEnabled={cardEnabled}
+          onClose={() => setAction(null)}
+        />
       ) : null}
 
       {action === 'payment' && !former && modeSupported ? (
@@ -300,6 +338,12 @@ export default function FicheMembrePage() {
             />
           ) : (
             <dl className="m-0 flex flex-col gap-2">
+              {/* Un candidat n'a pas de numéro : la ligne reste vide, jamais « 0000 ». */}
+              {m.member_number === undefined ? null : (
+                <Row label="N° de membre">
+                  <span className="tnum" data-testid="member-number">{m.member_number ?? ''}</span>
+                </Row>
+              )}
               <Row label="Téléphone">{m.phone ?? '—'}</Row>
               <Row label="E-mail">{m.email ?? '—'}</Row>
               <Row label="Région">{m.region ?? '—'}</Row>
@@ -354,6 +398,23 @@ export default function FicheMembrePage() {
 
       {modeSupported ? (
         <DuesPanel dues={m.dues} />
+      ) : null}
+
+      {modeSupported && missing.length > 0 ? <MissingPeriodsPanel periods={missing} /> : null}
+
+      {cardEnabled ? (
+        <AttestationsPanel
+          attestations={m.attestations ?? []}
+          memberId={m.id}
+          canIssue={!former}
+          onIssued={(issued) => {
+            setNotice({
+              tone: 'paid',
+              text: `Attestation ${issued.reference} délivrée.`,
+            });
+            reload();
+          }}
+        />
       ) : null}
 
       <PaymentsPanel
