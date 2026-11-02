@@ -89,7 +89,7 @@ describe('F3.2 — « Mon mot de passe » : le formulaire', () => {
   });
 
   it('envoie EXACTEMENT { current_password, password, password_confirmation } en PUT me/password', async () => {
-    const fetchMock = fakeServer([{ method: 'PUT', match: 'me/password', body: { message: 'ok' } }]);
+    const fetchMock = fakeServer([{ method: 'PUT', match: 'me/password', body: { message: 'Votre mot de passe a été changé.' } }]);
     await fillAndSave('Ancien-Mot-1', 'Baobab-Lagune-4827', 'Baobab-Lagune-4827');
     await screen.findByText(PASSWORD_CHANGED);
     const [call] = calls(fetchMock, 'PUT');
@@ -110,8 +110,9 @@ describe('F3.2 — « Mon mot de passe » : le formulaire', () => {
     renderInBureau(<MonMotDePassePage />);
     await user.type(input(NEW), 'Baobab-Lagune-4827');
     await user.click(screen.getByRole('button', { name: SAVE }));
-    expect(errorUnder(CURRENT)).toBe('Indiquez votre mot de passe actuel.');
-    expect(errorUnder(CONFIRM)).toBe('Confirmez votre nouveau mot de passe.');
+    // Les libellés du serveur (§14.2) pour les deux premiers champs.
+    expect(errorUnder(CURRENT)).toBe('Saisissez votre mot de passe actuel.');
+    expect(errorUnder(CONFIRM)).toBe('Retapez le nouveau mot de passe à l’identique.');
     expect(errorUnder(NEW)).toBeNull();
     expect(input(CURRENT)).toHaveFocus();
     expect(fetchMock).not.toHaveBeenCalled();
@@ -120,11 +121,11 @@ describe('F3.2 — « Mon mot de passe » : le formulaire', () => {
 
 describe('F3.2 — « Mon mot de passe » : les réponses', () => {
   it('200 : le message de succès, les champs vidés et remasqués, et on reste connecté', async () => {
-    fakeServer([{ method: 'PUT', match: 'me/password', body: { message: 'ok' } }]);
+    fakeServer([{ method: 'PUT', match: 'me/password', body: { message: 'Votre mot de passe a été changé.' } }]);
     const user = await fillAndSave('Ancien-Mot-1', 'Baobab-Lagune-4827');
     expect(await screen.findByRole('status')).toHaveTextContent(PASSWORD_CHANGED);
     expect(PASSWORD_CHANGED).toBe(
-      'Votre mot de passe a été changé. Si vous étiez connectée sur un autre appareil, il vous faudra vous y reconnecter.',
+      'Votre mot de passe a été changé. Vos autres appareils ont été déconnectés : il faudra vous y reconnecter.',
     );
     for (const label of [CURRENT, NEW, CONFIRM]) {
       expect(input(label).value).toBe('');
@@ -138,51 +139,89 @@ describe('F3.2 — « Mon mot de passe » : les réponses', () => {
     expect(screen.queryByText(PASSWORD_CHANGED)).toBeNull();
   });
 
-  it('422 : chaque message du serveur sous SON champ, tel quel, sans réécriture', async () => {
-    const messages = {
-      current_password: ['Le mot de passe actuel est incorrect.'],
-      password: [
-        'Le nouveau mot de passe doit contenir au moins 8 caractères.',
-        'Ce mot de passe est trop courant : choisissez-en un autre.',
+  it('422 (§14.2) : chaque message du serveur sous SON champ, tel quel ; le `message` commun n’est pas répété', async () => {
+    const errors = {
+      current_password: [
+        'Le mot de passe actuel est incorrect. Si vous l’avez oublié, demandez une réinitialisation à votre contact DIGISSOL.',
       ],
-      password_confirmation: ['La confirmation ne correspond pas au nouveau mot de passe.'],
+      password: [
+        'Le nouveau mot de passe doit faire au moins 8 caractères. Deux mots et quelques chiffres suffisent, par exemple « Baobab-Lagune-4827 ».',
+      ],
     };
     fakeServer([{
       method: 'PUT', match: 'me/password', status: 422,
-      body: { message: 'Le mot de passe actuel est incorrect. (et 3 autres erreurs)', errors: messages },
+      body: { message: 'Le mot de passe n’a pas été changé.', errors },
     }]);
-    await fillAndSave('faux', 'court', 'autre');
-    await waitFor(() => expect(errorUnder(CURRENT)).toBe('Le mot de passe actuel est incorrect.'));
-    expect(errorUnder(NEW)).toBe(messages.password.join(' '));
-    expect(errorUnder(CONFIRM)).toBe('La confirmation ne correspond pas au nouveau mot de passe.');
+    await fillAndSave('faux', 'court');
+    await waitFor(() => expect(errorUnder(CURRENT)).toBe(errors.current_password[0]));
+    expect(errorUnder(NEW)).toBe(errors.password[0]);
+    expect(errorUnder(CONFIRM)).toBeNull();
     expect(input(CURRENT)).toHaveAttribute('aria-invalid', 'true');
     expect(input(CURRENT)).toHaveFocus();
-    // Le résumé du serveur n'est pas affiché en plus : chaque message est à sa place.
-    expect(screen.queryByText(/et 3 autres erreurs/)).toBeNull();
+    expect(screen.queryByText('Le mot de passe n’a pas été changé.')).toBeNull();
     expect(screen.queryByText(PASSWORD_CHANGED)).toBeNull();
     // Un 422 ne déconnecte pas.
     expect(getSession('demo-asso')?.token).toBe(TOKEN);
   });
 
+  it('422 : la confirmation différente arrive sous `password` et reste sous « Nouveau mot de passe »', async () => {
+    const mismatch =
+      'La confirmation ne correspond pas au nouveau mot de passe : retapez-le à l’identique dans le second champ.';
+    fakeServer([{
+      method: 'PUT', match: 'me/password', status: 422,
+      body: { message: 'Le mot de passe n’a pas été changé.', errors: { password: [mismatch] } },
+    }]);
+    await fillAndSave('Baobab-Lagune-4827', 'Sagesse-Citron-3376', 'Sagesse-Citron-3377');
+    await waitFor(() => expect(errorUnder(NEW)).toBe(mismatch));
+    expect(errorUnder(CONFIRM)).toBeNull();
+    expect(errorUnder(CURRENT)).toBeNull();
+    expect(input(NEW)).toHaveFocus();
+  });
+
+  it('422 : plusieurs messages pour un même champ sont tous affichés, bout à bout', async () => {
+    const messages = [
+      'Le nouveau mot de passe doit être différent de l’actuel.',
+      'Ce mot de passe est trop courant : c’est l’un des premiers qu’un intrus essaie.',
+    ];
+    fakeServer([{
+      method: 'PUT', match: 'me/password', status: 422,
+      body: { message: 'Le mot de passe n’a pas été changé.', errors: { password: messages } },
+    }]);
+    await fillAndSave('azerty123', 'azerty123');
+    await waitFor(() => expect(errorUnder(NEW)).toBe(messages.join(' ')));
+  });
+
   it('422 sur un seul champ : les deux autres restent sans erreur', async () => {
     fakeServer([{
       method: 'PUT', match: 'me/password', status: 422,
-      body: { message: 'x', errors: { password: ['Ce mot de passe est trop simple.'] } },
+      body: {
+        message: 'Le mot de passe n’a pas été changé.',
+        errors: { password: ['Le mot de passe ne peut pas contenir le nom de votre espace (« demo-asso ») : choisissez autre chose.'] },
+      },
     }]);
-    await fillAndSave('Ancien-Mot-1', 'motdepasse');
-    await waitFor(() => expect(errorUnder(NEW)).toBe('Ce mot de passe est trop simple.'));
+    await fillAndSave('Ancien-Mot-1', 'demo-asso-2026');
+    await waitFor(() => expect(errorUnder(NEW)).toMatch(/^Le mot de passe ne peut pas contenir le nom de votre espace/));
     expect(errorUnder(CURRENT)).toBeNull();
     expect(errorUnder(CONFIRM)).toBeNull();
     expect(input(NEW)).toHaveFocus();
   });
 
-  it('429 : le délai est lu dans `Retry-After`', async () => {
+  it('429 (§14.3, forme nue, sans `code`) : le délai est lu dans `Retry-After`', async () => {
     fakeServer([{
       method: 'PUT', match: 'me/password', status: 429,
       body: { message: 'Too Many Attempts.' }, headers: { 'Retry-After': '170' },
     }]);
     await fillAndSave('Ancien-Mot-1', 'Baobab-Lagune-4827');
     expect(await screen.findByRole('alert')).toHaveTextContent('Trop de tentatives. Réessayez dans 3 minutes.');
+  });
+
+  it('429 du verrou par compte (10 / heure) : le délai long de `Retry-After`', async () => {
+    fakeServer([{
+      method: 'PUT', match: 'me/password', status: 429,
+      body: { message: 'Too Many Attempts.' }, headers: { 'Retry-After': '3329' },
+    }]);
+    await fillAndSave('Ancien-Mot-1', 'Baobab-Lagune-4827');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Trop de tentatives. Réessayez dans 56 minutes.');
   });
 
   it('coupure réseau : « Connexion impossible. Vérifiez votre réseau, puis réessayez. »', async () => {

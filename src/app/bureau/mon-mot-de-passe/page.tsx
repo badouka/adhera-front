@@ -13,25 +13,37 @@ const FIELDS: ReadonlyArray<FieldName> = ['current_password', 'password', 'passw
 
 const EMPTY: PasswordChange = { current_password: '', password: '', password_confirmation: '' };
 
-/** Un champ laissé vide : arrêté avant tout envoi. */
+/**
+ * Un champ laissé vide : arrêté avant tout envoi, pour ne pas user l'une des
+ * 10 tentatives par heure du compte (§14.3). Les deux premiers libellés sont
+ * ceux du serveur (§14.2) ; le serveur range une confirmation absente sous
+ * `password`, mais un champ vide se signale là où il est.
+ */
 const MISSING: Record<FieldName, string> = {
-  current_password: 'Indiquez votre mot de passe actuel.',
-  password: 'Indiquez votre nouveau mot de passe.',
-  password_confirmation: 'Confirmez votre nouveau mot de passe.',
+  current_password: 'Saisissez votre mot de passe actuel.',
+  password: 'Choisissez un nouveau mot de passe.',
+  password_confirmation: 'Retapez le nouveau mot de passe à l’identique.',
 };
 
+/** Neutre : le compte peut être tenu par une femme comme par un homme. */
 export const PASSWORD_CHANGED =
-  'Votre mot de passe a été changé. Si vous étiez connectée sur un autre appareil, il vous faudra vous y reconnecter.';
+  'Votre mot de passe a été changé. Vos autres appareils ont été déconnectés : il faudra vous y reconnecter.';
 
 export const PASSWORD_HINT =
   '8 caractères minimum. Deux mots et quelques chiffres suffisent, par exemple Baobab-Lagune-4827.';
 
 /**
- * « Mon mot de passe » (S3e) — ouvert à tous les rôles.
+ * « Mon mot de passe » (S3e, contrat §14) — ouvert à tous les rôles.
  *
- * ⚠️ Exception au piège 10 : les messages d'un `422` de cette route disent
- * quoi faire (« Le mot de passe actuel est incorrect. »…) et s'affichent TELS
- * QUELS, chacun sous son champ. L'écran n'en réécrit aucun.
+ * ⚠️ Exception au piège 10 (§14.2) : les messages d'un `422` de cette route
+ * sont en français et disent quoi faire ; ils s'affichent TELS QUELS, chacun
+ * sous son champ. Une confirmation différente arrive sous `password` : elle
+ * reste sous « Nouveau mot de passe ». Le `message` commun (« Le mot de passe
+ * n'a pas été changé. ») n'est pas répété. Aucune règle de symbole, de
+ * majuscule ni de chiffre côté écran (§14.2).
+ *
+ * Après un `200`, rien à faire : le jeton de l'onglet reste valable, les
+ * autres sont révoqués (§14.1).
  */
 export default function MonMotDePassePage() {
   const [values, setValues] = useState<PasswordChange>(EMPTY);
