@@ -73,7 +73,12 @@ membre de la minute recevrait un 429 — pendant une campagne, c'est la panne.
   `rel="noreferrer"` sur le lien de reçu.
 - **R4** — le code d'erreur est le contrat, jamais le message.
 - **R5** — rien n'est mis en cache : `cache: 'no-store'` sur chaque appel, et
-  la route est `force-dynamic`. Pas de service worker, pas de PWA.
+  la route est `force-dynamic`. **Une exception, bornée (F4)** : le service
+  worker de la carte (`public/m/sw.js`), qui ne contrôle que `/m/` et garde,
+  en « réseau d'abord », la dernière réponse de `GET m/{jeton}` pour montrer
+  la carte hors connexion. Il ne garde jamais une requête qui porte
+  `Authorization`, ni l'espace du bureau, ni `/v/`, ni un PDF
+  (`tests/serviceWorker.test.ts` exécute le fichier livré).
 - **R6** — le bouton principal dit ce qu'il fait : « J'ai payé », puis
   « Confirmer » (étape 1 : deux touchers). Le mode est préchoisi (Wave s'il
   est configuré), le montant est le solde ; autre montant, référence et
@@ -157,3 +162,37 @@ En local, le tenant passe en query sur la page de connexion
 
 `tests/guards.test.ts` tient aussi R7, R8 et R1 étendu à `/bureau`, chacun
 vérifié par contre-épreuve.
+
+## La carte, l'attestation et la vérification (F4)
+
+Tout est derrière l'option vendable `membership_card` (contrat §16,
+`_handoff/adhera-api-bureau-s4a-extrait.md`). Sans elle, `card` vaut `null`
+et la page du membre reste celle de F1.
+
+- **« Ma carte » / « Ma cotisation »** (`/m/{jeton}`) : la carte s'ouvre pour
+  un membre à jour, la cotisation sinon ; `?vue=carte` force la carte (c'est
+  l'adresse de l'icône posée sur l'écran d'accueil). La carte porte le nom de
+  **l'association**, jamais celui de la plateforme : la vue carte n'a ni
+  en-tête doublé ni « Propulsé par Adhera ».
+- **Le QR** de `verify_url` est engendré dans le navigateur par
+  `qrcode-generator` (version exacte), chargé par `import()` dans
+  `src/components/card/QrCode.tsx` seulement — un garde-fou le vérifie : il
+  n'entre dans le premier chargement d'aucune route.
+- **L'attestation** : le lien de l'API, tenant en query, comme un reçu ; un
+  refus (`not_up_to_date`, `not_a_member`, `feature_disabled`,
+  `issuer_missing`) s'affiche avec le `message` du serveur.
+- **« Garder sur mon téléphone »** : un manifeste par membre
+  (`/m/{jeton}/manifest.webmanifest`). R2 tient : le serveur Next n'appelle
+  pas l'API, le nom et le logo arrivent dans l'adresse du manifeste, posée
+  par la page. Invite de Chrome, notice de Safari, et — dans le navigateur
+  intégré de WhatsApp, Facebook ou Instagram — « Ouvrez ce lien dans Chrome
+  (ou Safari sur iPhone) » avec « Copier le lien ». L'icône neutre est dans
+  `public/carte/`.
+- **`/v/{code}`** : la vérification publique, sans compte. Un seul cas
+  d'erreur, le 404. Seul écran tourné vers un tiers à nommer la plateforme :
+  « Vérification assurée par Adhera », en pied de page.
+- **Bureau** : la colonne « N° » et le champ « Numéro de membre » (le 422 nomme
+  le porteur, tel quel), les attestations de la fiche (si
+  `features.membership_card === true`), et les « Années sans période
+  enregistrée » (`missing_periods`). Ces deux blocs sont chargés à la demande :
+  la fiche est au plafond de 200 Ko.

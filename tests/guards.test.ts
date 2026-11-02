@@ -383,6 +383,12 @@ describe('vocabulaire — l’écran du membre', () => {
     join(SRC, 'components', 'Fallbacks.tsx'),
     join(SRC, 'components', 'Shell.tsx'),
     join(SRC, 'lib', 'validation.ts'),
+    // F4 — la carte et la vérification.
+    join(SRC, 'components', 'card', 'MemberCardView.tsx'),
+    join(SRC, 'components', 'card', 'AttestationAction.tsx'),
+    join(SRC, 'components', 'card', 'KeepOnPhone.tsx'),
+    join(SRC, 'components', 'card', 'QrCode.tsx'),
+    join(SRC, 'app', 'v', '[code]', 'VerifyPage.tsx'),
   ];
   const BANNED = /d[ée]clar|justificatif/i;
 
@@ -448,13 +454,49 @@ describe('vocabulaire — l’espace du bureau', () => {
   });
 });
 
-/** F3 — le graphique est dessiné à la main : aucune bibliothèque, ni graphique ni autre. */
+/**
+ * F3 — le graphique est dessiné à la main : aucune bibliothèque, ni graphique
+ * ni autre. F4 — une exception, et une seule : le QR de la carte
+ * (`qrcode-generator`, version exacte), chargé À LA DEMANDE par un `import()`
+ * dans `QrCode.tsx`, et nulle part ailleurs : il n'entre dans le premier
+ * chargement d'aucune route.
+ */
+const QR_LIB = 'qrcode-generator';
+const QR_COMPONENT = join(SRC, 'components', 'card', 'QrCode.tsx');
+
+/** Les fichiers qui importent la bibliothèque QR, statiquement ou non. */
+export function qrImports(code: string): { static: boolean; dynamic: boolean } {
+  return {
+    static: /(?:from\s+|import\s+)['"]qrcode-generator['"]/.test(code),
+    dynamic: /import\(\s*['"]qrcode-generator['"]\s*\)/.test(code),
+  };
+}
+
 describe('dépendances — aucune bibliothèque ajoutée au bundle', () => {
-  it('les dépendances livrées sont next, react et react-dom, et rien d’autre', () => {
+  it('les dépendances livrées sont next, react, react-dom, et la bibliothèque QR (F4)', () => {
     const pkg = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')) as {
       dependencies: Record<string, string>;
     };
-    expect(Object.keys(pkg.dependencies).sort()).toEqual(['next', 'react', 'react-dom']);
+    expect(Object.keys(pkg.dependencies).sort()).toEqual(['next', QR_LIB, 'react', 'react-dom']);
+    // Une version exacte : la mise à jour d'un générateur de QR se décide.
+    expect(pkg.dependencies[QR_LIB]).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+
+  it('la bibliothèque QR n’est importée que par QrCode.tsx, et seulement à la demande', () => {
+    const importers: string[] = [];
+    for (const file of walk(SRC, ['.ts', '.tsx'])) {
+      const found = qrImports(stripComments(readFileSync(file, 'utf8')));
+      if (found.static) importers.push(`${relative(process.cwd(), file)} → statique`);
+      if (found.dynamic) importers.push(`${relative(process.cwd(), file)} → import()`);
+    }
+    expect(importers).toEqual([`${relative(process.cwd(), QR_COMPONENT)} → import()`]);
+  });
+
+  it('contre-épreuve : un import statique serait vu', () => {
+    expect(qrImports("import qrcode from 'qrcode-generator';").static).toBe(true);
+    expect(qrImports("import 'qrcode-generator';").static).toBe(true);
+    expect(qrImports("await import('qrcode-generator')").dynamic).toBe(true);
+    expect(qrImports("await import('qrcode-generator')").static).toBe(false);
   });
 
   it('le graphique du tableau de bord est un SVG écrit ici', () => {
@@ -558,5 +600,41 @@ describe('§12.4 — le reçu annulé se lit, il ne se déduit pas', () => {
       ),
     ).toBe(true);
     expect(deducesCancelledReceipts('<DuesPanel cancelledReceipts={ids} />')).toBe(true);
+  });
+});
+
+/**
+ * F4 — la carte et l'attestation portent le nom de L'ASSOCIATION. Aucun texte
+ * affichable des composants de la carte ne nomme la plateforme ; seule la page
+ * de vérification dit, en pied de page, « Vérification assurée par Adhera ».
+ */
+describe('marque — la carte ne nomme que l’association', () => {
+  const CARD_FILES = ['MemberCardView.tsx', 'AttestationAction.tsx', 'KeepOnPhone.tsx', 'QrCode.tsx'].map(
+    (f) => join(SRC, 'components', 'card', f),
+  );
+  const BRANDS = /adhera|eventflow|digissol/i;
+
+  it('aucun texte des composants de la carte ne dit Adhera, EventFlow ni DIGISSOL', () => {
+    const offenders: string[] = [];
+    for (const file of CARD_FILES) {
+      for (const text of visibleStrings(stripComments(readFileSync(file, 'utf8')))) {
+        // Une adresse (l'API) n'est pas un texte affiché.
+        if (BRANDS.test(text) && !/^https?:\/\//.test(text)) {
+          offenders.push(`${relative(process.cwd(), file)} → ${text}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('la vérification ne nomme la plateforme qu’une fois, en pied de page', () => {
+    const texts = visibleStrings(
+      stripComments(readFileSync(join(SRC, 'app', 'v', '[code]', 'VerifyPage.tsx'), 'utf8')),
+    ).filter((t) => BRANDS.test(t));
+    expect(texts).toEqual(['Vérification assurée par Adhera']);
+  });
+
+  it('contre-épreuve : un « Carte Adhera » serait vu', () => {
+    expect(visibleStrings('<p>Carte Adhera</p>').some((t) => BRANDS.test(t))).toBe(true);
   });
 });
