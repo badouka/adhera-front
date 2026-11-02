@@ -9,7 +9,12 @@
  * état réel.
  */
 
-import type { DeclarationResult, MemberPayload, PaymentMethod } from './types';
+import type {
+  DeclarationResult,
+  MemberPayload,
+  PaymentMethod,
+  Verification,
+} from './types';
 
 export const API_BASE = 'https://api.eventflow.africa/api/v1';
 
@@ -63,7 +68,9 @@ function readFieldErrors(raw: unknown): FieldErrors {
 async function toApiError(response: Response): Promise<ApiError> {
   let body: ErrorBody = {};
   try {
-    body = (await response.json()) as ErrorBody;
+    const raw: unknown = await response.json();
+    // Un corps `null` ou un tableau ne porte ni code ni message.
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) body = raw as ErrorBody;
   } catch {
     // Un 502 de nginx rend du HTML : on garde seulement le statut.
   }
@@ -80,12 +87,26 @@ function headers(tenant: string): HeadersInit {
   return { Accept: 'application/json', 'X-Tenant-Slug': tenant };
 }
 
+/**
+ * Les deux en-têtes que pose le service worker de la carte (`public/m/sw.js`)
+ * quand il sert, hors connexion, la dernière réponse gardée. Une réponse du
+ * réseau ne les porte jamais.
+ */
+export const OFFLINE_HEADER = 'X-Adhera-Hors-Connexion';
+export const SAVED_AT_HEADER = 'X-Adhera-Enregistre-Le';
+
+export type MemberResult = {
+  payload: MemberPayload;
+  /** ISO 8601 : la réponse vient du cache, faute de réseau. Sinon `null`. */
+  offlineSince: string | null;
+};
+
 /** `GET /m/{token}` — l'état du membre. */
 export async function fetchMember(
   token: string,
   tenant: string,
   signal?: AbortSignal,
-): Promise<MemberPayload> {
+): Promise<MemberResult> {
   let response: Response;
   try {
     response = await fetch(`${API_BASE}/m/${encodeURIComponent(token)}`, {
@@ -102,7 +123,11 @@ export async function fetchMember(
 
   if (!response.ok) throw await toApiError(response);
 
-  return (await response.json()) as MemberPayload;
+  const offline = response.headers?.get(OFFLINE_HEADER) === '1';
+  return {
+    payload: (await response.json()) as MemberPayload,
+    offlineSince: offline ? (response.headers.get(SAVED_AT_HEADER) ?? '') : null,
+  };
 }
 
 export type DeclarationInput = {
@@ -174,4 +199,76 @@ export function receiptUrl(
   return `${API_BASE}/m/${encodeURIComponent(token)}/receipts/${encodeURIComponent(
     receiptId,
   )}?${query.toString()}`;
+}
+
+/**
+ * L'URL de l'attestation du membre (§16.3) : le même mécanisme qu'un reçu, un
+ * lien qui porte le tenant en query.
+ */
+export function attestationUrl(token: string, tenant: string): string {
+  const query = new URLSearchParams({ tenant });
+  return `${API_BASE}/m/${encodeURIComponent(token)}/attestation?${query.toString()}`;
+}
+
+/**
+ * Avant de suivre le lien de l'attestation, on s'assure qu'il rend bien un PDF :
+ * un refus (403 `not_up_to_date`, `not_a_member`, `feature_disabled`, 409
+ * `issuer_missing`) s'affiche alors sur la page au lieu d'un JSON nu. La route
+ * est idempotente (§16.3) : la seconde ouverture rend la même pièce.
+ */
+export async function checkAttestation(
+  token: string,
+  tenant: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(attestationUrl(token, tenant), {
+      method: 'GET',
+      headers: { ...headers(tenant), Accept: 'application/pdf, application/json' },
+      cache: 'no-store',
+      signal,
+      referrerPolicy: 'no-referrer',
+    });
+  } catch (cause) {
+    if (cause instanceof DOMException && cause.name === 'AbortError') throw cause;
+    throw new ApiError(0, null, 'Réseau indisponible');
+  }
+
+  if (!response.ok) throw await toApiError(response);
+  // Le corps n'est pas lu : c'est le lien, suivi ensuite, qui livre le fichier.
+  await response.body?.cancel().catch(() => undefined);
+}
+
+/**
+ * `GET /membership/verify/{code}` — la vérification publique (§16.5), sans
+ * authentification. `attestation` est la référence portée par le QR d'un PDF.
+ */
+export async function fetchVerification(
+  code: string,
+  tenant: string,
+  attestation: string | null,
+  signal?: AbortSignal,
+): Promise<Verification> {
+  const query = attestation ? `?${new URLSearchParams({ attestation }).toString()}` : '';
+  let response: Response;
+  try {
+    response = await fetch(
+      `${API_BASE}/membership/verify/${encodeURIComponent(code)}${query}`,
+      {
+        method: 'GET',
+        headers: headers(tenant),
+        cache: 'no-store',
+        signal,
+        referrerPolicy: 'no-referrer',
+      },
+    );
+  } catch (cause) {
+    if (cause instanceof DOMException && cause.name === 'AbortError') throw cause;
+    throw new ApiError(0, null, 'Réseau indisponible');
+  }
+
+  if (!response.ok) throw await toApiError(response);
+
+  return (await response.json()) as Verification;
 }

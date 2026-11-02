@@ -209,3 +209,37 @@ export function zonedToIso(date: string, time: string, zone: string): string | n
   }
   return new Date(guess).toISOString();
 }
+
+/**
+ * Un instant ISO 8601 → « 2 novembre 2026 à 09:05 », avec l'heure.
+ *
+ * `timeZone` absent : le fuseau de l'appareil — c'est « l'heure locale » de
+ * celui qui lit (la page de vérification). `zoneName` ajoute le fuseau lu
+ * (« UTC+1 ») : un écran imprimé doit dire de quelle heure il parle.
+ */
+export function formatInstant(
+  value: string | null | undefined,
+  options: { timeZone?: string; zoneName?: boolean } = {},
+): string {
+  if (!value) return '';
+  const at = new Date(value);
+  if (Number.isNaN(at.getTime())) return '';
+
+  const fields: Record<string, string> = {};
+  for (const part of new Intl.DateTimeFormat('fr-FR', {
+    ...(options.timeZone ? { timeZone: safeTimeZone(options.timeZone) } : {}),
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+    ...(options.zoneName ? { timeZoneName: 'short' as const } : {}),
+  }).formatToParts(at)) {
+    fields[part.type] = part.value;
+  }
+
+  const day = fields.day === '1' ? '1er' : fields.day;
+  const zone = options.zoneName && fields.timeZoneName ? ` (${fields.timeZoneName})` : '';
+  return `${day} ${fields.month} ${fields.year} à ${fields.hour}:${fields.minute}${zone}`;
+}

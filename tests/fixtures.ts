@@ -60,3 +60,32 @@ export function fakeResponse(status: number, body: unknown): Response {
     json: async () => body,
   } as unknown as Response;
 }
+
+/** La carte de §16.2 : Aminata Diop, à jour. */
+export function memberCard(overrides: Partial<import('@/lib/types').MemberCard> = {}) {
+  return {
+    organisation_name: 'Cercle des Administrateurs Publics',
+    logo_url: 'https://api.eventflow.africa/storage-tenantdemo-asso/membership/logo-1a2b3c4d.png',
+    display_name: 'Aminata Diop',
+    first_name: 'Aminata',
+    last_name: 'Diop',
+    type: 'personne',
+    category_label: 'Membre actif',
+    member_number: '0001',
+    member_since: '2026-03-10',
+    is_up_to_date: true,
+    valid_until: '2027-03-09',
+    standing_label: 'À jour',
+    verify_url: 'https://demo-asso.adhera.africa/v/5RGF6J9Z2UJX',
+    ...overrides,
+  };
+}
+
+/** Une réponse avec des en-têtes (celle que rend le service worker hors connexion). */
+export function fakeResponseWithHeaders(
+  status: number,
+  body: unknown,
+  headers: Record<string, string>,
+): Response {
+  return { ...fakeResponse(status, body), headers: new Headers(headers) } as unknown as Response;
+}

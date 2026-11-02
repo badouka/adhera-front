@@ -19,6 +19,7 @@ export function CopyButton({
   label,
   selectRef,
   large = false,
+  text = 'Copier',
 }: {
   value: string;
   /** Ce que lit un lecteur d'écran : « Copier le numéro Orange Money ». */
@@ -27,6 +28,8 @@ export function CopyButton({
   selectRef?: React.RefObject<HTMLElement | null>;
   /** Pleine largeur, pour la carte d'un numéro marchand. */
   large?: boolean;
+  /** Le texte visible du bouton (« Copier le lien »). */
+  text?: string;
 }) {
   const [outcome, setOutcome] = useState<Outcome>('idle');
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -106,7 +109,7 @@ export function CopyButton({
         }
       >
         {outcome === 'copied' ? null : <CopyIcon />}
-        {outcome === 'copied' ? 'Copié' : 'Copier'}
+        {outcome === 'copied' ? 'Copié' : text}
       </button>
       <span role="status" aria-live="polite" className="sr-only">
         {outcome === 'copied'

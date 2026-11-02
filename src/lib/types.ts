@@ -87,6 +87,36 @@ export type Receipt = {
   cancelled_at?: string | null;
 };
 
+/**
+ * La carte de membre (§16.2, v3.8-S4a), prête à afficher. Ni région, ni
+ * téléphone, ni e-mail : c'est ce qu'on montre à un guichet.
+ */
+export type MemberCard = {
+  /** Peut être `""` (FON-18) : rien ne s'affiche à sa place. */
+  organisation_name: string;
+  /** `null` : la zone est masquée, jamais de logo de repli. */
+  logo_url: string | null;
+  display_name: string;
+  first_name: string | null;
+  last_name: string | null;
+  type: 'personne' | 'organisation' | string;
+  category_label: string | null;
+  /** `null` : la ligne disparaît (jamais « N° — »). */
+  member_number: string | null;
+  /** `YYYY-MM-DD`, ou `null` : la ligne disparaît. */
+  member_since: string | null;
+  is_up_to_date: boolean;
+  /**
+   * `null` dans TROIS cas : pas à jour, exonéré (à jour quand même), ancien.
+   * Ne s'affiche que si `is_up_to_date` ET non nul.
+   */
+  valid_until: string | null;
+  /** Composé par le serveur : « À jour » ou « Cotisation à régler », tel quel. */
+  standing_label: string;
+  /** L'adresse que le QR encode : on ne la recompose jamais. */
+  verify_url: string;
+};
+
 export type MemberPayload = {
   organisation: Organisation;
   member: Member;
@@ -95,6 +125,45 @@ export type MemberPayload = {
   pending_declaration: PendingDeclaration | null;
   last_rejection: LastRejection | null;
   receipts: Receipt[];
+  /**
+   * `null` quand la clé `membership_card` est éteinte — et absente d'un serveur
+   * antérieur à v3.8 : lue alors comme `null`.
+   */
+  card?: MemberCard | null;
+  /** Gouverne SEUL le bouton d'attestation. Absent = `false`. */
+  attestation_available?: boolean;
+};
+
+/* ───────────────── Vérification publique (§16.5) ───────────────── */
+
+/** Un IDENTIFIANT, à tester, jamais à afficher tel quel. */
+export type VerificationStanding = 'up_to_date' | 'not_up_to_date' | 'former';
+
+export type VerifiedAttestation = {
+  reference: string;
+  /** ISO 8601 */
+  issued_at: string;
+  /** `YYYY-MM-DD`, ou null. */
+  valid_until: string | null;
+  is_valid: boolean;
+};
+
+export type Verification = {
+  organisation: { name: string; logo_url: string | null };
+  member: {
+    display_name: string;
+    type: string;
+    category_label: string | null;
+    member_number: string | null;
+    member_since: string | null;
+  };
+  standing: VerificationStanding;
+  /** Toujours `null` pour un ancien membre. */
+  valid_until: string | null;
+  /** ISO 8601 — l'instant de la vérification, à afficher. */
+  checked_at: string;
+  /** `null` sans `?attestation=`, ou si la référence ne correspond pas. */
+  attestation: VerifiedAttestation | null;
 };
 
 /** Les cinq modes acceptés par `POST /m/{token}/payments`. */
