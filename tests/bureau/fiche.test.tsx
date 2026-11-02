@@ -802,3 +802,44 @@ describe('§1 — l’échéance : lue, comparée à aujourd’hui, jamais calcu
     expect(within(situation()).getByText('Prochaine échéance')).toBeInTheDocument();
   });
 });
+
+describe('Micro-correctif — un ancien membre : jamais « Pas à jour », aucun reste à payer', () => {
+  const owing = {
+    is_up_to_date: false,
+    covered_until: '2026-02-28',
+    balance_due: 150000,
+    balance_due_formatted: '150 000 FCFA',
+  };
+  const ancien = memberDetail({
+    ...owing,
+    status: 'former',
+    left_at: '2026-10-20',
+    left_reason: 'resigned',
+  });
+
+  it('la fiche : « Ancien membre », couverture affichée, pas de reste à payer', async () => {
+    server(ancien, [{ match: /payments\?member_id=/, body: [] }]);
+    renderInBureau(<FicheMembrePage />);
+    await screen.findByText(/Ancien membre depuis le 20 octobre 2026/);
+    const s = within(situation());
+    expect(s.getByText('Ancien membre')).toBeInTheDocument();
+    expect(s.getByText('Couvert jusqu’au')).toBeInTheDocument();
+    expect(s.getByText('28 février 2026')).toBeInTheDocument();
+    expect(s.queryByText('Reste à payer')).toBeNull();
+    expect(situation().textContent).not.toMatch(/150 000 FCFA/);
+    expect(screen.queryByText('Pas à jour')).toBeNull();
+    expect(standingDetail(ancien)).toBe('Couvert jusqu’au 28 février 2026');
+  });
+
+  it('contre-épreuve : le même membre actif est « Pas à jour » et doit 150 000 FCFA', async () => {
+    const actif = memberDetail({ ...owing, status: 'active' });
+    server(actif, [{ match: /payments\?member_id=/, body: [] }]);
+    renderInBureau(<FicheMembrePage />);
+    await screen.findByRole('heading', { name: actif.name });
+    const s = within(situation());
+    expect(s.getByText('Pas à jour')).toBeInTheDocument();
+    expect(s.getByText('Reste à payer')).toBeInTheDocument();
+    expect(s.getByText('150 000 FCFA')).toBeInTheDocument();
+    expect(s.getByText('Couvert jusqu’au')).toBeInTheDocument();
+  });
+});

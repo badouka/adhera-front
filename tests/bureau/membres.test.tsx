@@ -187,4 +187,32 @@ describe('B5 — le registre', () => {
     await screen.findByText('Cette catégorie n’existe plus. Rechargez la page.');
     expect(screen.queryByText(/Aucun membre/)).not.toBeInTheDocument();
   });
+
+  it('les anciens membres : aucune pastille « Pas à jour », aucun reste à payer', async () => {
+    const owing = { is_up_to_date: false, balance_due: 150000, balance_due_formatted: '150 000 FCFA' };
+    server([
+      memberItem({ id: 'f-1', name: 'Cheikh Sow (test)', status: 'former', covered_until: '2026-02-28', ...owing }),
+      memberItem({ id: 'f-2', name: 'Fatou Ba (test)', status: 'former', covered_until: null, ...owing }),
+    ]);
+    const user = userEvent.setup();
+    renderInBureau(<MembresPage />);
+    await screen.findByTestId('member-cards');
+    await user.click(screen.getByRole('tab', { name: 'Anciens membres' }));
+    const cards = within(await screen.findByTestId('member-cards'));
+    await cards.findByText('Cheikh Sow (test)');
+    expect(cards.getAllByText('Ancien membre')).toHaveLength(2);
+    expect(cards.getByText('Couvert jusqu’au 28 février 2026')).toBeInTheDocument();
+    expect(screen.queryByText('Pas à jour')).toBeNull();
+    expect(screen.queryByText(/Reste à payer/)).toBeNull();
+    expect(screen.queryByText(/150 000 FCFA/)).toBeNull();
+  });
+
+  it('contre-épreuve : les mêmes membres actifs sont « Pas à jour » avec leur reste à payer', async () => {
+    const owing = { is_up_to_date: false, balance_due: 150000, balance_due_formatted: '150 000 FCFA' };
+    server([memberItem({ id: 'a-1', name: 'Cheikh Sow (test)', status: 'active', covered_until: '2026-02-28', ...owing })]);
+    renderInBureau(<MembresPage />);
+    const cards = within(await screen.findByTestId('member-cards'));
+    expect(cards.getByText('Pas à jour')).toBeInTheDocument();
+    expect(cards.getByText(fullText('Reste à payer 150 000 FCFA'))).toBeInTheDocument();
+  });
 });

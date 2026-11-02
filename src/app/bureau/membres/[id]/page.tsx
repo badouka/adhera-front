@@ -315,6 +315,9 @@ export default function FicheMembrePage() {
               <Row label="Situation">
                 {m.status === 'pending' ? (
                   'Candidature'
+                ) : former ? (
+                  // Jamais « Pas à jour » : on ne réclame rien à un ancien membre.
+                  'Ancien membre'
                 ) : upToDateWithArrears(m) ? (
                   // Jamais « À jour » seul à côté d'un montant dû (§12.1, `all`).
                   <ArrearsLine member={m} />
@@ -333,10 +336,12 @@ export default function FicheMembrePage() {
                   </span>
                 </Row>
               )}
-              {/* null = INCONNU, jamais « 0 FCFA » (piège 4). */}
-              <Row label="Reste à payer">
-                <span className="money">{m.balance_due_formatted ?? '—'}</span>
-              </Row>
+              {/* null = INCONNU, jamais « 0 FCFA » (piège 4). Rien n'est réclamé à un ancien. */}
+              {former ? null : (
+                <Row label="Reste à payer">
+                  <span className="money">{m.balance_due_formatted ?? '—'}</span>
+                </Row>
+              )}
             </dl>
           ) : (
             <p className="m-0 text-ink-muted">

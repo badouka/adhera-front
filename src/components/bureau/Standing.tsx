@@ -48,12 +48,18 @@ export function ArrearsLine({ member }: { member: MemberListItem }) {
 
 /**
  * « Couvert jusqu'au … » pour un membre à jour, « Reste à payer … » sinon.
+ * Un ancien membre : sa couverture seulement, jamais de reste à payer.
  *
  * ⚠️ `balance_due_formatted: null` veut dire INCONNU, jamais « rien à payer »
  * (piège 4) : on affiche « — », jamais « 0 FCFA ».
  */
 export function standingDetail(member: MemberListItem): ReactNode {
   if (member.status === 'pending') return 'Candidature en attente';
+  // Rien n'est réclamé à un ancien membre : jamais « Reste à payer ».
+  if (member.status === 'former') {
+    const until = formatDate(member.covered_until);
+    return until ? `Couvert jusqu’au ${until}` : '—';
+  }
   if (upToDateWithArrears(member)) return <ArrearsLine member={member} />;
   if (member.is_up_to_date) {
     const until = formatDate(member.covered_until);
