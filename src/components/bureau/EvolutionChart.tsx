@@ -142,18 +142,25 @@ export function EvolutionChart({ months }: { months: Month[] }) {
         <p className="small m-0 text-ink-muted">Rien n’a été encaissé sur ces 12 mois.</p>
       ) : null}
 
-      {/* La même série en tableau, pour un lecteur d'écran. */}
-      <table className="sr-only">
-        <caption>Encaissé par mois</caption>
-        <tbody>
-          {months.map((month) => (
-            <tr key={month.month}>
-              <th scope="row">{month.label}</th>
-              <td>{month.collected_formatted}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {/*
+        La même série en tableau, pour un lecteur d'écran. `sr-only` sur une
+        ENVELOPPE, jamais sur le <table> : Firefox dessine le <caption> dans
+        l'enveloppe du tableau, hors de la boîte que `sr-only` rogne, et il
+        s'affichait par-dessus la lecture du mois (garde-fou dans guards.test).
+      */}
+      <div className="sr-only">
+        <table>
+          <caption>Encaissé par mois</caption>
+          <tbody>
+            {months.map((month) => (
+              <tr key={month.month}>
+                <th scope="row">{month.label}</th>
+                <td>{month.collected_formatted}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

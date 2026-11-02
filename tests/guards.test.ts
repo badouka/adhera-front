@@ -467,6 +467,27 @@ describe('dépendances — aucune bibliothèque ajoutée au bundle', () => {
   });
 });
 
+/**
+ * Accessibilité — `sr-only` jamais directement sur un <table> : Firefox dessine
+ * le <caption> dans l'enveloppe du tableau, hors de la boîte que `sr-only`
+ * rogne, et il reste visible. On enveloppe le tableau dans un <div sr-only>.
+ */
+const SR_ONLY_TABLE = /<table\b[^>]*\bsr-only\b/;
+
+describe('accessibilité — aucun <table> ne porte sr-only directement', () => {
+  it('ne trouve aucun <table className="… sr-only …"> dans src/', () => {
+    const { offenders, scanned } = scan([SRC], [{ label: '<table> en sr-only', pattern: SR_ONLY_TABLE }]);
+    expect(scanned).toBeGreaterThan(50);
+    expect(offenders).toEqual([]);
+  });
+
+  it('contre-épreuve : le scan voit l’ancien tableau du graphique, sur une ou plusieurs lignes', () => {
+    expect(SR_ONLY_TABLE.test('<table className="sr-only">')).toBe(true);
+    expect(SR_ONLY_TABLE.test('<table\n  data-x="1"\n  className="w-full sr-only"\n>')).toBe(true);
+    expect(SR_ONLY_TABLE.test('<div className="sr-only">\n  <table>')).toBe(false);
+  });
+});
+
 /** Étape 1 — prénom et nom sont deux champs : jamais de « nom complet ». */
 describe('noms — aucun champ « nom complet » pour une personne', () => {
   it('aucune chaîne de /bureau ne parle de « nom complet »', () => {

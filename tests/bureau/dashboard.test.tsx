@@ -3,7 +3,7 @@
  * @vitest-environment-options { "url": "https://demo-asso.adhera.africa/bureau" }
  */
 
-import { cleanup, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import TableauDeBordPage, { rateCountLabel, rateLabel } from '@/app/bureau/page';
@@ -146,6 +146,59 @@ describe('Tableau de bord — les chiffres', () => {
     // Un mois vide n'a pas de barre dessinée, mais sa colonne existe.
     expect((bars[0] as Element).querySelector('path')).toBeNull();
     expect((bars[3] as Element).querySelector('path')).not.toBeNull();
+  });
+});
+
+/**
+ * Vrai si `el` est rogné par un `sr-only` dans TOUS les navigateurs.
+ *
+ * Un `sr-only` posé sur un <table> ne compte pas : Firefox dessine le
+ * <caption> dans l'enveloppe du tableau, hors de la boîte rognée (défaut vu
+ * sur demo-asso). jsdom ne calcule aucune mise en page : ce test lit la
+ * structure ; le rendu réel est vérifié en recette (chromium, firefox, webkit).
+ */
+function hiddenFromSight(el: Element): boolean {
+  let node: Element | null = el;
+  while (node) {
+    const wrapper: Element | null = node.closest('.sr-only');
+    if (!wrapper) return false;
+    if (wrapper.tagName !== 'TABLE') return true;
+    node = wrapper.parentElement;
+  }
+  return false;
+}
+
+describe('Tableau de bord — le libellé du graphique pour un lecteur d’écran', () => {
+  it('le tableau garde son <caption>, rogné par une enveloppe : un seul texte visible au-dessus', async () => {
+    fakeServer([{ match: 'membership/dashboard', body: dashboard() }]);
+    renderInBureau(<TableauDeBordPage />);
+    await screen.findAllByTestId('bar');
+    // Toujours accessible, sous son nom.
+    const table = screen.getByRole('table', { name: 'Encaissé par mois' });
+    const caption = table.querySelector('caption') as Element;
+    expect(caption).toHaveTextContent('Encaissé par mois');
+    expect(hiddenFromSight(caption)).toBe(true);
+    expect(hiddenFromSight(table)).toBe(true);
+    expect(table).not.toHaveClass('sr-only');
+    expect(document.querySelectorAll('table.sr-only')).toHaveLength(0);
+    // Le seul texte lisible au-dessus du graphique : le mois et son montant.
+    const readout = screen.getByTestId('chart-readout');
+    expect(hiddenFromSight(readout)).toBe(false);
+    expect(readout).toHaveTextContent(/^novembre 2026 : 0 FCFA$/);
+  });
+
+  it('contre-épreuve : un <table class="sr-only"> laisserait son <caption> visible', () => {
+    render(
+      <table className="sr-only">
+        <caption>Encaissé par mois</caption>
+        <tbody>
+          <tr>
+            <td>0 FCFA</td>
+          </tr>
+        </tbody>
+      </table>,
+    );
+    expect(hiddenFromSight(screen.getByText('Encaissé par mois'))).toBe(false);
   });
 });
 
