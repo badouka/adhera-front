@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { Shell } from '@/components/Shell';
+import { NO_AUTOCORRECT, PasswordField } from '@/components/bureau/PasswordField';
 import { Field, inputClass, Notice } from '@/components/bureau/ui';
 import { ApiError } from '@/lib/api';
 import { INVALID_CREDENTIALS, login } from '@/lib/bureau/api';
@@ -116,26 +117,23 @@ export default function ConnexionPage() {
                   name="email"
                   autoComplete="username"
                   inputMode="email"
+                  {...NO_AUTOCORRECT}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className={inputClass(!!errors.email, 'h-13')}
                 />
               )}
             </Field>
-            <Field label="Mot de passe" error={errors.password}>
-              {(props) => (
-                <input
-                  {...props}
-                  ref={passwordRef}
-                  type="password"
-                  name="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className={inputClass(!!errors.password, 'h-13')}
-                />
-              )}
-            </Field>
+            <PasswordField
+              ref={passwordRef}
+              label="Mot de passe"
+              name="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={setPassword}
+              error={errors.password}
+              inputClassName="h-13"
+            />
 
             <div ref={errorRef} tabIndex={-1} role="alert" aria-live="polite">
               {formError ? (

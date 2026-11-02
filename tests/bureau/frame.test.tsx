@@ -235,6 +235,27 @@ describe('B1 — la connexion', () => {
     expect(window.localStorage.length).toBe(0);
   });
 
+  it('F3.2 — e-mail et mot de passe : ni majuscule ni correction d’office ; « Afficher » sur le mot de passe', async () => {
+    fakeServer([]);
+    const user = userEvent.setup();
+    render(<ConnexionPage />);
+    const email = await screen.findByLabelText('E-mail');
+    const password = screen.getByLabelText('Mot de passe');
+    for (const el of [email, password]) {
+      expect(el).toHaveAttribute('autocapitalize', 'none');
+      expect(el).toHaveAttribute('autocorrect', 'off');
+      expect(el).toHaveAttribute('spellcheck', 'false');
+    }
+    expect(email).toHaveAttribute('type', 'email');
+    expect(email).toHaveAttribute('autocomplete', 'username');
+    expect(password).toHaveAttribute('autocomplete', 'current-password');
+    expect(password).toHaveAttribute('type', 'password');
+    await user.click(screen.getByRole('button', { name: 'Afficher : Mot de passe' }));
+    expect(password).toHaveAttribute('type', 'text');
+    await user.click(screen.getByRole('button', { name: 'Masquer : Mot de passe' }));
+    expect(password).toHaveAttribute('type', 'password');
+  });
+
   it('après expiration : « Votre session a expiré »', async () => {
     window.history.replaceState(null, '', '/bureau/connexion?session=expiree');
     fakeServer([]);
