@@ -187,12 +187,9 @@ et la page du membre reste celle de F1.
 - **L'attestation** : le lien de l'API, tenant en query, comme un reçu ; un
   refus (`not_up_to_date`, `not_a_member`, `feature_disabled`,
   `issuer_missing`) s'affiche avec le `message` du serveur.
-- **« Garder sur mon téléphone »** : un manifeste par membre
-  (`/m/{jeton}/manifest.webmanifest`). R2 tient : le serveur Next n'appelle
-  pas l'API, le nom et le logo arrivent dans l'adresse du manifeste, posée
-  par la page. Invite de Chrome, notice de Safari, et — dans le navigateur
-  intégré de WhatsApp, Facebook ou Instagram — « Ouvrez ce lien dans Chrome
-  (ou Safari sur iPhone) » avec « Copier le lien ». L'icône neutre est dans
+- **Le manifeste** reste (`/m/{jeton}/manifest.webmanifest`, R2 : le nom et
+  l'icône arrivent dans son adresse), mais le bouton « Garder sur mon
+  téléphone » a été retiré en F5 : voir plus bas. L'icône neutre est dans
   `public/carte/`.
 - **`/v/{code}`** : la vérification publique, sans compte. Un seul cas
   d'erreur, le 404. Seul écran tourné vers un tiers à nommer la plateforme :
@@ -202,3 +199,61 @@ et la page du membre reste celle de F1.
   `features.membership_card === true`), et les « Années sans période
   enregistrée » (`missing_periods`). Ces deux blocs sont chargés à la demande :
   la fiche est au plafond de 200 Ko.
+
+
+## F5 — le bureau simplifié, d'après la maquette validée
+
+La référence de l'écran est la maquette cliquable `maquette-tresorier.zip`
+(`_handoff/`), et ce que le serveur donne est le §18 du contrat
+(`v3.8.4-adhera-simple`). Le principe : **la technologie s'adapte à
+l'utilisateur** — un geste par écran, une phrase en tête, la preuve avant la
+décision, des choix tout prêts, un mot par chose. Aucune fonction n'est
+retirée : ce qui sert rarement est rangé dans « Plus ».
+
+- **Quatre entrées** (N1) : Accueil · Membres · Paiements (avec le nombre à
+  vérifier) · Plus. Barre du bas sur téléphone, barre latérale `ink` de
+  248 px à partir de 1024 px. En tête : le nom de l'association, jamais
+  coupé, et « Connecté·e : nom, rôle » lu par `GET admin/me`. Un écran d'un
+  geste (refus, saisie, fiche, écrans de « Plus ») porte « Retour » à la
+  place de l'en-tête et de la barre du bas (`useBackBar`).
+- **Accueil** (`/bureau`) : tout vient du bloc `simple` de `GET dashboard` ;
+  l'année est `simple.year`, jamais celle du téléphone. Les tuiles et les
+  lignes ouvrent la liste filtrée (`?filtre=retard|a-jour|renouveler`).
+- **Paiements à vérifier** (`/bureau/a-verifier`, l'ancienne `a-valider`
+  y mène) : un à la fois, la preuve avant les deux décisions. Le refus prend
+  une raison toute prête (`reason_code`, la phrase est composée et stockée
+  par le serveur) ou un texte libre de 10 caractères, puis ouvre
+  `share.whatsapp_url`. L'onglet est ouvert AU TOUCHER (`pendingTab.ts`) :
+  un `window.open` après un `await` serait bloqué.
+- **Un membre a payé** (`/bureau/enregistrer?membre={id}`, l'ancienne
+  `encaisser` y mène) : quatre questions numérotées, la date toujours écrite
+  en toutes lettres (P7), « Vous allez enregistrer », puis « C'est
+  enregistré » et le reçu à envoyer par WhatsApp (`share`, ou « pas de
+  téléphone »).
+- **« Est-ce le même paiement ? »** : `409 possible_duplicate` (§18.1), pour
+  la saisie comme pour « J'ai bien reçu cet argent ». « Oui » n'envoie rien ;
+  « Non » rejoue avec `confirm_duplicate: true` et une `Idempotency-Key`
+  NEUVE (la même clé avec un autre corps serait refusée). Jamais coché par
+  défaut.
+- **Les membres** : les actifs, dans l'ordre du serveur ; « En retard » /
+  « À jour » selon `is_up_to_date`, « À renouveler » par
+  `standing=renewing_soon`. « Imprimer cette liste » : une feuille A4 par
+  `print:` (A12).
+- **La fiche** : un seul montant, « {prénom} a payé : l'enregistrer » (le
+  prénom remplace « il » et « elle »), ses paiements, les années non
+  réclamées repliées (P6), et « Autres actions » pour le reste.
+- **Plus** : relances, file WhatsApp, demandes d'adhésion, anciens membres,
+  tous les paiements (A6), chiffres détaillés et Excel, types de membres,
+  paramètres (les deux cases d'e-mail, §18.6), Mon profil (§18.7), mot de
+  passe, déconnexion.
+- **Page du membre** : « Bonjour {prénom} », « J'ai payé : le signaler »,
+  « Ma carte de membre ». « Garder sur mon téléphone » est remplacé par
+  **« Enregistrer ma carte dans mes photos »** : la carte est dessinée en
+  PNG dans le navigateur (`cardImage.ts`, chargé par `import()` au toucher),
+  puis partagée (`navigator.share({ files })`), téléchargée, ou — dans le
+  navigateur intégré de WhatsApp — montrée en plein écran pour un appui long.
+- **Un mot par chose** (A11) : `tests/guards.test.ts` (`LEXIQUE_BANNIS`)
+  refuse dans tout texte affiché de `src/` les mots que le lexique bannit
+  (versement, encaisser, valider, rejeté, reste dû, couvert, pas à jour,
+  catégorie…), lus par l'analyseur de TypeScript. La liste vit là, une seule
+  fois.
