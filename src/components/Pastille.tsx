@@ -28,7 +28,7 @@ export function Pastille({
 }) {
   return (
     <span
-      className={`small inline-flex shrink-0 items-center gap-[6px] rounded-full px-[10px] py-1 font-semibold ${TONES[tone]}`}
+      className={`small inline-flex shrink-0 items-center gap-[6px] rounded-full px-[10px] py-1 font-semibold whitespace-nowrap ${TONES[tone]}`}
     >
       {icon}
       {children}

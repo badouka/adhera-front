@@ -17,6 +17,7 @@ import {
   Label,
   LINK_BUTTON,
   Notice,
+  Pill,
   Skeleton,
   Toast,
 } from '@/components/bureau/ui';
@@ -513,7 +514,7 @@ function safeDecode(value: string): string {
 function MemberPastille({ member, late }: { member: MemberDetail; late: boolean }) {
   if (member.status === 'former') return <Pastille tone="due">Ancien membre</Pastille>;
   if (member.status === 'pending') return <Pastille tone="info">Demande d’adhésion</Pastille>;
-  return late ? <Pastille tone="late">En retard</Pastille> : <Pastille tone="paid">À jour</Pastille>;
+  return late ? <Pill tone="late">En retard</Pill> : <Pill tone="ok">À jour</Pill>;
 }
 
 function MoreRow({

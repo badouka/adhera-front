@@ -162,7 +162,7 @@ describe('le cadre du bureau', () => {
       </BureauFrame>,
     );
     await screen.findByText('un geste');
-    expect(screen.getByRole('link', { name: 'Les membres' })).toHaveAttribute('href', '/bureau/membres');
+    expect(await screen.findByRole('link', { name: 'Les membres' })).toHaveAttribute('href', '/bureau/membres');
     expect(container.querySelector('header')).toBeNull();
     expect(screen.queryByRole('navigation', { name: 'Navigation' })).not.toBeInTheDocument();
   });

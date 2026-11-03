@@ -6,8 +6,7 @@ import { RECORD_PATH } from '@/components/bureau/BureauFrame';
 import { useBureau } from '@/components/bureau/BureauContext';
 import { isModeUnsupported } from '@/components/bureau/format';
 import { ChatIcon, SearchIcon } from '@/components/bureau/Icons';
-import { Button, inputClass, Label, LINK_BUTTON, Notice, Skeleton, Toast } from '@/components/bureau/ui';
-import { Pastille } from '@/components/Pastille';
+import { Button, inputClass, Label, LINK_BUTTON, Notice, Pill, Skeleton, Toast } from '@/components/bureau/ui';
 import { isSessionError, listMembers } from '@/lib/bureau/api';
 import { errorMessage } from '@/lib/bureau/messages';
 import { remindByWhatsapp } from '@/lib/bureau/remind';
@@ -297,7 +296,7 @@ function Situation({ member }: { member: MemberListItem }) {
       </span>
     );
   }
-  return <Pastille tone="paid">À jour</Pastille>;
+  return <Pill tone="ok">À jour</Pill>;
 }
 
 /** Ordinateur : le tableau, et les deux gestes de chaque ligne. */
@@ -345,7 +344,7 @@ function MemberTable({
                   <td className="tnum px-4 py-3 whitespace-nowrap" data-testid="member-number">
                     {member.member_number ?? ''}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="min-w-[170px] px-4 py-3">
                     <Link href={memberHref(member)} className="font-semibold break-words">
                       {member.name}
                     </Link>
@@ -355,11 +354,7 @@ function MemberTable({
                     {member.phone ?? <span className="text-ink-muted">pas de téléphone</span>}
                   </td>
                   <td className="px-4 py-3">
-                    {late ? (
-                      <Pastille tone="late">En retard</Pastille>
-                    ) : (
-                      <Pastille tone="paid">À jour</Pastille>
-                    )}
+                    {late ? <Pill tone="late">En retard</Pill> : <Pill tone="ok">À jour</Pill>}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">{due || '—'}</td>
                   <td className="money tnum px-4 py-3 text-right font-bold text-due">

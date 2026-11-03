@@ -15,9 +15,9 @@ import {
   Label,
   LINK_BUTTON,
   Notice,
+  Pill,
   Skeleton,
 } from '@/components/bureau/ui';
-import { Pastille } from '@/components/Pastille';
 import { ApiError, fieldMessages } from '@/lib/api';
 import {
   createDirectPayment,
@@ -427,7 +427,7 @@ export default function EnregistrerPage() {
                 return (
                   <label
                     key={choice.value}
-                    className={`flex min-h-12 cursor-pointer items-center gap-[10px] rounded-[var(--radius-md)] bg-surface-raised px-3 py-[6px] text-[15px] leading-5 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[var(--focus)] ${
+                    className={`flex min-h-12 cursor-pointer items-center gap-2 rounded-[var(--radius-md)] bg-surface-raised px-[10px] py-[6px] text-[15px] leading-5 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[var(--focus)] ${
                       on ? 'border-2 border-indigo bg-indigo-soft font-semibold' : 'border border-line-strong'
                     }`}
                   >
@@ -439,7 +439,8 @@ export default function EnregistrerPage() {
                       onChange={() => setMethod(choice.value)}
                       className="size-5 shrink-0 accent-[var(--indigo)]"
                     />
-                    <span className="min-w-0 break-words">{choice.label}</span>
+                    {/* Un mot ne se coupe jamais : « Orange Money » passe à la ligne entre ses deux mots. */}
+                    <span className="min-w-0">{choice.label}</span>
                   </label>
                 );
               })}
@@ -643,7 +644,7 @@ function WhoPicker({ onPick }: { onPick: (id: string) => void }) {
                   </span>
                 </span>
                 {m.is_up_to_date ? (
-                  <Pastille tone="paid">À jour</Pastille>
+                  <Pill tone="ok">À jour</Pill>
                 ) : (
                   <span className="small shrink-0 text-right text-due">
                     doit encore

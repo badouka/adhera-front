@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { LogoutButton, PASSWORD_PATH } from '@/components/bureau/BureauFrame';
-import { useBureau } from '@/components/bureau/BureauContext';
 
 /**
  * « Plus » (F5, N3) : tout ce qui sert rarement. Les écrans existaient déjà ;
@@ -22,7 +21,6 @@ export const PLUS_ENTRIES: ReadonlyArray<{ href: string; label: string; card?: b
 ];
 
 export default function PlusPage() {
-  const { settings } = useBureau();
   return (
     <div className="mx-auto flex w-full max-w-[600px] flex-col gap-4">
       <h1 className="title m-0">Plus</h1>
@@ -46,9 +44,6 @@ export default function PlusPage() {
       <div className="flex flex-col items-start rounded-[var(--radius-md)] border border-line bg-surface-raised px-4">
         <LogoutButton className="w-full text-ink" />
       </div>
-      {settings.issuer_name?.trim() ? (
-        <p className="small m-0 text-center text-ink-muted">{settings.issuer_name}</p>
-      ) : null}
     </div>
   );
 }
