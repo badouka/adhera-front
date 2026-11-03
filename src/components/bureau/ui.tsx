@@ -52,9 +52,9 @@ type FieldRender = {
 };
 
 /**
- * Un champ étiqueté. L'erreur affichée est un libellé français écrit par
- * l'écran, jamais un message de l'API (piège 10) — sauf « Mon mot de passe »,
- * dont les messages de `422` sont rédigés pour l'écran (S3e) et passent tels quels.
+ * Un champ étiqueté. L'erreur affichée est soit le libellé de la validation
+ * locale, soit le message d'un `422` de l'API, tel quel : l'API parle français
+ * partout dans Adhera (`fieldMessages`).
  */
 export function Field({
   label,

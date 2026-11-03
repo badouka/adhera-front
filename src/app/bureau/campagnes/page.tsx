@@ -16,7 +16,7 @@ import {
   Skeleton,
 } from '@/components/bureau/ui';
 import { Pastille } from '@/components/Pastille';
-import { ApiError } from '@/lib/api';
+import { ApiError, fieldMessages } from '@/lib/api';
 import {
   cancelCampaign,
   createCampaign,
@@ -448,10 +448,10 @@ function NewCampaignPanel({
       onLaunched(await createCampaign({ segment, send_email: sendEmail, scheduled_at: scheduledIso }));
     } catch (cause) {
       if (isSessionError(cause)) return;
+      // Le message d'un `422` est celui de l'API, tel quel : elle parle français.
       setError(
-        cause instanceof ApiError && cause.errors.scheduled_at
-          ? 'Choisissez une date et une heure à venir.'
-          : errorMessage(cause, 'La campagne n’a pas pu être lancée.'),
+        fieldMessages(cause).scheduled_at ??
+          errorMessage(cause, 'La campagne n’a pas pu être lancée.'),
       );
       setBusy(false);
     }

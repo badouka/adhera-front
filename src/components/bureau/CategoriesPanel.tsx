@@ -9,7 +9,8 @@ import {
   listCategories,
   updateCategory,
 } from '@/lib/bureau/api';
-import { errorMessage, invalidFields } from '@/lib/bureau/messages';
+import { fieldMessages } from '@/lib/api';
+import { errorMessage } from '@/lib/bureau/messages';
 import {
   CATEGORY_MODES,
   type Category,
@@ -288,12 +289,8 @@ export function CategoriesPanel() {
   );
 }
 
-const CATEGORY_FIELD_ERRORS: Record<string, string> = {
-  label: 'Indiquez le nom de la catégorie.',
-  mode: 'Choisissez le mode de calcul.',
-  amount: 'Vérifiez le montant.',
-  sort_order: 'L’ordre doit être un nombre entier.',
-};
+/** Les champs du formulaire : un `422` s'y range, avec le message de l'API tel quel. */
+const CATEGORY_FIELDS = ['label', 'mode', 'amount', 'sort_order'] as const;
 
 function CategoryForm({
   initial,
@@ -325,14 +322,14 @@ function CategoryForm({
     setFormError(null);
 
     const next: Record<string, string> = {};
-    if (label.trim() === '') next.label = CATEGORY_FIELD_ERRORS.label as string;
+    if (label.trim() === '') next.label = 'Indiquez le nom de la catégorie.';
     const value = needsAmount ? parseAmount(amount) : null;
     if (needsAmount && (value === null || value < 1)) {
       next.amount = 'Indiquez le montant de la cotisation, en chiffres.';
     }
     const order = Number(sortOrder);
     if (sortOrder.trim() !== '' && !Number.isInteger(order)) {
-      next.sort_order = CATEGORY_FIELD_ERRORS.sort_order as string;
+      next.sort_order = 'L’ordre doit être un nombre entier.';
     }
     setErrors(next);
     if (Object.keys(next).length > 0) return;
@@ -349,10 +346,9 @@ function CategoryForm({
       onSaved(initial ? await updateCategory(initial.id, input) : await createCategory(input));
     } catch (cause) {
       if (isSessionError(cause)) return;
+      const messages = fieldMessages(cause);
       const mapped: Record<string, string> = {};
-      for (const field of invalidFields(cause)) {
-        if (CATEGORY_FIELD_ERRORS[field]) mapped[field] = CATEGORY_FIELD_ERRORS[field] as string;
-      }
+      for (const field of CATEGORY_FIELDS) if (messages[field]) mapped[field] = messages[field];
       if (Object.keys(mapped).length > 0) setErrors(mapped);
       else setFormError(errorMessage(cause, 'La catégorie n’a pas pu être enregistrée.'));
     } finally {

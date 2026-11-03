@@ -44,6 +44,21 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Les champs refusés d'un `422`, chacun avec son PREMIER message, tel que
+ * l'API l'écrit : elle parle français partout dans Adhera (« Le champ prénom
+ * est obligatoire. »). Aucun écran ne traduit ni ne réécrit ces messages.
+ */
+export function fieldMessages(error: unknown): Record<string, string> {
+  if (!(error instanceof ApiError) || error.status !== 422) return {};
+  const out: Record<string, string> = {};
+  for (const [field, messages] of Object.entries(error.errors)) {
+    const first = messages.map((m) => m.trim()).find((m) => m !== '');
+    if (first) out[field] = first;
+  }
+  return out;
+}
+
 type ErrorBody = {
   code?: unknown;
   message?: unknown;

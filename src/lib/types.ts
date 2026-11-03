@@ -10,6 +10,13 @@ export type Organisation = {
   name: string;
   /** Versionnée par son contenu : relue à chaque chargement, jamais recomposée. */
   logo_url: string | null;
+  /**
+   * L'icône CARRÉE (512 × 512) tirée du logo par le serveur, pour l'écran
+   * d'accueil du téléphone : le manifeste et l'apple-touch-icon. Versionnée et
+   * jamais recomposée, comme `logo_url`. `null` (ou absente d'un serveur plus
+   * ancien) : on retombe sur `logo_url`.
+   */
+  icon_url?: string | null;
   om_merchant_number: string | null;
   wave_merchant_number: string | null;
   /** Texte libre, à rendre en TEXTE avec ses retours à la ligne, jamais en HTML. */

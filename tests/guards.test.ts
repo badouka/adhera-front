@@ -643,35 +643,57 @@ describe('marque — la carte ne nomme que l’association', () => {
  * F4 — `a { color: var(--link) }` (globals.css) est hors couche : il l'emporte
  * sur une classe Tailwind. Un lien PLEIN (`bg-indigo text-on-indigo`) prenait
  * donc la couleur des liens, celle de son fond : le bouton « Télécharger mon
- * attestation » est sorti bleu sur bleu, vu en recette. Sur un `<a>` ou un
- * `<Link>`, une couleur de texte « sur fond » se pose en `!`, comme dans
- * `bureau/ui.tsx`.
+ * attestation » est sorti bleu sur bleu, vu en recette. Même défaut, plus
+ * discret, sur « Espace du bureau » (`text-ink-muted`) et la liste des reçus
+ * (`text-ink`) : écart E5. Sur un `<a>` ou un `<Link>`, TOUTE couleur de texte
+ * du thème se pose en `!`, comme dans `bureau/ui.tsx` — sauf `text-link`, qui
+ * est celle de la règle globale.
  */
-export function anchorsWithWeakOnColor(code: string): string[] {
+const THEME_COLORS = [
+  ...readFileSync(join(SRC, 'app', 'globals.css'), 'utf8').matchAll(/--color-([\w-]+):/g),
+]
+  .map((m) => m[1] as string)
+  .filter((name) => name !== 'link');
+
+export function anchorsWithWeakTextColor(code: string): string[] {
   const found: string[] = [];
   for (const m of code.matchAll(/<(a|Link)\b[^>]*?className=(?:"([^"]*)"|\{`([^`]*)`\})/gs)) {
     for (const cls of (m[2] ?? m[3] ?? '').split(/\s+/)) {
-      if (/^text-on-[\w-]+$/.test(cls)) found.push(`<${m[1]}> ${cls}`);
+      const color = /^text-([\w-]+)$/.exec(cls)?.[1];
+      if (color && THEME_COLORS.includes(color)) found.push(`<${m[1]}> ${cls}`);
     }
   }
   return found;
 }
 
-describe('liens pleins — le texte ne prend pas la couleur du fond', () => {
-  it('aucun <a> ni <Link> ne pose text-on-… sans « ! »', () => {
+describe('liens — le texte garde la couleur que l’écran lui donne', () => {
+  it('la liste des couleurs du thème est lue', () => {
+    expect(THEME_COLORS).toEqual(expect.arrayContaining(['ink', 'ink-muted', 'on-indigo']));
+    expect(THEME_COLORS).not.toContain('link');
+  });
+
+  it('aucun <a> ni <Link> ne pose une couleur de texte du thème sans « ! »', () => {
     const offenders: string[] = [];
     for (const file of walk(SRC, ['.tsx'])) {
-      for (const hit of anchorsWithWeakOnColor(stripComments(readFileSync(file, 'utf8')))) {
+      for (const hit of anchorsWithWeakTextColor(stripComments(readFileSync(file, 'utf8')))) {
         offenders.push(`${relative(process.cwd(), file)} → ${hit}`);
       }
     }
     expect(offenders).toEqual([]);
   });
 
-  it('contre-épreuve : le bouton bleu sur bleu serait vu', () => {
-    expect(anchorsWithWeakOnColor('<a href="x" className="bg-indigo text-on-indigo">T</a>')).toEqual([
+  it('contre-épreuve : le bouton bleu sur bleu et les liens d’E5 seraient vus', () => {
+    expect(anchorsWithWeakTextColor('<a href="x" className="bg-indigo text-on-indigo">T</a>')).toEqual([
       '<a> text-on-indigo',
     ]);
-    expect(anchorsWithWeakOnColor('<a href="x" className="bg-indigo text-on-indigo!">T</a>')).toEqual([]);
+    expect(anchorsWithWeakTextColor('<Link href="/bureau" className="small text-ink-muted">E</Link>')).toEqual([
+      '<Link> text-ink-muted',
+    ]);
+    expect(anchorsWithWeakTextColor('<a href="x" className="border text-ink no-underline">R</a>')).toEqual([
+      '<a> text-ink',
+    ]);
+    expect(anchorsWithWeakTextColor('<a href="x" className="bg-indigo text-on-indigo!">T</a>')).toEqual([]);
+    // Une taille ou un alignement n'est pas une couleur ; `text-link` est celle de la règle.
+    expect(anchorsWithWeakTextColor('<a href="x" className="text-[18px] text-center text-link">T</a>')).toEqual([]);
   });
 });

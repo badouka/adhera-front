@@ -19,7 +19,7 @@ import { Card, Shell } from '@/components/Shell';
 import { API_BASE, fetchMember } from '@/lib/api';
 import { formatDate, formatInstant, isPast } from '@/lib/dates';
 import { listenForInstallPrompt } from '@/lib/install';
-import { manifestHref, safeLogoUrl } from '@/lib/manifest';
+import { homeIconUrl, manifestHref } from '@/lib/manifest';
 import { resolveMemberState, screenForError } from '@/lib/state';
 import { resolveTenant } from '@/lib/tenant';
 import type { LastRejection, MemberCard, MemberPayload, ScreenState } from '@/lib/types';
@@ -224,7 +224,9 @@ export function MemberPage({ token }: { token: string }) {
       </p>
     ) : null;
 
-  const installLinks = card ? <CardHeadLinks token={token} card={card} /> : null;
+  const installLinks = card ? (
+    <CardHeadLinks token={token} card={card} iconUrl={payload.organisation.icon_url} />
+  ) : null;
 
   if (card && current === 'carte') {
     return (
@@ -346,13 +348,24 @@ export function MemberPage({ token }: { token: string }) {
 /**
  * Le manifeste de la carte, et l'icône que Safari pose sur l'écran d'accueil.
  * React 19 les remonte dans `<head>`.
+ *
+ * L'image est `organisation.icon_url`, l'icône carrée du serveur ; à défaut,
+ * le logo de la carte. Toutes deux passent telles que l'API les sert.
  */
-function CardHeadLinks({ token, card }: { token: string; card: MemberCard }) {
-  const logo = safeLogoUrl(card.logo_url);
+function CardHeadLinks({
+  token,
+  card,
+  iconUrl,
+}: {
+  token: string;
+  card: MemberCard;
+  iconUrl: string | null | undefined;
+}) {
+  const icon = homeIconUrl(iconUrl, card.logo_url);
   return (
     <>
-      <link rel="manifest" href={manifestHref(token, card.organisation_name, card.logo_url)} />
-      <link rel="apple-touch-icon" href={logo ?? '/carte/icone-180.png'} />
+      <link rel="manifest" href={manifestHref(token, card.organisation_name, icon)} />
+      <link rel="apple-touch-icon" href={icon ?? '/carte/icone-180.png'} />
       <meta name="apple-mobile-web-app-capable" content="yes" />
       <meta name="mobile-web-app-capable" content="yes" />
       <meta name="apple-mobile-web-app-title" content="Ma carte" />

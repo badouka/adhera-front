@@ -364,18 +364,18 @@ describe('B7 — prénom et nom à l’édition', () => {
     expect(body).not.toHaveProperty('last_name');
   });
 
-  it('un 422 sur `first_name` se range sous « Prénom », en français', async () => {
+  it('un 422 sur `first_name` se range sous « Prénom », avec le message de l’API tel quel', async () => {
     const { user } = await edit(MOUSSA, [
       {
         method: 'PUT',
         match: `membership/members/${MOUSSA.id}`,
         status: 422,
-        body: { message: 'Membre invalide.', errors: { first_name: ['The prénom field is required.'] } },
+        body: { message: 'Membre invalide.', errors: { first_name: ['Le champ prénom ne doit pas dépasser 255 caractères.'] } },
       },
     ]);
     await user.click(screen.getByRole('button', { name: 'Enregistrer les modifications' }));
-    await screen.findByText('Indiquez le prénom (255 caractères au plus).');
-    expect(document.body.textContent).not.toMatch(/field is required/);
+    const message = await screen.findByText('Le champ prénom ne doit pas dépasser 255 caractères.');
+    expect(screen.getByLabelText(/^Prénom/).getAttribute('aria-describedby')).toContain(message.id);
   });
 });
 

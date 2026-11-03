@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { ApiError, declarePayment } from '@/lib/api';
+import { ApiError, declarePayment, fieldMessages } from '@/lib/api';
 import { useIdempotencyKey } from '@/lib/idempotency';
 import { formatTypedAmount } from '@/lib/typedAmount';
 import {
@@ -28,19 +28,6 @@ const PROOF_CODES: Record<string, string> = {
   file_too_large: 'La capture dépasse 10 Mo.',
   upload_invalid:
     'La capture n’a pas pu être lue. Réessayez avec une autre image.',
-};
-
-/**
- * Les messages de validation de Laravel sont en ANGLAIS : `errors` ne sert qu'à
- * désigner le champ fautif, le libellé affiché est le nôtre.
- */
-const FIELD_MESSAGES: Record<keyof DeclarationErrors, string> = {
-  amount:
-    'Vérifiez le montant : un nombre entier, sans dépasser ce qui reste à payer.',
-  method: 'Choisissez le moyen de paiement utilisé.',
-  reference: 'Vérifiez la référence du transfert (255 caractères au plus).',
-  proof:
-    'La capture n’a pas été acceptée : envoyez un JPG, un PNG, un WebP ou un PDF de 10 Mo au plus.',
 };
 
 const RELOAD_CODES: Record<string, string> = {
@@ -197,17 +184,20 @@ export function PaymentSheet({
         return;
       }
 
+      // Le message d'un `422` est celui de l'API, tel quel : elle parle français.
+      const messages = fieldMessages(error);
       const fields: DeclarationErrors = {};
       for (const key of ['amount', 'method', 'reference', 'proof'] as const) {
-        if (error.errors[key]?.length) fields[key] = FIELD_MESSAGES[key];
+        if (messages[key]) fields[key] = messages[key];
       }
       if (hasErrors(fields)) {
         showFieldErrors(fields);
         return;
       }
 
-      // R4 : un refus que cet écran ne sait pas lire ne se recopie pas.
-      setFormError(GENERIC);
+      // Un champ que l'écran ne montre pas : le premier message de l'API, tel
+      // quel ; sans message lisible, le texte générique.
+      setFormError(Object.values(messages)[0] ?? GENERIC);
       return;
     }
 

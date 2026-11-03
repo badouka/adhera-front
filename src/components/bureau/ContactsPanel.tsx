@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { createContact, deleteContact, isSessionError } from '@/lib/bureau/api';
-import { errorMessage, invalidFields } from '@/lib/bureau/messages';
+import { fieldMessages } from '@/lib/api';
+import { errorMessage } from '@/lib/bureau/messages';
 import { CONTACT_ROLES, type Contact, type ContactRole } from '@/lib/bureau/types';
 import { ConfirmDialog, Recap } from './ConfirmDialog';
 import { PlusIcon } from './Icons';
@@ -13,14 +14,8 @@ const ROLE_LABEL = Object.fromEntries(CONTACT_ROLES.map((r) => [r.value, r.label
   string
 >;
 
-const FIELD_ERRORS: Record<string, string> = {
-  first_name: 'Indiquez le prénom du contact.',
-  last_name: 'Indiquez le nom de famille du contact.',
-  role: 'Choisissez le rôle du contact.',
-  role_title: 'Vérifiez la fonction (255 caractères au plus).',
-  phone: 'Vérifiez le numéro de téléphone.',
-  email: 'Vérifiez l’adresse e-mail.',
-};
+/** Les champs du formulaire : un `422` s'y range, avec le message de l'API tel quel. */
+const FIELDS = ['first_name', 'last_name', 'role', 'role_title', 'phone', 'email'] as const;
 
 /**
  * Les contacts rattachés — réservés aux membres `organisation` : l'écran ne
@@ -159,8 +154,8 @@ function ContactForm({
     setFormError(null);
     // Un contact est une personne : prénom ET nom, sans condition (v3.5.7).
     const missing: Record<string, string> = {};
-    if (firstName.trim() === '') missing.first_name = FIELD_ERRORS.first_name as string;
-    if (lastName.trim() === '') missing.last_name = FIELD_ERRORS.last_name as string;
+    if (firstName.trim() === '') missing.first_name = 'Indiquez le prénom du contact.';
+    if (lastName.trim() === '') missing.last_name = 'Indiquez le nom de famille du contact.';
     if (Object.keys(missing).length > 0) {
       setErrors(missing);
       return;
@@ -180,10 +175,9 @@ function ContactForm({
       );
     } catch (cause) {
       if (isSessionError(cause)) return;
+      const messages = fieldMessages(cause);
       const mapped: Record<string, string> = {};
-      for (const field of invalidFields(cause)) {
-        if (FIELD_ERRORS[field]) mapped[field] = FIELD_ERRORS[field] as string;
-      }
+      for (const field of FIELDS) if (messages[field]) mapped[field] = messages[field];
       if (Object.keys(mapped).length > 0) setErrors(mapped);
       else setFormError(errorMessage(cause, 'Le contact n’a pas pu être ajouté.'));
     } finally {

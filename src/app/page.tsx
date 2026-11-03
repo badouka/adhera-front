@@ -14,7 +14,7 @@ export default function Home() {
           Utilisez le lien reçu de votre association.
         </p>
         <div className="grow" />
-        <Link href="/bureau" className="small text-ink-muted">
+        <Link href="/bureau" className="small text-ink-muted!">
           Espace du bureau
         </Link>
       </div>

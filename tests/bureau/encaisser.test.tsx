@@ -187,20 +187,26 @@ describe('« Encaisser » — chercher, toucher, encaisser', () => {
     expect(screen.getByRole('button', { name: 'Encaisser 150 000 FCFA' })).toBeInTheDocument();
   });
 
-  it('un 422 de validation : le champ désigné, libellé en français', async () => {
+  it('un 422 de validation : le champ désigné, avec le message de l’API tel quel', async () => {
     server([
       {
         method: 'POST',
         match: /members\/[^/]+\/payments$/,
         status: 422,
-        body: { message: 'The amount field must be at least 1.', errors: { amount: ['The amount field must be at least 1.'] } },
+        body: {
+          message: 'Versement invalide.',
+          errors: {
+            amount: ['Le champ montant doit être au moins égal à 1.'],
+            paid_on: ['Le champ date du versement n\'est pas une date valide.'],
+          },
+        },
       },
     ]);
     const user = userEvent.setup();
     renderInBureau(<EncaisserPage />);
     await user.click(await searchAndPick(user));
-    await screen.findByText('Vérifiez le montant.');
-    expect(document.body.textContent).not.toMatch(/must be at least/);
+    await screen.findByText('Le champ montant doit être au moins égal à 1.');
+    expect(screen.getByText('Le champ date du versement n\'est pas une date valide.')).toBeInTheDocument();
   });
 
   it('« Changer de membre » revient à la recherche', async () => {

@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { GET } from '@/app/m/[token]/manifest.webmanifest/route';
-import { buildManifest, manifestHref, safeLogoUrl } from '@/lib/manifest';
+import { buildManifest, homeIconUrl, manifestHref, safeLogoUrl } from '@/lib/manifest';
 
 const TOKEN = 'a'.repeat(64);
 const LOGO = 'https://api.eventflow.africa/storage-tenantdemo-asso/membership/logo-1a2b3c4d.png';
+const ICON = 'https://api.eventflow.africa/storage-tenantdemo-asso/membership/icon-1a2b3c4d.png';
 
 describe('F4 § 1.4 — le manifeste de la carte', () => {
   it('start_url, scope et name', () => {
@@ -38,6 +39,25 @@ describe('F4 § 1.4 — le manifeste de la carte', () => {
     expect(buildManifest(TOKEN, 'X', 'https://evil.example/logo.png').icons[0]?.src).toBe(
       '/carte/icone-192.png',
     );
+  });
+
+  it('l’icône de l’écran d’accueil : icon_url, à défaut logo_url', () => {
+    expect(homeIconUrl(ICON, LOGO)).toBe(ICON);
+    expect(homeIconUrl(null, LOGO)).toBe(LOGO);
+    expect(homeIconUrl(undefined, LOGO)).toBe(LOGO);
+    expect(homeIconUrl(null, null)).toBeNull();
+    // Une icône qui ne vient pas de l'API n'est pas servie.
+    expect(homeIconUrl('https://evil.example/icon.png', LOGO)).toBeNull();
+  });
+
+  it('l’adresse de l’API passe TELLE QUELLE : jamais recomposée ni normalisée', () => {
+    // `new URL(...).toString()` mettrait l'hôte en minuscules et encoderait l'espace.
+    const raw = 'https://API.eventflow.africa/storage-tenantdemo-asso/membership/icon 1a2b.png';
+    expect(safeLogoUrl(raw)).toBe(raw);
+    expect(homeIconUrl(raw, LOGO)).toBe(raw);
+    expect(buildManifest(TOKEN, 'X', ICON).icons).toEqual([
+      { src: ICON, sizes: '512x512', type: 'image/png', purpose: 'any' },
+    ]);
   });
 
   it('manifestHref porte le nom et le logo, rien si le nom est vide', () => {

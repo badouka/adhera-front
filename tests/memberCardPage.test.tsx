@@ -205,6 +205,34 @@ describe('F4 § 1.4 — garder la carte', () => {
     expect(href.pathname).toBe(`/m/${TOKEN}/manifest.webmanifest`);
     expect(href.searchParams.get('nom')).toBe('Cercle des Administrateurs Publics');
     expect(href.searchParams.get('logo')).toBe(memberCard().logo_url);
+    // Sans `icon_url`, l'apple-touch-icon retombe aussi sur le logo.
+    expect(document.head.querySelector('link[rel="apple-touch-icon"]')?.getAttribute('href')).toBe(
+      memberCard().logo_url,
+    );
+  });
+
+  it('manifeste et apple-touch-icon : `organisation.icon_url`, l’icône carrée, telle quelle', async () => {
+    const icon = 'https://api.eventflow.africa/storage-tenantdemo-asso/membership/icon-1a2b3c4d.png';
+    serve({ ...UP_TO_DATE, organisation: { ...UP_TO_DATE.organisation, icon_url: icon } });
+    await screen.findByTestId('member-card');
+    const link = document.head.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    const href = new URL(link!.getAttribute('href')!, window.location.origin);
+    expect(href.searchParams.get('logo')).toBe(icon);
+    expect(document.head.querySelector('link[rel="apple-touch-icon"]')?.getAttribute('href')).toBe(icon);
+  });
+
+  it('ni icône ni logo : l’icône neutre de l’app', async () => {
+    serve({
+      ...UP_TO_DATE,
+      organisation: { ...UP_TO_DATE.organisation, icon_url: null },
+      card: memberCard({ logo_url: null }),
+    });
+    await screen.findByTestId('member-card');
+    const link = document.head.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    expect(new URL(link!.getAttribute('href')!, window.location.origin).searchParams.has('logo')).toBe(false);
+    expect(document.head.querySelector('link[rel="apple-touch-icon"]')?.getAttribute('href')).toBe(
+      '/carte/icone-180.png',
+    );
   });
 
   it('hors connexion : la carte depuis le cache, avec le bandeau daté', async () => {

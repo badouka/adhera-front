@@ -165,7 +165,7 @@ describe('les erreurs typées', () => {
     fetchMock.mockResolvedValue(
       fakeResponse(422, {
         message: 'Membre invalide.',
-        errors: { name: ['The name field is required.'] },
+        errors: { name: ['Le champ raison sociale est obligatoire.'] },
       }),
     );
     const error = await createMember({
@@ -210,5 +210,31 @@ describe('readRetryAfter — le délai d’un 429', () => {
     ).toBe(600);
     expect(readRetryAfter({}, new Headers(), now)).toBeNull();
     expect(readRetryAfter({ retry_after: 'bientôt' }, undefined, now)).toBeNull();
+  });
+});
+
+describe('les messages de validation de l’API, tels quels', () => {
+  it('fieldMessages : le premier message de chaque champ, rien hors d’un 422', async () => {
+    const { ApiError, fieldMessages } = await import('@/lib/api');
+    const error = new ApiError(422, null, 'Versement invalide.', {
+      amount: ['Le champ montant doit être au moins égal à 1.', 'Second message.'],
+      method: ['  ', 'La valeur sélectionnée pour mode de règlement est invalide.'],
+    });
+    expect(fieldMessages(error)).toEqual({
+      amount: 'Le champ montant doit être au moins égal à 1.',
+      method: 'La valeur sélectionnée pour mode de règlement est invalide.',
+    });
+    expect(fieldMessages(new ApiError(409, null, 'x', { amount: ['y'] }))).toEqual({});
+    expect(fieldMessages(new Error('x'))).toEqual({});
+  });
+
+  it('errorMessage : un 422 sans code rend le message de l’API, sinon le repli', async () => {
+    const { ApiError } = await import('@/lib/api');
+    const { errorMessage } = await import('@/lib/bureau/messages');
+    const error = new ApiError(422, null, 'Campagne invalide.', {
+      scheduled_at: ['Le champ date d’envoi doit être une date postérieure à maintenant.'],
+    });
+    expect(errorMessage(error, 'repli')).toBe('Le champ date d’envoi doit être une date postérieure à maintenant.');
+    expect(errorMessage(new ApiError(422, null, '', {}), 'repli')).toBe('repli');
   });
 });

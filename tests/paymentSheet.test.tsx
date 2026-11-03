@@ -307,32 +307,33 @@ describe('les réponses du serveur', () => {
     return user;
   }
 
-  it('422 errors.reference : le champ se déplie, message en français', async () => {
+  it('422 errors.reference : le champ se déplie, avec le message de l’API tel quel', async () => {
     await submitWith(
       fakeResponse(422, {
-        message: 'The reference field must not be greater than 255 characters.',
-        errors: { reference: ['The reference field must not be greater than 255 characters.'] },
+        message: 'Le champ référence ne doit pas dépasser 255 caractères.',
+        errors: { reference: ['Le champ référence ne doit pas dépasser 255 caractères.'] },
       }),
     );
 
-    const message = await screen.findByText(
-      'Vérifiez la référence du transfert (255 caractères au plus).',
-    );
+    const message = await screen.findByText('Le champ référence ne doit pas dépasser 255 caractères.');
     const input = screen.getByLabelText(/Référence du transfert/);
     expect(input.getAttribute('aria-describedby')).toContain(message.id);
-    expect(screen.queryByText(/The reference field/)).not.toBeInTheDocument();
     expect(confirmButton()).toBeInTheDocument();
   });
 
-  it('422 sans code ni champ connu : message générique, jamais le texte brut', async () => {
+  it('422 sur un champ que l’écran ne montre pas : le message de l’API, tel quel', async () => {
     await submitWith(
       fakeResponse(422, {
-        message: 'The given data was invalid.',
-        errors: { foo: ['The foo field is required.'] },
+        message: 'Les données envoyées sont invalides.',
+        errors: { foo: ['Le champ foo est obligatoire.'] },
       }),
     );
+    await screen.findByText('Le champ foo est obligatoire.');
+  });
+
+  it('422 sans aucun message lisible : message générique', async () => {
+    await submitWith(fakeResponse(422, { message: '', errors: {} }));
     await screen.findByText(/Votre paiement n’a pas pu être signalé\./);
-    expect(screen.queryByText(/given data|foo field/)).not.toBeInTheDocument();
   });
 
   it('422 amount_exceeds_balance : message, puis rechargement', async () => {

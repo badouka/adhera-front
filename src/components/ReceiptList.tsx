@@ -37,7 +37,7 @@ export function ReceiptList({
             <a
               href={receiptUrl(token, tenant, receipt.id)}
               rel="noreferrer"
-              className="flex min-h-14 items-center gap-3 rounded-[var(--radius-md)] border border-line bg-surface-raised px-3 py-2 text-ink no-underline"
+              className="flex min-h-14 items-center gap-3 rounded-[var(--radius-md)] border border-line bg-surface-raised px-3 py-2 text-ink! no-underline"
             >
               <DownloadIcon className="shrink-0 text-indigo" />
               <span className="flex min-w-0 grow flex-col">

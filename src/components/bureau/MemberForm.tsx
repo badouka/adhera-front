@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ApiError } from '@/lib/api';
+import { fieldMessages } from '@/lib/api';
 import { isSessionError, listCategories } from '@/lib/bureau/api';
-import { errorMessage, invalidFields } from '@/lib/bureau/messages';
+import { errorMessage } from '@/lib/bureau/messages';
 import type {
   Category,
   MemberInput,
@@ -19,25 +19,22 @@ type FieldName = keyof MemberInput;
 type Errors = Partial<Record<FieldName, string>>;
 
 /**
- * Les libellés d'erreur, en français et écrits ici. Les messages de l'API sont
- * en anglais : `errors` ne sert qu'à DÉSIGNER le champ fautif (piège 10).
+ * Les champs du formulaire, dans l'ordre de l'écran : c'est l'ordre du focus
+ * sur la première erreur. Le message d'un `422` est celui de l'API, tel quel
+ * (elle parle français ; le refus d'un numéro nomme son porteur, §16.1).
  */
-export const MEMBER_FIELD_ERRORS: Record<FieldName, string> = {
-  type: 'Choisissez le type de membre.',
-  first_name: 'Indiquez le prénom (255 caractères au plus).',
-  last_name: 'Indiquez le nom de famille (255 caractères au plus).',
-  name: 'Indiquez la raison sociale (255 caractères au plus).',
-  phone: 'Vérifiez le numéro de téléphone.',
-  email: 'Vérifiez l’adresse e-mail : elle est invalide ou déjà utilisée.',
-  region: 'Vérifiez la région (255 caractères au plus).',
-  category_id: 'Choisissez une catégorie active.',
-  joined_at: 'Indiquez une date d’adhésion valide.',
-  // Repli seulement : le 422 de ce champ est rédigé en français par le serveur
-  // et nomme le porteur du numéro (§16.1) — il s'affiche tel quel.
-  member_number: 'Vérifiez le numéro de membre (32 caractères au plus).',
-};
-
-const FIELDS = Object.keys(MEMBER_FIELD_ERRORS) as FieldName[];
+const FIELDS: FieldName[] = [
+  'type',
+  'first_name',
+  'last_name',
+  'name',
+  'phone',
+  'email',
+  'region',
+  'category_id',
+  'joined_at',
+  'member_number',
+];
 
 /** Le type imposé par les réglages, ou null si l'association est mixte. */
 function fixedType(memberTypes: MemberTypes): MemberType | null {
@@ -170,27 +167,16 @@ export function MemberForm({
       });
     } catch (error) {
       if (isSessionError(error)) return;
-      const fields = invalidFields(error);
+      const messages = fieldMessages(error);
       const mapped: Errors = {};
-      for (const field of fields) {
-        if ((FIELDS as string[]).includes(field)) {
-          mapped[field as FieldName] = MEMBER_FIELD_ERRORS[field as FieldName];
-        }
+      for (const field of FIELDS) {
+        if (messages[field]) mapped[field] = messages[field];
       }
-      // Le refus d'un numéro NOMME son porteur, « (membre supprimé) » compris :
-      // `errors.member_number[0]`, tel quel.
-      const numberMessage =
-        error instanceof ApiError ? error.errors.member_number?.[0]?.trim() : undefined;
-      if (mapped.member_number && numberMessage) mapped.member_number = numberMessage;
       if (Object.keys(mapped).length > 0) {
         setErrors(mapped);
         focusFirst(mapped);
       } else {
-        setFormError(
-          fields.length > 0
-            ? 'Le formulaire contient une erreur. Vérifiez les champs, puis réessayez.'
-            : errorMessage(error, 'Le membre n’a pas pu être enregistré.'),
-        );
+        setFormError(errorMessage(error, 'Le membre n’a pas pu être enregistré.'));
       }
     } finally {
       setSending(false);

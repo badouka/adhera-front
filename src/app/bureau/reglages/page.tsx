@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useId, useRef, useState } from 'react';
-import { ApiError } from '@/lib/api';
+import { ApiError, fieldMessages } from '@/lib/api';
 import { useBureau } from '@/components/bureau/BureauContext';
 import { PASSWORD_PATH } from '@/components/bureau/BureauFrame';
 import { CategoriesPanel } from '@/components/bureau/CategoriesPanel';
@@ -26,7 +26,7 @@ import {
   updateSettings,
   uploadLogo,
 } from '@/lib/bureau/api';
-import { errorMessage, invalidFields } from '@/lib/bureau/messages';
+import { errorMessage } from '@/lib/bureau/messages';
 import {
   MEMBER_TYPES_LABELS,
   MODE_COTISATION_LABELS,
@@ -123,12 +123,13 @@ function WeeklyReportPanel() {
   );
 }
 
-const SETTINGS_FIELD_ERRORS: Record<string, string> = {
-  issuer_name: 'Indiquez le nom de l’association (255 caractères au plus).',
-  om_merchant_number: 'Vérifiez le numéro marchand Orange Money.',
-  wave_merchant_number: 'Vérifiez le numéro marchand Wave.',
-  payment_instructions: `Les instructions ne doivent pas dépasser ${MAX_INSTRUCTIONS} caractères.`,
-};
+/** Les champs du formulaire : un `422` s'y range, avec le message de l'API tel quel. */
+const SETTINGS_FIELDS = [
+  'issuer_name',
+  'om_merchant_number',
+  'wave_merchant_number',
+  'payment_instructions',
+] as const;
 
 function AssociationPanel() {
   const { settings, setSettings } = useBureau();
@@ -149,7 +150,7 @@ function AssociationPanel() {
     const next: Record<string, string> = {};
     if (name.trim() === '') next.issuer_name = 'Indiquez le nom de l’association.';
     if (instructions.length > MAX_INSTRUCTIONS) {
-      next.payment_instructions = SETTINGS_FIELD_ERRORS.payment_instructions as string;
+      next.payment_instructions = `Les instructions ne doivent pas dépasser ${MAX_INSTRUCTIONS} caractères.`;
     }
     setErrors(next);
     if (Object.keys(next).length > 0) return;
@@ -167,10 +168,9 @@ function AssociationPanel() {
       setSaved(true);
     } catch (cause) {
       if (isSessionError(cause)) return;
+      const messages = fieldMessages(cause);
       const mapped: Record<string, string> = {};
-      for (const field of invalidFields(cause)) {
-        if (SETTINGS_FIELD_ERRORS[field]) mapped[field] = SETTINGS_FIELD_ERRORS[field] as string;
-      }
+      for (const field of SETTINGS_FIELDS) if (messages[field]) mapped[field] = messages[field];
       if (Object.keys(mapped).length > 0) setErrors(mapped);
       else setFormError(errorMessage(cause, 'Les réglages n’ont pas pu être enregistrés.'));
     } finally {

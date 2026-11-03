@@ -2,9 +2,9 @@
 
 import Link from 'next/link';
 import { useEffect, useId, useRef, useState } from 'react';
-import { ApiError } from '@/lib/api';
+import { ApiError, fieldMessages } from '@/lib/api';
 import { BureauApiError, createDirectPayment, isSessionError } from '@/lib/bureau/api';
-import { errorMessage, invalidFields, PAYMENT_NETWORK_MESSAGE } from '@/lib/bureau/messages';
+import { errorMessage, PAYMENT_NETWORK_MESSAGE } from '@/lib/bureau/messages';
 import type { MemberDetail, MemberDue, Payment } from '@/lib/bureau/types';
 import { todayInDakar } from '@/lib/dates';
 import { useIdempotencyKey } from '@/lib/idempotency';
@@ -39,12 +39,7 @@ const METHOD_ORDER: PaymentMethod[] = ['especes', 'wave', 'om', 'virement', 'che
 
 type Errors = Partial<Record<'amount' | 'method' | 'paid_on' | 'reference', string>>;
 
-const FIELD_ERRORS: Required<Errors> = {
-  amount: 'Vérifiez le montant.',
-  method: 'Choisissez le mode de paiement.',
-  paid_on: 'Indiquez une date de paiement valide.',
-  reference: 'Vérifiez la référence (255 caractères au plus).',
-};
+const FIELDS: ReadonlyArray<keyof Errors> = ['amount', 'method', 'paid_on', 'reference'];
 
 /**
  * « Encaisser » — un versement reçu en main propre (B9). Il est enregistré ET
@@ -169,10 +164,11 @@ export function DirectPaymentPanel({
         setBusy(false);
         return;
       }
-      const fields = invalidFields(cause).filter((f): f is keyof Errors => f in FIELD_ERRORS);
-      if (fields.length > 0) {
-        const mapped: Errors = {};
-        for (const f of fields) mapped[f] = FIELD_ERRORS[f];
+      // Le message d'un `422` est celui de l'API, tel quel : elle parle français.
+      const messages = fieldMessages(cause);
+      const mapped: Errors = {};
+      for (const f of FIELDS) if (messages[f]) mapped[f] = messages[f];
+      if (Object.keys(mapped).length > 0) {
         setErrors(mapped);
         if (mapped.reference) setReferenceOpen(true);
       } else if (cause instanceof ApiError && cause.status === 0) {

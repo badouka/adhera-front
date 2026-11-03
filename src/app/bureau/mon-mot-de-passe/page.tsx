@@ -35,9 +35,8 @@ export const PASSWORD_HINT =
 /**
  * « Mon mot de passe » (S3e, contrat §14) — ouvert à tous les rôles.
  *
- * ⚠️ Exception au piège 10 (§14.2) : les messages d'un `422` de cette route
- * sont en français et disent quoi faire ; ils s'affichent TELS QUELS, chacun
- * sous son champ. Une confirmation différente arrive sous `password` : elle
+ * Les messages d'un `422` de cette route (§14.2) disent quoi faire ; comme
+ * partout dans Adhera, ils s'affichent TELS QUELS, chacun sous son champ. Une confirmation différente arrive sous `password` : elle
  * reste sous « Nouveau mot de passe ». Le `message` commun (« Le mot de passe
  * n'a pas été changé. ») n'est pas répété. Aucune règle de symbole, de
  * majuscule ni de chiffre côté écran (§14.2).

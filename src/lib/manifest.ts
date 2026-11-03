@@ -30,15 +30,31 @@ export function isPlausibleToken(token: string): boolean {
 /** Le logo n'est accepté que s'il vient de l'API (même règle que la CSP). */
 const LOGO_ORIGIN = new URL(API_BASE).origin;
 
+/**
+ * L'adresse servie par l'API, TELLE QUELLE, si elle vient bien de l'API ; sinon
+ * `null`. Elle est seulement contrôlée, jamais recomposée ni normalisée.
+ */
 export function safeLogoUrl(raw: string | null | undefined): string | null {
   if (!raw) return null;
   try {
     const url = new URL(raw);
     if (url.origin !== LOGO_ORIGIN || url.protocol !== 'https:') return null;
-    return url.toString();
+    return raw;
   } catch {
     return null;
   }
+}
+
+/**
+ * L'image de l'écran d'accueil (manifeste et apple-touch-icon) : `icon_url`,
+ * l'icône carrée du serveur ; à défaut (`null`, ou absente d'un serveur plus
+ * ancien), `logo_url`. Les deux adresses passent telles que l'API les sert.
+ */
+export function homeIconUrl(
+  iconUrl: string | null | undefined,
+  logoUrl: string | null | undefined,
+): string | null {
+  return iconUrl ? safeLogoUrl(iconUrl) : safeLogoUrl(logoUrl);
 }
 
 function logoType(url: string): string {
@@ -49,16 +65,20 @@ export function memberPath(token: string): string {
   return `/m/${encodeURIComponent(token)}`;
 }
 
-/** L'adresse du manifeste, telle que la page la pose dans `<head>`. */
+/**
+ * L'adresse du manifeste, telle que la page la pose dans `<head>`. `icon` est
+ * l'image de l'écran d'accueil (`homeIconUrl`) ; elle voyage sous `?logo=`,
+ * le nom que lisent déjà les manifestes des cartes installées.
+ */
 export function manifestHref(
   token: string,
   organisationName: string,
-  logoUrl: string | null,
+  icon: string | null,
 ): string {
   const query = new URLSearchParams();
   const name = organisationName.trim();
   if (name) query.set('nom', name);
-  const logo = safeLogoUrl(logoUrl);
+  const logo = safeLogoUrl(icon);
   if (logo) query.set('logo', logo);
   const qs = query.toString();
   return `${memberPath(token)}/manifest.webmanifest${qs ? `?${qs}` : ''}`;

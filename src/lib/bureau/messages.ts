@@ -2,12 +2,12 @@
  * Les libellés d'erreur affichés au bureau.
  *
  * R4 : on branche sur le `code` (ou le statut), jamais sur le message. Les
- * messages de validation de l'API sont en ANGLAIS (piège 10) : `errors` sert à
- * désigner le champ, le libellé est le nôtre. Le `404` d'un membre nomme une
- * classe PHP (piège 11) : il n'est jamais recopié.
+ * messages de VALIDATION d'un `422` sont ceux de l'API, tels quels : elle parle
+ * français partout dans Adhera (`fieldMessages`, `src/lib/api.ts`). Le `404`
+ * d'un membre nomme une classe PHP (piège 11) : il n'est jamais recopié.
  */
 
-import { ApiError } from '../api';
+import { ApiError, fieldMessages } from '../api';
 
 /** Le verrou par compte de `admin/login` (§2) : dix échecs par heure. */
 export const TOO_MANY_ATTEMPTS = 'too_many_attempts';
@@ -97,16 +97,15 @@ export function errorMessage(error: unknown, fallback: string): string {
 
   // Une erreur MÉTIER d'Adhera (avec `code`) est rédigée en français par le
   // serveur : c'est le meilleur libellé disponible pour un code que cet écran
-  // ne connaît pas encore. Une erreur de validation (sans `code`) ne l'est pas.
+  // ne connaît pas encore.
   if (error.code && (error.status === 409 || error.status === 422) && error.message) {
     return error.message;
   }
 
-  return fallback;
-}
+  // Une erreur de validation (sans `code`) que l'écran n'a rangée sous aucun
+  // champ : le premier message de l'API, tel quel.
+  const first = Object.values(fieldMessages(error))[0];
+  if (first) return first;
 
-/** Les champs refusés d'un `422`, sans leurs messages anglais. */
-export function invalidFields(error: unknown): string[] {
-  if (!(error instanceof ApiError) || error.status !== 422) return [];
-  return Object.keys(error.errors);
+  return fallback;
 }

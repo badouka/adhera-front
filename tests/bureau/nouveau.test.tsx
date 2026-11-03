@@ -85,13 +85,13 @@ describe('B6 — prénom et nom, ou raison sociale', () => {
     expect(body).not.toHaveProperty('first_name');
   });
 
-  it('respecte le 422 du serveur : le champ désigné, en français', async () => {
+  it('respecte le 422 du serveur : le champ désigné, avec le message de l’API tel quel', async () => {
     fakeServer([
       {
         method: 'POST',
         match: 'membership/members',
         status: 422,
-        body: { message: 'Membre invalide.', errors: { last_name: ['The nom field is required.'] } },
+        body: { message: 'Membre invalide.', errors: { last_name: ['Le champ nom ne doit pas dépasser 255 caractères.'] } },
       },
       { match: 'membership/categories', body: CATEGORIES },
     ]);
@@ -100,7 +100,6 @@ describe('B6 — prénom et nom, ou raison sociale', () => {
     await user.type(screen.getByLabelText(/^Prénom/), 'Awa');
     await user.type(screen.getByLabelText(/^Nom/), 'Ba');
     await user.click(screen.getByRole('button', { name: 'Ajouter le membre' }));
-    await screen.findByText('Indiquez le nom de famille (255 caractères au plus).');
-    expect(document.body.textContent).not.toMatch(/field is required/);
+    await screen.findByText('Le champ nom ne doit pas dépasser 255 caractères.');
   });
 });
