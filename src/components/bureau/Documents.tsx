@@ -43,12 +43,15 @@ export function ReceiptButton({
   tone = 'secondary',
   compact = false,
   failure = 'Le reçu n’a pas pu être téléchargé.',
+  className,
 }: {
   receiptId: string;
   reference: string;
   label?: string;
   tone?: 'primary' | 'secondary' | 'ghost';
   compact?: boolean;
+  /** L'habit complet du bouton, à la place de `tone` (les gros boutons de F5). */
+  className?: string;
   /** Ce qui a échoué, dans les mots de l'écran (une attestation n'est pas un reçu). */
   failure?: string;
 }) {
@@ -72,13 +75,13 @@ export function ReceiptButton({
   }
 
   return (
-    <span className="inline-flex flex-col gap-1">
+    <span className={className ? 'flex flex-col gap-1' : 'inline-flex flex-col gap-1'}>
       <button
         type="button"
         onClick={download}
         disabled={busy}
         aria-label={compact ? `${label} ${reference}` : undefined}
-        className={buttonClass(tone, compact ? 'min-h-10 px-3 small' : '')}
+        className={className ?? buttonClass(tone, compact ? 'min-h-10 px-3 small' : '')}
       >
         <DownloadIcon size={18} />
         {busy ? 'Téléchargement…' : compact ? reference : label}
@@ -102,7 +105,16 @@ export function ReceiptButton({
  * `noopener`), puis dirigé vers le lien quand il arrive. Si l'onglet a été
  * bloqué malgré tout, un lien `noopener noreferrer` prend le relais.
  */
-export function ProofButton({ paymentId }: { paymentId: string }) {
+export function ProofButton({
+  paymentId,
+  label = 'Voir la capture',
+  className,
+}: {
+  paymentId: string;
+  label?: string;
+  /** L'habit complet du bouton (les gros boutons de F5). */
+  className?: string;
+}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fallbackUrl, setFallbackUrl] = useState<string | null>(null);
@@ -131,15 +143,15 @@ export function ProofButton({ paymentId }: { paymentId: string }) {
   }
 
   return (
-    <span className="inline-flex flex-col gap-1">
+    <span className={className ? 'flex flex-col gap-1' : 'inline-flex flex-col gap-1'}>
       <button
         type="button"
         onClick={open}
         disabled={busy}
-        className={buttonClass('secondary')}
+        className={className ?? buttonClass('secondary')}
       >
         <EyeIcon />
-        {busy ? 'Ouverture…' : 'Voir la capture'}
+        {busy ? 'Ouverture…' : label}
       </button>
       {fallbackUrl ? (
         <a
