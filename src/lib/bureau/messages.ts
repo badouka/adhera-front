@@ -28,6 +28,13 @@ export function tooManyAttemptsMessage(retryAfter: number | null, code: string |
   return `Trop de tentatives. Réessayez dans ${minutes} minute${minutes > 1 ? 's' : ''}.`;
 }
 
+/**
+ * ⚠️ RÈGLE (2026-11-03) : le comportement se branche sur le `code` ; le texte
+ * affiché est le `message` de l'API dès qu'il existe, les libellés locaux ne
+ * servent que de repli. Cette table est GELÉE telle quelle : un code nouveau
+ * n'y entre pas, il affiche le message de l'API (garde-fou dans
+ * `tests/guards.test.ts`).
+ */
 const BY_CODE: Record<string, string> = {
   feature_disabled:
     'Ce service n’est pas inclus dans l’offre de votre association. Contactez DIGISSOL.',
@@ -88,18 +95,16 @@ export function errorMessage(error: unknown, fallback: string): string {
       'retryAfter' in error && typeof error.retryAfter === 'number' ? error.retryAfter : null;
     return tooManyAttemptsMessage(retryAfter, error.code);
   }
+
+  // Un code que cette table ne connaît pas, quel que soit le statut : le
+  // `message` de l'API, tel quel. Les libellés ci-dessous ne sont que des replis.
+  if (error.code && error.message.trim()) return error.message;
+
   if (error.status === 403) {
     return 'Cette action n’est pas autorisée pour votre association.';
   }
   if (error.status >= 500) {
     return `${fallback} Le service ne répond pas : réessayez dans un instant.`;
-  }
-
-  // Une erreur MÉTIER d'Adhera (avec `code`) est rédigée en français par le
-  // serveur : c'est le meilleur libellé disponible pour un code que cet écran
-  // ne connaît pas encore.
-  if (error.code && (error.status === 409 || error.status === 422) && error.message) {
-    return error.message;
   }
 
   // Une erreur de validation (sans `code`) que l'écran n'a rangée sous aucun

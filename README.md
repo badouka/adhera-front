@@ -71,7 +71,13 @@ membre de la minute recevrait un 429 — pendant une campagne, c'est la panne.
 - **R3** — le jeton ne fuit pas : `Referrer-Policy: no-referrer`, aucun script
   tiers, police téléchargée au build et servie par l'app, `noindex, nofollow`,
   `rel="noreferrer"` sur le lien de reçu.
-- **R4** — le code d'erreur est le contrat, jamais le message.
+- **R4** — le comportement se branche sur le `code`, jamais sur le message ;
+  le texte affiché est le `message` de l'API dès qu'il existe, les libellés
+  locaux ne servent que de repli. Un code nouveau affiche le message de l'API :
+  les tables de libellés par code (`BY_CODE`, `PROOF_CODES`, `RELOAD_CODES`)
+  sont gelées, et `tests/guards.test.ts` refuse toute clé ajoutée. Les messages
+  de validation d'un `422` s'affichent tels quels (`fieldMessages`) : l'API
+  parle français partout dans Adhera (v3.8.2).
 - **R5** — rien n'est mis en cache : `cache: 'no-store'` sur chaque appel, et
   la route est `force-dynamic`. **Une exception, bornée (F4)** : le service
   worker de la carte (`public/m/sw.js`), qui ne contrôle que `/m/` et garde,
@@ -128,7 +134,7 @@ Le contrat est `_handoff/adhera-api-bureau.md`, hors dépôt.
 
 ## F3 — tableau de bord, relances, campagnes, annulation
 
-Le contrat est `_handoff/adhera-api-bureau.md` (v3.7.2-adhera-S3c, §9 à §11).
+Le contrat est `_handoff/adhera-api-bureau.md` (§9 à §11).
 
 - **L'accueil `/bureau` est le tableau de bord** : trois boutons (« Encaisser »,
   « À valider (n) », « À envoyer (n) » — un zéro reste visible, grisé), puis
@@ -166,7 +172,7 @@ vérifié par contre-épreuve.
 ## La carte, l'attestation et la vérification (F4)
 
 Tout est derrière l'option vendable `membership_card` (contrat §16,
-`_handoff/adhera-api-bureau-s4a-extrait.md`). Sans elle, `card` vaut `null`
+`_handoff/adhera-api-bureau.md`). Sans elle, `card` vaut `null`
 et la page du membre reste celle de F1.
 
 - **« Ma carte » / « Ma cotisation »** (`/m/{jeton}`) : la carte s'ouvre pour

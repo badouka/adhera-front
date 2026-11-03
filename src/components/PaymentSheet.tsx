@@ -21,7 +21,15 @@ import { UploadIcon } from './Icons';
 const GENERIC =
   'Votre paiement n’a pas pu être signalé. Réessayez dans un instant.';
 
-/** R4 : on branche sur le code, et on écrit nous-mêmes le message affiché. */
+/** Le `message` d'un refus qui porte un `code`, ou rien. */
+function apiMessage(error: ApiError): string | null {
+  return error.code && error.message.trim() ? error.message : null;
+}
+
+/**
+ * R4 : on branche sur le code. Ces deux tables sont gardées telles quelles ;
+ * un code nouveau n'y entre pas, il affiche le message de l'API.
+ */
 const PROOF_CODES: Record<string, string> = {
   mime_not_allowed:
     'Ce type de fichier n’est pas accepté : envoyez un JPG, un PNG, un WebP ou un PDF.',
@@ -197,7 +205,7 @@ export function PaymentSheet({
 
       // Un champ que l'écran ne montre pas : le premier message de l'API, tel
       // quel ; sans message lisible, le texte générique.
-      setFormError(Object.values(messages)[0] ?? GENERIC);
+      setFormError(Object.values(messages)[0] ?? apiMessage(error) ?? GENERIC);
       return;
     }
 
@@ -206,7 +214,8 @@ export function PaymentSheet({
       return;
     }
 
-    setFormError(GENERIC);
+    // Un code que cet écran ne connaît pas : le message de l'API, tel quel.
+    setFormError(apiMessage(error) ?? GENERIC);
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {

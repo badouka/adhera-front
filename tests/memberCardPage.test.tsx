@@ -183,14 +183,14 @@ describe('F4 § 1.3 — l’attestation', () => {
     expect(open).not.toHaveBeenCalled();
   });
 
-  it('R4 : on branche sur le code, jamais sur le message', () => {
+  it('un refus avec un code affiche le message de l’API, code nouveau compris', () => {
     const served = 'Texte rédigé par le serveur.';
-    for (const code of ['not_up_to_date', 'not_a_member', 'feature_disabled', 'issuer_missing']) {
+    for (const code of ['not_up_to_date', 'not_a_member', 'feature_disabled', 'issuer_missing', 'autre_chose']) {
       expect(attestationErrorMessage(new ApiError(403, code, served))).toBe(served);
     }
-    // Un code inconnu, ou pas de code : notre texte, jamais celui du serveur.
-    expect(attestationErrorMessage(new ApiError(403, 'autre_chose', served))).not.toBe(served);
+    // Sans code (une panne, un 500 de nginx) ou sans message : notre texte, en repli.
     expect(attestationErrorMessage(new ApiError(500, null, served))).not.toBe(served);
+    expect(attestationErrorMessage(new ApiError(403, 'autre_chose', '  '))).toMatch(/n’a pas pu être téléchargée/);
     expect(attestationErrorMessage(new ApiError(0, null, ''))).toMatch(/Connexion impossible/);
   });
 });

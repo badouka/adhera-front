@@ -697,3 +697,50 @@ describe('liens — le texte garde la couleur que l’écran lui donne', () => {
     expect(anchorsWithWeakTextColor('<a href="x" className="text-[18px] text-center text-link">T</a>')).toEqual([]);
   });
 });
+
+/**
+ * Règle du 2026-11-03 : le comportement se branche sur le `code`, le texte
+ * affiché est le `message` de l'API dès qu'il existe, et les libellés locaux ne
+ * servent que de repli. Les trois tables de libellés par code sont GELÉES
+ * telles quelles : un code nouveau n'y entre pas, il affiche le message de
+ * l'API. Retirer une clé reste permis (le message de l'API prend alors le
+ * relais) ; en ajouter une fait échouer ce test.
+ */
+export function tableKeys(code: string, name: string): string[] {
+  const start = code.indexOf(`const ${name}`);
+  if (start < 0) return [];
+  const body = code.slice(start, code.indexOf('\n};', start));
+  return [...body.matchAll(/^\s+(\w+):/gm)].map((m) => m[1] as string);
+}
+
+const FROZEN_TABLES: ReadonlyArray<{ file: string; name: string; keys: string[] }> = [
+  {
+    file: 'src/lib/bureau/messages.ts',
+    name: 'BY_CODE',
+    keys: [
+      'feature_disabled', 'cotisation_mode_unsupported', 'category_in_use', 'mime_not_allowed',
+      'file_too_large', 'logo_missing', 'upload_invalid', 'proof_missing',
+      'member_is_not_an_organisation', 'unknown_member', 'unknown_category', 'nothing_due',
+      'amount_exceeds_balance', 'amount_due_unknown', 'invalid_period', 'adhera_domain_missing',
+      'message_not_pending', 'campaign_already_sent', 'invalid_campaign', 'duplicate_payment',
+      'idempotency_key_reused', 'payment_not_cancellable', 'reason_required',
+    ],
+  },
+  { file: 'src/components/PaymentSheet.tsx', name: 'PROOF_CODES', keys: ['mime_not_allowed', 'file_too_large', 'upload_invalid'] },
+  { file: 'src/components/PaymentSheet.tsx', name: 'RELOAD_CODES', keys: ['amount_exceeds_balance', 'nothing_due', 'amount_due_unknown'] },
+];
+
+describe('libellés par code — un code nouveau affiche le message de l’API', () => {
+  for (const table of FROZEN_TABLES) {
+    it(`${table.name} n’accueille aucun code nouveau`, () => {
+      const keys = tableKeys(readFileSync(join(process.cwd(), table.file), 'utf8'), table.name);
+      expect(keys.length).toBeGreaterThan(0);
+      expect(keys.filter((k) => !table.keys.includes(k))).toEqual([]);
+    });
+  }
+
+  it('contre-épreuve : un code ajouté serait vu', () => {
+    const code = "const BY_CODE: Record<string, string> = {\n  nothing_due: 'x',\n  code_neuf: 'y',\n};\n";
+    expect(tableKeys(code, 'BY_CODE')).toEqual(['nothing_due', 'code_neuf']);
+  });
+});

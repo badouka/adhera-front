@@ -9,22 +9,13 @@ export const ATTESTATION_WAIT =
   'Votre attestation sera disponible dès que votre cotisation sera réglée.';
 
 /**
- * Les refus que le serveur rédige POUR LE MEMBRE (§16.3, v3.8.1) : leur
- * `message` s'affiche tel quel. R4 : on reconnaît le `code`, jamais le texte.
+ * Un refus d'attestation. Le serveur rédige ses messages POUR LE MEMBRE
+ * (§16.3) : tout refus qui porte un `code` affiche son `message` tel quel,
+ * code nouveau compris. Les libellés locaux ne sont que des replis.
  */
-const MEMBER_FACING_CODES = new Set([
-  'not_up_to_date',
-  'not_a_member',
-  'feature_disabled',
-  'issuer_missing',
-  'member_not_found',
-]);
-
 export function attestationErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
-    if (error.code && MEMBER_FACING_CODES.has(error.code) && error.message.trim()) {
-      return error.message;
-    }
+    if (error.code && error.message.trim()) return error.message;
     if (error.status === 0) {
       return 'Connexion impossible. Vérifiez votre réseau, puis réessayez.';
     }

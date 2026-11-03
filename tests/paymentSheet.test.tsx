@@ -331,6 +331,11 @@ describe('les réponses du serveur', () => {
     await screen.findByText('Le champ foo est obligatoire.');
   });
 
+  it('un code que l’écran ne connaît pas : le message de l’API, tel quel', async () => {
+    await submitWith(fakeResponse(409, { code: 'code_neuf', message: 'Message rédigé par l’API.' }));
+    await screen.findByText('Message rédigé par l’API.');
+  });
+
   it('422 sans aucun message lisible : message générique', async () => {
     await submitWith(fakeResponse(422, { message: '', errors: {} }));
     await screen.findByText(/Votre paiement n’a pas pu être signalé\./);

@@ -237,4 +237,24 @@ describe('les messages de validation de l’API, tels quels', () => {
     expect(errorMessage(error, 'repli')).toBe('Le champ date d’envoi doit être une date postérieure à maintenant.');
     expect(errorMessage(new ApiError(422, null, '', {}), 'repli')).toBe('repli');
   });
+
+  it('errorMessage : un code nouveau affiche le message de l’API, quel que soit le statut', async () => {
+    const { ApiError } = await import('@/lib/api');
+    const { errorMessage } = await import('@/lib/bureau/messages');
+    for (const status of [403, 404, 409, 422, 500]) {
+      expect(errorMessage(new ApiError(status, 'code_neuf', 'Message rédigé par l’API.'), 'repli')).toBe(
+        'Message rédigé par l’API.',
+      );
+    }
+    // Un code connu garde son libellé (table gelée), un code sans message retombe sur le repli.
+    expect(errorMessage(new ApiError(422, 'nothing_due', 'Autre texte.'), 'repli')).toBe(
+      'Aucune cotisation n’est réclamée à ce membre pour le moment.',
+    );
+    expect(errorMessage(new ApiError(403, 'code_neuf', ''), 'repli')).toBe(
+      'Cette action n’est pas autorisée pour votre association.',
+    );
+    expect(errorMessage(new ApiError(403, null, 'x'), 'repli')).toBe(
+      'Cette action n’est pas autorisée pour votre association.',
+    );
+  });
 });
