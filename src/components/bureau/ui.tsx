@@ -1,6 +1,6 @@
 'use client';
 
-import { forwardRef, useId, type ReactNode } from 'react';
+import { forwardRef, useEffect, useId, type ReactNode } from 'react';
 
 /* ─────────────────────────────── Boutons ─────────────────────────────── */
 
@@ -251,4 +251,57 @@ export function Tabs<T extends string>({
       })}
     </div>
   );
+}
+
+/* ───────────────────── F5 — les gros boutons de la maquette ───────────────────── */
+
+export type BigTone = 'primary' | 'outline' | 'outline-indigo' | 'outline-red' | 'danger';
+
+const BIG: Record<BigTone, string> = {
+  primary: 'bg-indigo text-on-indigo! text-[17px]',
+  danger: 'bg-late text-on-indigo! text-[17px]',
+  outline: 'border border-line-strong bg-surface-raised text-ink! text-[16px]',
+  'outline-indigo': 'border-2 border-indigo bg-surface-raised text-indigo! text-[17px]',
+  'outline-red': 'border-2 border-late bg-surface-raised text-late! text-[17px]',
+};
+
+/**
+ * Un bouton de geste (maquette) : pleine largeur, 56 px de haut, un seul
+ * « principal » par écran (N2). Habille aussi des liens, d'où les `!`.
+ */
+export function bigButtonClass(tone: BigTone, extra = ''): string {
+  return `flex min-h-14 w-full items-center justify-center gap-2 rounded-[var(--radius-md)] px-4 py-2 text-center leading-[22px] font-semibold no-underline disabled:opacity-60 ${BIG[tone]} ${extra}`;
+}
+
+/** Un lien discret, souligné, de la couleur des liens. */
+export const LINK_BUTTON =
+  'bg-transparent p-[10px] text-[15px] font-semibold text-indigo! underline underline-offset-2 disabled:opacity-60';
+
+/** « RESTE À PAYER » : la petite étiquette en capitales de la maquette. */
+export function Label({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return <span className={`label uppercase ${className || 'text-ink-muted'}`}>{children}</span>;
+}
+
+/** Un message bref, en bas de l'écran, qui s'efface seul. */
+export function Toast({ message, onDone }: { message: string | null; onDone: () => void }) {
+  useToastTimer(message, onDone);
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className={`fixed bottom-[84px] left-1/2 z-50 max-w-[calc(100%-32px)] -translate-x-1/2 rounded-[var(--radius-md)] bg-ink px-4 py-3 text-[15px] text-on-indigo transition-opacity lg:bottom-6 print:hidden ${
+        message ? 'opacity-100' : 'pointer-events-none opacity-0'
+      }`}
+    >
+      {message}
+    </div>
+  );
+}
+
+function useToastTimer(message: string | null, onDone: () => void) {
+  useEffect(() => {
+    if (!message) return;
+    const timer = setTimeout(onDone, 4000);
+    return () => clearTimeout(timer);
+  }, [message, onDone]);
 }

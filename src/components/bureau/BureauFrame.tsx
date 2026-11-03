@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AlertIcon } from '@/components/Icons';
-import { getSettings, isSessionError, logout } from '@/lib/bureau/api';
+import { getMe, getSettings, isSessionError, listPayments, logout } from '@/lib/bureau/api';
 import { errorMessage } from '@/lib/bureau/messages';
 import {
   currentTenant,
@@ -14,48 +14,46 @@ import {
   subscribe,
   type BureauSession,
 } from '@/lib/bureau/session';
-import type { Settings } from '@/lib/bureau/types';
+import type { Me, Settings } from '@/lib/bureau/types';
 import {
   BureauContext,
   useBureau,
+  type BackLink,
   type BureauContextValue,
 } from './BureauContext';
-import {
-  CashIcon,
-  ChartIcon,
-  CloseIcon,
-  InboxIcon,
-  KeyIcon,
-  LogoutIcon,
-  MegaphoneIcon,
-  MenuIcon,
-  SendIcon,
-  SettingsIcon,
-  UsersIcon,
-} from './Icons';
-import { Button, buttonClass, Skeleton } from './ui';
+import { ChevronLeftIcon, LogoutIcon } from './Icons';
+import { Button, Skeleton } from './ui';
 
-/** « Encaisser » ouvre la navigation : c'est le geste le plus fréquent. */
-const ENCAISSER = { href: '/bureau/encaisser', label: 'Encaisser', icon: CashIcon } as const;
+/**
+ * F5 — quatre entrées, pas une de plus (N1). Tout ce qui sert rarement vit
+ * dans « Plus » : les écrans existent, ils sont seulement rangés là.
+ */
+export const VERIFY_PATH = '/bureau/a-verifier';
+export const RECORD_PATH = '/bureau/enregistrer';
+export const PLUS_PATH = '/bureau/plus';
 
-const NAV = [
-  ENCAISSER,
-  { href: '/bureau', label: 'Tableau de bord', icon: ChartIcon },
-  { href: '/bureau/a-valider', label: 'À valider', icon: InboxIcon },
-  { href: '/bureau/a-envoyer', label: 'À envoyer', icon: SendIcon },
-  { href: '/bureau/campagnes', label: 'Campagnes', icon: MegaphoneIcon },
-  { href: '/bureau/membres', label: 'Membres', icon: UsersIcon },
-  { href: '/bureau/reglages', label: 'Réglages', icon: SettingsIcon },
-] as const;
+type NavKey = 'home' | 'members' | 'verify' | 'plus';
+
+const NAV: ReadonlyArray<{ key: NavKey; href: string; label: string; long: string }> = [
+  { key: 'home', href: '/bureau', label: 'Accueil', long: 'Accueil' },
+  { key: 'members', href: '/bureau/membres', label: 'Membres', long: 'Membres' },
+  { key: 'verify', href: VERIFY_PATH, label: 'Paiements', long: 'Paiements à vérifier' },
+  { key: 'plus', href: PLUS_PATH, label: 'Plus', long: 'Plus' },
+];
 
 const LOGIN_PATH = '/bureau/connexion';
 
-/** « Mon mot de passe » (S3e) : depuis le bloc « Connecté », et depuis Réglages. */
+/** « Mon mot de passe » (S3e), rangé dans « Plus ». */
 export const PASSWORD_PATH = '/bureau/mon-mot-de-passe';
 
-function isActive(pathname: string, href: string): boolean {
-  if (href === '/bureau') return pathname === '/bureau';
-  return pathname === href || pathname.startsWith(`${href}/`);
+/** L'entrée de la navigation à laquelle appartient une page. */
+export function navKey(pathname: string): NavKey {
+  if (pathname === '/bureau' || pathname.startsWith(RECORD_PATH)) return 'home';
+  if (pathname.startsWith('/bureau/membres')) return 'members';
+  if (pathname.startsWith(VERIFY_PATH) || pathname.startsWith('/bureau/a-valider')) {
+    return 'verify';
+  }
+  return 'plus';
 }
 
 type FrameState =
@@ -79,6 +77,10 @@ export function BureauFrame({ children }: { children: ReactNode }) {
   return <GuardedFrame pathname={pathname}>{children}</GuardedFrame>;
 }
 
+function isAbort(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError';
+}
+
 function GuardedFrame({
   pathname,
   children,
@@ -89,6 +91,10 @@ function GuardedFrame({
   const [state, setState] = useState<FrameState>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
   const [modeFlag, setModeFlag] = useState(true);
+  const [me, setMe] = useState<Me | null>(null);
+  const [toVerify, setToVerify] = useState<number | null>(null);
+  const [countTick, setCountTick] = useState(0);
+  const [back, setBack] = useState<BackLink | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -105,7 +111,7 @@ function GuardedFrame({
         const settings = await getSettings(controller.signal);
         setState({ kind: 'ready', session, settings });
       } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') return;
+        if (isAbort(error)) return;
         if (isSessionError(error)) return;
         setState({
           kind: 'error',
@@ -119,6 +125,34 @@ function GuardedFrame({
 
     return () => controller.abort();
   }, [attempt]);
+
+  const ready = state.kind === 'ready';
+
+  // « Connecté·e : nom, rôle » — lu par `GET admin/me` (§18.7). Sans réponse,
+  // l'en-tête garde le nom de la connexion : il ne bloque rien.
+  useEffect(() => {
+    if (!ready) return;
+    const controller = new AbortController();
+    getMe(controller.signal)
+      .then(setMe)
+      .catch(() => {
+        // Le nom de la session suffit à dire qui est connecté.
+      });
+    return () => controller.abort();
+  }, [ready]);
+
+  // Le nombre à vérifier, sur l'entrée « Paiements » : relu à chaque page, et
+  // après chaque décision (`refreshToVerify`).
+  useEffect(() => {
+    if (!ready) return;
+    const controller = new AbortController();
+    listPayments({ status: 'declared' }, controller.signal)
+      .then((list) => setToVerify(list.length))
+      .catch(() => {
+        // Sans compteur, l'entrée reste là : seul le chiffre manque.
+      });
+    return () => controller.abort();
+  }, [ready, pathname, countTick]);
 
   // Une purge venue d'ailleurs (déconnexion, 401) ferme le cadre aussitôt :
   // aucune donnée ne reste affichée sans session.
@@ -135,6 +169,7 @@ function GuardedFrame({
     setState((prev) => (prev.kind === 'ready' ? { ...prev, settings } : prev));
   }, []);
   const markModeUnsupported = useCallback(() => setModeFlag(false), []);
+  const refreshToVerify = useCallback(() => setCountTick((n) => n + 1), []);
 
   const value = useMemo<BureauContextValue | null>(() => {
     if (state.kind !== 'ready') return null;
@@ -144,8 +179,13 @@ function GuardedFrame({
       setSettings,
       modeSupported: state.settings.mode_is_supported && modeFlag,
       markModeUnsupported,
+      me,
+      setMe,
+      toVerify,
+      refreshToVerify,
+      setBack,
     };
-  }, [state, setSettings, modeFlag, markModeUnsupported]);
+  }, [state, setSettings, modeFlag, markModeUnsupported, me, toVerify, refreshToVerify]);
 
   if (state.kind === 'error') {
     return (
@@ -170,16 +210,23 @@ function GuardedFrame({
     );
   }
 
+  const active = navKey(pathname);
+
   return (
     <BureauContext.Provider value={value}>
       <div className="flex min-h-dvh bg-surface text-ink">
-        <Sidebar pathname={pathname} />
+        <Sidebar active={active} />
         <div className="flex min-w-0 grow flex-col">
-          <TopBar pathname={pathname} />
+          {back ? <BackBar back={back} /> : <TopBar />}
           {value.modeSupported ? null : <ModeBanner />}
-          <main className="mx-auto flex w-full max-w-[1120px] min-w-0 grow flex-col gap-4 px-4 pt-4 pb-10 lg:px-8 lg:pt-8">
+          <main
+            className={`mx-auto flex w-full max-w-[1040px] min-w-0 grow flex-col gap-4 px-4 pt-[18px] lg:px-10 lg:pt-8 lg:pb-12 print:max-w-none print:p-0 ${
+              back ? 'pb-10' : 'pb-24'
+            }`}
+          >
             {children}
           </main>
+          {back ? null : <TabBar active={active} />}
         </div>
       </div>
     </BureauContext.Provider>
@@ -194,12 +241,24 @@ function ModeBanner() {
   return (
     <div
       role="alert"
-      className="border-b border-due bg-due-soft px-4 py-3 font-semibold text-due lg:px-8"
+      className="border-b border-due bg-due-soft px-4 py-3 font-semibold text-due lg:px-10 print:hidden"
     >
       Le mode de cotisation de votre association n’est pas encore pris en
       charge. Contactez DIGISSOL.
     </div>
   );
+}
+
+/** Le nom de l'association : jamais coupé (N1), il passe à la ligne. */
+function associationName(settings: Settings): string {
+  return settings.issuer_name?.trim() || 'Espace du bureau';
+}
+
+/** « Fatim Diarra, Trésorière » : le nom et le rôle, composés par le serveur. */
+export function whoLine(me: Me | null, session: BureauSession): string {
+  const name = me?.name?.trim() || session.admin.name;
+  const role = me?.role_label?.trim();
+  return role ? `${name}, ${role}` : name;
 }
 
 function Logo({ settings, size }: { settings: Settings; size: number }) {
@@ -218,153 +277,132 @@ function Logo({ settings, size }: { settings: Settings; size: number }) {
   );
 }
 
-function Sidebar({ pathname }: { pathname: string }) {
-  const { settings, session } = useBureau();
+function CountBadge({ count }: { count: number | null }) {
+  if (!count) return null;
+  return (
+    <span
+      className="inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-[var(--radius-pill)] bg-indigo px-[6px] text-[12px] font-bold text-on-indigo"
+      data-testid="verify-count"
+    >
+      {count}
+    </span>
+  );
+}
+
+/** Ordinateur (1024 px et plus) : la barre `ink` de 248 px de la maquette. */
+function Sidebar({ active }: { active: NavKey }) {
+  const { settings, session, me, toVerify } = useBureau();
 
   return (
-    <aside className="sticky top-0 hidden h-dvh w-[248px] shrink-0 flex-col gap-6 bg-ink px-3 py-5 text-[var(--sidebar-text)] lg:flex">
-      <div className="flex items-center gap-3 px-2">
+    <aside className="sticky top-0 hidden h-dvh w-[248px] shrink-0 flex-col bg-ink py-6 lg:flex print:hidden">
+      <div className="flex flex-col gap-1 border-b border-[var(--sidebar-text)]/20 px-5 pb-5">
         <Logo settings={settings} size={40} />
-        <span className="heading min-w-0 break-words text-on-indigo">
-          {settings.issuer_name?.trim() || 'Espace du bureau'}
+        <span className="text-[18px] leading-6 font-bold break-words text-on-indigo">
+          {associationName(settings)}
+        </span>
+        <span className="small break-words text-[var(--sidebar-text)]">
+          {whoLine(me, session)}
         </span>
       </div>
 
-      <nav aria-label="Espace du bureau" className="flex flex-col gap-1">
-        {NAV.map(({ href, label, icon: Icon }) => {
-          const active = isActive(pathname, href);
-          if (href === ENCAISSER.href) {
-            return (
-              <Link
-                key={href}
-                href={href}
-                aria-current={active ? 'page' : undefined}
-                className="mb-3 flex min-h-12 items-center justify-center gap-2 rounded-[var(--radius-md)] bg-surface-raised px-3 text-[17px] font-bold text-indigo! no-underline"
-              >
-                <Icon />
-                {label}
-              </Link>
-            );
-          }
+      <nav aria-label="Espace du bureau" className="flex flex-col pt-3">
+        {NAV.map(({ key, href, long }) => {
+          const on = key === active;
           return (
             <Link
-              key={href}
+              key={key}
               href={href}
-              aria-current={active ? 'page' : undefined}
-              className={`flex min-h-11 items-center gap-3 rounded-[var(--radius-sm)] px-3 font-semibold no-underline ${
-                // `!` : la règle globale `a { color }` de F1 est hors @layer.
-                active
-                  ? 'bg-indigo text-on-indigo!'
-                  : 'text-[var(--sidebar-text)]! hover:bg-indigo/40'
+              aria-current={on ? 'page' : undefined}
+              // `!` : la règle globale `a { color }` de F1 est hors @layer.
+              className={`flex h-12 items-center justify-between border-l-[3px] no-underline ${
+                on
+                  ? 'border-indigo bg-indigo/30 pr-5 pl-[17px] font-semibold text-on-indigo!'
+                  : 'border-transparent px-5 text-[var(--sidebar-text)]!'
               }`}
             >
-              <Icon />
-              {label}
+              {long}
+              {key === 'verify' ? <CountBadge count={toVerify} /> : null}
             </Link>
           );
         })}
       </nav>
-
-      <div className="grow" />
-
-      <div className="flex flex-col gap-2 border-t border-[var(--sidebar-text)]/20 px-2 pt-4">
-        <span className="small">Connecté :</span>
-        <span className="font-semibold break-words text-on-indigo">
-          {session.admin.name}
-        </span>
-        <PasswordLink pathname={pathname} />
-        <LogoutButton className="justify-start px-0 text-[var(--sidebar-text)]" />
-      </div>
     </aside>
   );
 }
 
-function TopBar({ pathname }: { pathname: string }) {
-  const { settings, session } = useBureau();
-  const [open, setOpen] = useState(false);
-
-  // Le menu se referme à chaque changement de page.
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
-
+/** Téléphone : le sigle (ici le nom) et « Connecté·e : nom, rôle ». */
+function TopBar() {
+  const { settings, session, me } = useBureau();
   return (
-    <header className="sticky top-0 z-40 border-b border-line bg-surface-raised lg:hidden">
-      <div className="flex min-h-14 items-center gap-3 px-4">
-        <Logo settings={settings} size={32} />
-        <span className="heading min-w-0 grow truncate">
-          {settings.issuer_name?.trim() || 'Espace du bureau'}
-        </span>
-        {/* Toujours visible, hors du menu : le geste le plus fréquent. */}
-        <Link
-          href={ENCAISSER.href}
-          aria-current={isActive(pathname, ENCAISSER.href) ? 'page' : undefined}
-          className={buttonClass('primary', 'shrink-0 px-3 no-underline')}
-        >
-          <CashIcon size={18} />
-          Encaisser
-        </Link>
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={open}
-          aria-controls="bureau-menu"
-          aria-label={open ? 'Fermer le menu' : 'Ouvrir le menu'}
-          className="flex size-11 shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-ink"
-        >
-          {open ? <CloseIcon /> : <MenuIcon />}
-        </button>
+    <header className="bg-ink px-4 pt-[14px] pb-3 lg:hidden print:hidden">
+      <div className="text-[18px] leading-6 font-bold break-words text-on-indigo">
+        {associationName(settings)}
       </div>
-
-      {open ? (
-        <div id="bureau-menu" className="flex flex-col gap-1 border-t border-line bg-ink px-3 py-3 text-[var(--sidebar-text)]">
-          <nav aria-label="Espace du bureau" className="flex flex-col gap-1">
-            {NAV.filter((item) => item.href !== ENCAISSER.href).map(({ href, label, icon: Icon }) => {
-              const active = isActive(pathname, href);
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  aria-current={active ? 'page' : undefined}
-                  onClick={() => setOpen(false)}
-                  className={`flex min-h-12 items-center gap-3 rounded-[var(--radius-sm)] px-3 font-semibold no-underline ${
-                    active ? 'bg-indigo text-on-indigo!' : 'text-[var(--sidebar-text)]!'
-                  }`}
-                >
-                  <Icon />
-                  {label}
-                </Link>
-              );
-            })}
-          </nav>
-          <div className="mt-2 flex flex-col items-start gap-1 border-t border-[var(--sidebar-text)]/20 px-3 pt-3">
-            <span className="small min-w-0 break-words">
-              Connecté : <span className="font-semibold text-on-indigo">{session.admin.name}</span>
-            </span>
-            <PasswordLink pathname={pathname} onNavigate={() => setOpen(false)} />
-            <LogoutButton className="px-0 text-[var(--sidebar-text)]" />
-          </div>
-        </div>
-      ) : null}
+      <div className="small break-words text-[var(--sidebar-text)]">
+        Connecté·e : {whoLine(me, session)}
+      </div>
     </header>
   );
 }
 
-function PasswordLink({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
+/** Un écran d'un geste : « Retour », et ni en-tête ni barre du bas. */
+function BackBar({ back }: { back: BackLink }) {
   return (
-    <Link
-      href={PASSWORD_PATH}
-      onClick={onNavigate}
-      aria-current={isActive(pathname, PASSWORD_PATH) ? 'page' : undefined}
-      className="inline-flex min-h-11 items-center gap-2 font-semibold text-[var(--sidebar-text)]! no-underline hover:underline aria-[current=page]:text-on-indigo!"
-    >
-      <KeyIcon />
-      Changer mon mot de passe
-    </Link>
+    <div className="sticky top-0 z-30 flex h-14 items-center border-b border-line bg-surface-raised px-2 print:hidden">
+      {back.onClick ? (
+        <button
+          type="button"
+          onClick={back.onClick}
+          className="inline-flex h-11 items-center gap-[6px] bg-transparent px-2 font-semibold text-indigo"
+        >
+          <ChevronLeftIcon size={20} />
+          {back.label}
+        </button>
+      ) : (
+        <Link
+          href={back.href}
+          className="inline-flex h-11 items-center gap-[6px] px-2 font-semibold text-indigo! no-underline"
+        >
+          <ChevronLeftIcon size={20} />
+          {back.label}
+        </Link>
+      )}
+    </div>
   );
 }
 
-function LogoutButton({ className = '' }: { className?: string }) {
+/** Téléphone : la barre du bas, quatre entrées, le nombre à vérifier. */
+function TabBar({ active }: { active: NavKey }) {
+  const { toVerify } = useBureau();
+  return (
+    <nav
+      aria-label="Navigation"
+      className="fixed inset-x-0 bottom-0 z-30 grid h-16 grid-cols-4 border-t border-line bg-surface-raised pb-[env(safe-area-inset-bottom)] lg:hidden print:hidden"
+    >
+      {NAV.map(({ key, href, label }) => {
+        const on = key === active;
+        return (
+          <Link
+            key={key}
+            href={href}
+            aria-current={on ? 'page' : undefined}
+            className={`small flex items-center justify-center gap-[6px] border-t-[3px] no-underline ${
+              on
+                ? 'border-indigo font-bold text-indigo!'
+                : 'border-transparent text-ink-muted!'
+            }`}
+          >
+            {label}
+            {key === 'verify' ? <CountBadge count={toVerify} /> : null}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+/** « Se déconnecter » : dans « Plus ». La purge locale a lieu quoi qu'il arrive. */
+export function LogoutButton({ className = '' }: { className?: string }) {
   const [busy, setBusy] = useState(false);
 
   async function onClick() {

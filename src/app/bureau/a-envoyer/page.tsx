@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useBureau } from '@/components/bureau/BureauContext';
+import { useBackBar, useBureau } from '@/components/bureau/BureauContext';
 import { CopyAction } from '@/components/bureau/CopyAction';
 import { ChatIcon } from '@/components/bureau/Icons';
 import {
@@ -78,6 +78,7 @@ export function reasonLabel(
  * - l'ordre est celui du serveur, jamais retrié.
  */
 export default function AEnvoyerPage() {
+  useBackBar({ href: '/bureau/plus', label: 'Plus' });
   const { settings } = useBureau();
   const zone = safeTimeZone(settings.timezone);
   const [load, setLoad] = useState<Load>({ kind: 'loading' });

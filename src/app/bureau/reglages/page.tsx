@@ -1,11 +1,8 @@
 'use client';
 
-import Link from 'next/link';
 import { useId, useRef, useState } from 'react';
 import { ApiError, fieldMessages } from '@/lib/api';
-import { useBureau } from '@/components/bureau/BureauContext';
-import { PASSWORD_PATH } from '@/components/bureau/BureauFrame';
-import { CategoriesPanel } from '@/components/bureau/CategoriesPanel';
+import { useBackBar, useBureau } from '@/components/bureau/BureauContext';
 import { ConfirmDialog } from '@/components/bureau/ConfirmDialog';
 import { UploadIcon } from '@/components/Icons';
 import {
@@ -22,6 +19,7 @@ import {
   deleteLogo,
   isSessionError,
   setArrearsPolicy,
+  setVerificationDigest,
   setWeeklyReport,
   updateSettings,
   uploadLogo,
@@ -38,78 +36,83 @@ const MAX_INSTRUCTIONS = 5000;
 const MAX_LOGO_BYTES = 2 * 1024 * 1024;
 const LOGO_TYPES = ['image/jpeg', 'image/png'];
 
-/** B11 — les réglages de l'association. */
+/**
+ * B11 — « Paramètres de l'association », rangés dans « Plus » (F5). Les types
+ * de membres ont leur écran ; le mot de passe aussi.
+ */
 export default function ReglagesPage() {
+  useBackBar({ href: '/bureau/plus', label: 'Plus' });
   return (
     <>
-      <PageTitle title="Réglages" />
+      <PageTitle title="Paramètres de l’association" />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
         <AssociationPanel />
         <div className="flex flex-col gap-4">
           <LogoPanel />
-          <WeeklyReportPanel />
+          <EmailsPanel />
           <ModePanel />
           <ArrearsPanel />
-          <PasswordPanel />
         </div>
       </div>
-      <CategoriesPanel />
     </>
   );
 }
 
-/** « Mon mot de passe » : le même écran que depuis le bloc « Connecté ». */
-function PasswordPanel() {
-  return (
-    <Panel title="Mon mot de passe">
-      <p className="m-0 text-ink-muted">
-        Choisissez un mot de passe facile à retenir et à taper sur votre téléphone.
-      </p>
-      <Link href={PASSWORD_PATH} className={buttonClass('secondary', 'self-start no-underline')}>
-        Changer mon mot de passe
-      </Link>
-    </Panel>
-  );
-}
-
 /**
- * Le rapport du lundi (§10) : c'est le SEUL moyen de l'arrêter — ses e-mails
- * n'ont aucun lien de désabonnement, à dessein. La case s'enregistre d'un
- * toucher ; la charge renvoyée fait foi.
+ * Les deux messages du bureau, deux cases (§18.6) : le résumé du lundi (§10) —
+ * c'est le SEUL moyen de l'arrêter, ses e-mails n'ont aucun lien de
+ * désabonnement —, et l'e-mail du matin, qui ne part que s'il y a des
+ * paiements à vérifier. Chaque case s'enregistre d'un toucher ; la charge
+ * renvoyée fait foi.
  */
-function WeeklyReportPanel() {
+function EmailsPanel() {
   const { settings, setSettings } = useBureau();
-  const enabled = settings.weekly_report_enabled ?? true;
-  const [busy, setBusy] = useState(false);
+  const weekly = settings.weekly_report_enabled ?? true;
+  const digest = settings.verification_digest_enabled ?? true;
+  const [busy, setBusy] = useState<'weekly' | 'digest' | null>(null);
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
 
-  async function toggle(next: boolean) {
+  async function toggle(which: 'weekly' | 'digest', next: boolean) {
     if (busy) return;
-    setBusy(true);
+    setBusy(which);
     setStatus(null);
     try {
-      const updated = await setWeeklyReport(next);
+      const updated =
+        which === 'weekly' ? await setWeeklyReport(next) : await setVerificationDigest(next);
       setSettings(updated);
       setStatus({ ok: true, text: 'Enregistré.' });
     } catch (cause) {
       if (isSessionError(cause)) return;
       setStatus({ ok: false, text: errorMessage(cause, 'Le réglage n’a pas pu être enregistré.') });
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
   return (
-    <Panel title="Rapport hebdomadaire">
+    <Panel title="Messages par e-mail">
       <label className="flex min-h-11 cursor-pointer items-start gap-3">
         <input
           type="checkbox"
-          checked={enabled}
-          disabled={busy}
-          onChange={(e) => void toggle(e.target.checked)}
+          checked={weekly}
+          disabled={busy !== null}
+          onChange={(e) => void toggle('weekly', e.target.checked)}
           className="mt-[3px] size-5 shrink-0 accent-[var(--indigo)]"
         />
-        <span>Recevoir chaque lundi le rapport par e-mail (président et trésorier)</span>
+        <span>Résumé par e-mail chaque lundi (président et trésorier)</span>
+      </label>
+      <label className="flex min-h-11 cursor-pointer items-start gap-3">
+        <input
+          type="checkbox"
+          checked={digest}
+          disabled={busy !== null}
+          onChange={(e) => void toggle('digest', e.target.checked)}
+          className="mt-[3px] size-5 shrink-0 accent-[var(--indigo)]"
+        />
+        <span>
+          Un e-mail le matin quand des membres disent avoir payé : la liste des
+          paiements à vérifier (rien les autres jours)
+        </span>
       </label>
       {status ? (
         <span
@@ -455,7 +458,7 @@ function ArrearsPanel() {
         >
           <p className="m-0 font-semibold">{chosen.label}</p>
           <p className="m-0" data-testid="arrears-recap">
-            Les montants à encaisser et les relances vont changer. Rien n’est
+            Les montants à recevoir et les relances vont changer. Rien n’est
             effacé ; vous pourrez revenir en arrière à tout moment.
           </p>
         </ConfirmDialog>

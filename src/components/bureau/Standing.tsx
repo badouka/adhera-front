@@ -23,7 +23,7 @@ export function upToDateWithArrears(member: MemberListItem): boolean {
 
 /** La pastille de situation d'un membre, selon son statut puis sa cotisation. */
 export function StandingPastille({ member }: { member: MemberListItem }) {
-  if (member.status === 'pending') return <Pastille tone="info">Candidature</Pastille>;
+  if (member.status === 'pending') return <Pastille tone="info">Demande d’adhésion</Pastille>;
   if (member.status === 'former') return <Pastille tone="due">Ancien membre</Pastille>;
   if (upToDateWithArrears(member)) return <Pastille tone="due">Arriérés à régler</Pastille>;
   if (member.is_up_to_date) {
@@ -33,7 +33,7 @@ export function StandingPastille({ member }: { member: MemberListItem }) {
       </Pastille>
     );
   }
-  return <Pastille tone="late">Pas à jour</Pastille>;
+  return <Pastille tone="late">En retard</Pastille>;
 }
 
 /** « À jour pour l'année en cours — arriérés : 500 000 FCFA ». */
@@ -47,23 +47,23 @@ export function ArrearsLine({ member }: { member: MemberListItem }) {
 }
 
 /**
- * « Couvert jusqu'au … » pour un membre à jour, « Reste à payer … » sinon.
+ * « À jour jusqu'au … » pour un membre à jour, « Reste à payer … » sinon.
  * Un ancien membre : sa couverture seulement, jamais de reste à payer.
  *
  * ⚠️ `balance_due_formatted: null` veut dire INCONNU, jamais « rien à payer »
  * (piège 4) : on affiche « — », jamais « 0 FCFA ».
  */
 export function standingDetail(member: MemberListItem): ReactNode {
-  if (member.status === 'pending') return 'Candidature en attente';
+  if (member.status === 'pending') return 'Demande en attente';
   // Rien n'est réclamé à un ancien membre : jamais « Reste à payer ».
   if (member.status === 'former') {
     const until = formatDate(member.covered_until);
-    return until ? `Couvert jusqu’au ${until}` : '—';
+    return until ? `À jour jusqu’au ${until}` : '—';
   }
   if (upToDateWithArrears(member)) return <ArrearsLine member={member} />;
   if (member.is_up_to_date) {
     const until = formatDate(member.covered_until);
-    return until ? `Couvert jusqu’au ${until}` : 'À jour';
+    return until ? `À jour jusqu’au ${until}` : 'À jour';
   }
   return (
     <>

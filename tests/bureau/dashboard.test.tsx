@@ -6,7 +6,7 @@
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import TableauDeBordPage, { rateCountLabel, rateLabel } from '@/app/bureau/page';
+import TableauDeBordPage, { rateCountLabel, rateLabel } from '@/app/bureau/chiffres/page';
 import { resetSessionCache, saveSession } from '@/lib/bureau/session';
 import { calls, dashboard, fakeResponse, fakeServer, renderInBureau, SESSION } from './fixtures';
 
@@ -37,13 +37,13 @@ function dashboardUrls(fetchMock: ReturnType<typeof fakeServer>) {
 }
 
 describe('Tableau de bord — les chiffres', () => {
-  it('« signalé » n’est JAMAIS additionné à « encaissé »', async () => {
+  it('« signalé » n’est JAMAIS additionné à « reçu »', async () => {
     fakeServer([{ match: 'membership/dashboard', body: dashboard() }]);
     renderInBureau(<TableauDeBordPage />);
 
     expect(await screen.findByTestId('collected')).toHaveTextContent('350 000 FCFA');
     const declared = screen.getByTestId('declared');
-    expect(declared).toHaveTextContent('Signalé par les membres, en attente de validation');
+    expect(declared).toHaveTextContent('Signalé par les membres, en attente de vérification');
     expect(declared).toHaveTextContent('50 000 FCFA');
     expect(declared).toHaveTextContent('1 paiement');
     // 350 000 + 50 000 n'apparaît nulle part.
@@ -96,8 +96,8 @@ describe('Tableau de bord — les chiffres', () => {
     renderInBureau(<TableauDeBordPage />);
     expect(await screen.findByTestId('rate')).toHaveTextContent('60 %');
     expect(screen.getByText('Membres actifs').nextSibling).toHaveTextContent('5');
-    expect(screen.getByText('Pas à jour').nextSibling).toHaveTextContent('2');
-    expect(screen.getByText('Candidatures').nextSibling).toHaveTextContent('1');
+    expect(screen.getByText('En retard').nextSibling).toHaveTextContent('2');
+    expect(screen.getByText('Demandes d’adhésion').nextSibling).toHaveTextContent('1');
     expect(screen.getByTestId('upcoming')).toHaveTextContent('2 échéances dans les 30 prochains jours.');
 
     const methods = screen.getByRole('heading', { name: 'Par moyen de paiement' }).closest('section') as HTMLElement;
@@ -109,7 +109,7 @@ describe('Tableau de bord — les chiffres', () => {
       'Chèque0 FCFA',
       'Espèces100 000 FCFA',
     ]);
-    const cats = screen.getByRole('heading', { name: 'Par catégorie' }).closest('section') as HTMLElement;
+    const cats = screen.getByRole('heading', { name: 'Par type de membre' }).closest('section') as HTMLElement;
     expect(within(cats).getByText('Sans catégorie')).toBeInTheDocument();
   });
 
@@ -119,7 +119,7 @@ describe('Tableau de bord — les chiffres', () => {
     fakeServer([{ match: 'membership/dashboard', body: d }]);
     renderInBureau(<TableauDeBordPage />);
     expect(await screen.findByTestId('unknown')).toHaveTextContent(
-      /Total partiel : 2 membres au montant inconnu .* n’est pas comptée dans le reste à encaisser/,
+      /Total partiel : 2 membres au montant inconnu .* n’est pas comptée dans le reste à recevoir/,
     );
   });
 
@@ -174,9 +174,9 @@ describe('Tableau de bord — le libellé du graphique pour un lecteur d’écra
     renderInBureau(<TableauDeBordPage />);
     await screen.findAllByTestId('bar');
     // Toujours accessible, sous son nom.
-    const table = screen.getByRole('table', { name: 'Encaissé par mois' });
+    const table = screen.getByRole('table', { name: 'Reçu par mois' });
     const caption = table.querySelector('caption') as Element;
-    expect(caption).toHaveTextContent('Encaissé par mois');
+    expect(caption).toHaveTextContent('Reçu par mois');
     expect(hiddenFromSight(caption)).toBe(true);
     expect(hiddenFromSight(table)).toBe(true);
     expect(table).not.toHaveClass('sr-only');
@@ -190,7 +190,7 @@ describe('Tableau de bord — le libellé du graphique pour un lecteur d’écra
   it('contre-épreuve : un <table class="sr-only"> laisserait son <caption> visible', () => {
     render(
       <table className="sr-only">
-        <caption>Encaissé par mois</caption>
+        <caption>Reçu par mois</caption>
         <tbody>
           <tr>
             <td>0 FCFA</td>
@@ -198,22 +198,18 @@ describe('Tableau de bord — le libellé du graphique pour un lecteur d’écra
         </tbody>
       </table>,
     );
-    expect(hiddenFromSight(screen.getByText('Encaissé par mois'))).toBe(false);
+    expect(hiddenFromSight(screen.getByText('Reçu par mois'))).toBe(false);
   });
 });
 
-describe('Tableau de bord — les trois boutons', () => {
-  it('« Encaisser », « À valider (n) », « À envoyer (n) » ; un zéro reste visible, grisé', async () => {
+describe('Chiffres détaillés — rangés dans « Plus » (F5)', () => {
+  it('plus aucun « Encaisser » ni compteur de gestes : ils vivent sur l’accueil (N2)', async () => {
     fakeServer([{ match: 'membership/dashboard', body: dashboard() }]);
     renderInBureau(<TableauDeBordPage />);
-    const actions = screen.getByRole('navigation', { name: 'Actions' });
-    expect(within(actions).getByRole('link', { name: 'Encaisser' })).toHaveAttribute('href', '/bureau/encaisser');
-    const toValidate = await within(actions).findByRole('link', { name: 'À valider (1)' });
-    expect(toValidate).toHaveAttribute('href', '/bureau/a-valider');
-    expect(toValidate).not.toHaveAttribute('data-idle');
-    const toSend = within(actions).getByRole('link', { name: 'À envoyer (0)' });
-    expect(toSend).toHaveAttribute('href', '/bureau/a-envoyer');
-    expect(toSend).toHaveAttribute('data-idle', 'true');
+    await screen.findByTestId('collected');
+    expect(screen.getByRole('heading', { name: 'Chiffres détaillés et fichiers Excel' })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Actions' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Encaisser/ })).not.toBeInTheDocument();
   });
 });
 
@@ -287,7 +283,7 @@ describe('Tableau de bord — les exports', () => {
     await screen.findByTestId('collected');
 
     await user.click(screen.getByRole('button', { name: 'Registre des membres (Excel)' }));
-    await user.click(screen.getByRole('button', { name: 'Versements de la période (Excel)' }));
+    await user.click(screen.getByRole('button', { name: 'Paiements de la période (Excel)' }));
     await waitFor(() => expect(click).toHaveBeenCalledTimes(2));
 
     const exports = calls(fetchMock).filter((c) => c.url.includes('/exports/'));
@@ -309,7 +305,7 @@ describe('Tableau de bord — les exports', () => {
     const user = userEvent.setup();
     renderInBureau(<TableauDeBordPage />);
     await screen.findByTestId('collected');
-    await user.click(screen.getByRole('button', { name: 'Versements de la période (Excel)' }));
+    await user.click(screen.getByRole('button', { name: 'Paiements de la période (Excel)' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Les dates de la période ne sont pas valides.');
   });
 
@@ -333,11 +329,11 @@ describe('Tableau de bord — les exports', () => {
     renderInBureau(<TableauDeBordPage />);
     await screen.findByTestId('collected');
     await user.click(screen.getByRole('button', { name: 'Registre des membres (Excel)' }));
-    await user.click(screen.getByRole('button', { name: 'Versements de la période (Excel)' }));
+    await user.click(screen.getByRole('button', { name: 'Paiements de la période (Excel)' }));
     await waitFor(() => expect(names).toHaveLength(2));
     expect(names).toEqual([
       'registre-association-f31-2026-11-01.xlsx',
-      'versements-2026-01-01_2026-11-01.xlsx',
+      'paiements-2026-01-01_2026-11-01.xlsx',
     ]);
   });
 

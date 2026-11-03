@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useBackBar } from '@/components/bureau/BureauContext';
 import { PasswordField } from '@/components/bureau/PasswordField';
 import { buttonClass, Notice, PageTitle, Panel } from '@/components/bureau/ui';
 import { ApiError } from '@/lib/api';
@@ -45,6 +46,7 @@ export const PASSWORD_HINT =
  * autres sont révoqués (§14.1).
  */
 export default function MonMotDePassePage() {
+  useBackBar({ href: '/bureau/plus', label: 'Plus' });
   const [values, setValues] = useState<PasswordChange>(EMPTY);
   const [errors, setErrors] = useState<Partial<Record<FieldName, string>>>({});
   const [formError, setFormError] = useState<string | null>(null);

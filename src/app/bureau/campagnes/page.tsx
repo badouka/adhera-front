@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useId, useState } from 'react';
-import { useBureau } from '@/components/bureau/BureauContext';
+import { useBackBar, useBureau } from '@/components/bureau/BureauContext';
 import { ConfirmDialog } from '@/components/bureau/ConfirmDialog';
 import { PlusIcon, SendIcon } from '@/components/bureau/Icons';
 import {
@@ -42,7 +42,7 @@ import {
 const SEGMENTS: ReadonlyArray<{ value: CampaignSegment; label: string; recap: string }> = [
   {
     value: 'non_a_jour',
-    label: 'Les membres qui ne sont pas à jour',
+    label: 'Les membres en retard',
     recap: 'les membres non à jour',
   },
   { value: 'tous_actifs', label: 'Tous les membres actifs', recap: 'tous les membres actifs' },
@@ -118,6 +118,7 @@ type Banner = { tone: 'paid' | 'info' | 'late'; text: string };
  * `422 campaign_already_sent` : on recharge la liste (piège 30).
  */
 export default function CampagnesPage() {
+  useBackBar({ href: '/bureau/plus', label: 'Plus' });
   const { settings } = useBureau();
   const zone = safeTimeZone(settings.timezone);
   const [load, setLoad] = useState<Load>({ kind: 'loading' });

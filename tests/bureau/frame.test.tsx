@@ -7,9 +7,11 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ConnexionPage from '@/app/bureau/connexion/page';
+import PlusPage from '@/app/bureau/plus/page';
+import { useBackBar } from '@/components/bureau/BureauContext';
 import { BureauFrame } from '@/components/bureau/BureauFrame';
 import { getSession, navigation, resetSessionCache, saveSession } from '@/lib/bureau/session';
-import { calls, fakeServer, SESSION, settings } from './fixtures';
+import { calls, fakeServer, ME, SESSION, settings } from './fixtures';
 
 const nav = vi.hoisted(() => ({
   pathname: '/bureau',
@@ -56,64 +58,113 @@ describe('le cadre du bureau', () => {
     expect(screen.queryByText('contenu protégé')).not.toBeInTheDocument();
   });
 
-  it('en-tête : nom et logo de l’association, personne connectée, déconnexion', async () => {
+  it('en-tête : le nom de l’association, jamais coupé, et « Connecté·e : nom, rôle » lu par GET admin/me', async () => {
     saveSession(SESSION);
-    fakeServer([{ match: 'membership/settings', body: settings() }]);
+    const fetchMock = fakeServer([
+      { match: 'membership/settings', body: settings({ issuer_name: 'Association des techniciens supérieurs en anesthésie-réanimation du Sénégal' }) },
+      { match: /^me$/, body: ME },
+      { match: 'membership/payments', body: [] },
+    ]);
     const { container } = render(<BureauFrame>contenu protégé</BureauFrame>);
 
     await screen.findByText('contenu protégé');
-    expect(screen.getAllByText('Association Démo').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Trésorier Démo').length).toBeGreaterThan(0);
-    const logo = container.querySelector('img') as HTMLImageElement;
+    const header = container.querySelector('header') as HTMLElement;
+    await within(header).findByText('Connecté·e : Fatim Diarra, Trésorière');
+    const name = within(header).getByText(
+      'Association des techniciens supérieurs en anesthésie-réanimation du Sénégal',
+    );
+    expect(name.className).toContain('break-words');
+    expect(name.className).not.toContain('truncate');
+    expect(calls(fetchMock).some((c) => c.url === 'https://api.eventflow.africa/api/v1/admin/me')).toBe(true);
+    const logo = container.querySelector('aside img') as HTMLImageElement;
     expect(logo.src).toBe(
       'https://api.eventflow.africa/storage-tenantdemo-asso/membership/logo-e40fd0e4.png',
     );
-    expect(screen.getAllByRole('button', { name: 'Se déconnecter' }).length).toBeGreaterThan(0);
     // Pas de bannière quand le mode est pris en charge.
     expect(screen.queryByText(/pas encore pris en charge/)).not.toBeInTheDocument();
   });
 
-  it('« Encaisser » : en tête de la navigation, et visible hors du menu mobile', async () => {
+  it('GET admin/me en échec : le nom de la connexion, sans rôle inventé', async () => {
     saveSession(SESSION);
-    fakeServer([{ match: 'membership/settings', body: settings() }]);
-    render(<BureauFrame>contenu protégé</BureauFrame>);
-    await screen.findByText('contenu protégé');
-
-    // Deux liens : la barre latérale (grand écran) et l'en-tête mobile, qui
-    // n'exige pas d'ouvrir le menu.
-    const links = screen.getAllByRole('link', { name: 'Encaisser' });
-    expect(links).toHaveLength(2);
-    for (const link of links) expect(link).toHaveAttribute('href', '/bureau/encaisser');
-    expect(screen.getByRole('button', { name: 'Ouvrir le menu' })).toHaveAttribute('aria-expanded', 'false');
-    // Dans la barre latérale, il précède « À valider ».
-    const sidebar = screen.getAllByRole('navigation', { name: 'Espace du bureau' })[0] as HTMLElement;
-    const order = within(sidebar).getAllByRole('link').map((a) => a.textContent);
-    expect(order[0]).toBe('Encaisser');
+    fakeServer([
+      { match: 'membership/settings', body: settings() },
+      { match: /^me$/, status: 500, body: {} },
+      { match: 'membership/payments', body: [] },
+    ]);
+    const { container } = render(<BureauFrame>contenu</BureauFrame>);
+    await screen.findByText('contenu');
+    const header = container.querySelector('header') as HTMLElement;
+    expect(within(header).getByText('Connecté·e : Trésorier Démo')).toBeInTheDocument();
   });
 
-  it('F3.2 — « Changer mon mot de passe » : dans le bloc « Connecté » de la barre latérale ET du menu mobile', async () => {
+  it('N1 — quatre entrées, pas une de plus, et le nombre à vérifier ; aucun « Encaisser »', async () => {
     saveSession(SESSION);
-    fakeServer([{ match: 'membership/settings', body: settings() }]);
-    const user = userEvent.setup();
-    const { container } = render(<BureauFrame>contenu protégé</BureauFrame>);
-    await screen.findByText('contenu protégé');
+    const fetchMock = fakeServer([
+      { match: 'membership/settings', body: settings() },
+      { match: /^me$/, body: ME },
+      { match: 'membership/payments', body: [{ id: 'a' }, { id: 'b' }] },
+    ]);
+    const { container } = render(<BureauFrame>contenu</BureauFrame>);
+    await screen.findByText('contenu');
 
-    // Barre latérale : sous « Connecté : Nom », avant « Se déconnecter ».
-    const sidebar = container.querySelector('aside') as HTMLElement;
-    const inSidebar = within(sidebar).getByRole('link', { name: 'Changer mon mot de passe' });
-    expect(inSidebar).toHaveAttribute('href', '/bureau/mon-mot-de-passe');
-    const block = inSidebar.parentElement as HTMLElement;
-    expect(within(block).getByText('Connecté :')).toBeInTheDocument();
-    expect(within(block).getByText('Trésorier Démo')).toBeInTheDocument();
-    expect(within(block).getByRole('button', { name: 'Se déconnecter' })).toBeInTheDocument();
+    const sidebar = within(container.querySelector('aside') as HTMLElement);
+    const tabbar = within(screen.getByRole('navigation', { name: 'Navigation' }));
+    await waitFor(() => expect(tabbar.getByTestId('verify-count')).toHaveTextContent('2'));
+    expect(sidebar.getAllByRole('link').map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
+      ['Accueil', '/bureau'],
+      ['Membres', '/bureau/membres'],
+      ['Paiements à vérifier2', '/bureau/a-verifier'],
+      ['Plus', '/bureau/plus'],
+    ]);
+    expect(tabbar.getAllByRole('link').map((a) => a.textContent)).toEqual([
+      'Accueil',
+      'Membres',
+      'Paiements2',
+      'Plus',
+    ]);
+    expect(tabbar.getByRole('link', { name: 'Accueil' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.queryByRole('link', { name: /Encaisser/ })).not.toBeInTheDocument();
+    // Le compteur : la file des paiements signalés, telle que le serveur la sert.
+    expect(
+      calls(fetchMock).some((c) => c.url.endsWith('/admin/membership/payments?status=declared')),
+    ).toBe(true);
+  });
 
-    // Menu mobile : fermé, il ne montre rien ; ouvert, le lien est au même endroit.
-    expect(screen.getAllByRole('link', { name: 'Changer mon mot de passe' })).toHaveLength(1);
-    await user.click(screen.getByRole('button', { name: 'Ouvrir le menu' }));
-    const menu = container.querySelector('#bureau-menu') as HTMLElement;
-    const inMenu = within(menu).getByRole('link', { name: 'Changer mon mot de passe' });
-    expect(inMenu).toHaveAttribute('href', '/bureau/mon-mot-de-passe');
-    expect(within(menu).getByText(/Connecté :/)).toBeInTheDocument();
+  it('une entrée rangée dans « Plus » allume « Plus »', async () => {
+    nav.pathname = '/bureau/campagnes';
+    saveSession(SESSION);
+    fakeServer([
+      { match: 'membership/settings', body: settings() },
+      { match: /^me$/, body: ME },
+      { match: 'membership/payments', body: [] },
+    ]);
+    render(<BureauFrame>contenu</BureauFrame>);
+    await screen.findByText('contenu');
+    const tabbar = within(screen.getByRole('navigation', { name: 'Navigation' }));
+    expect(tabbar.getByRole('link', { name: 'Plus' })).toHaveAttribute('aria-current', 'page');
+    expect(tabbar.queryByTestId('verify-count')).not.toBeInTheDocument();
+  });
+
+  it('un écran d’un geste : « Retour » à la place de l’en-tête et de la barre du bas', async () => {
+    saveSession(SESSION);
+    fakeServer([
+      { match: 'membership/settings', body: settings() },
+      { match: /^me$/, body: ME },
+      { match: 'membership/payments', body: [] },
+    ]);
+    function Geste() {
+      useBackBar({ href: '/bureau/membres', label: 'Les membres' });
+      return <p>un geste</p>;
+    }
+    const { container } = render(
+      <BureauFrame>
+        <Geste />
+      </BureauFrame>,
+    );
+    await screen.findByText('un geste');
+    expect(screen.getByRole('link', { name: 'Les membres' })).toHaveAttribute('href', '/bureau/membres');
+    expect(container.querySelector('header')).toBeNull();
+    expect(screen.queryByRole('navigation', { name: 'Navigation' })).not.toBeInTheDocument();
   });
 
   it('mode_is_supported: false → UNE bannière', async () => {
@@ -128,17 +179,21 @@ describe('le cadre du bureau', () => {
     ).toHaveLength(1);
   });
 
-  it('se déconnecter : révoque, purge, revient à la connexion', async () => {
+  it('se déconnecter (dans « Plus ») : révoque, purge, revient à la connexion', async () => {
     saveSession(SESSION);
     const fetchMock = fakeServer([
       { method: 'POST', match: 'logout', body: { success: true } },
       { match: 'membership/settings', body: settings() },
+      { match: /^me$/, body: ME },
+      { match: 'membership/payments', body: [] },
     ]);
     const user = userEvent.setup();
-    render(<BureauFrame>contenu</BureauFrame>);
-    await screen.findByText('contenu');
-
-    await user.click(screen.getAllByRole('button', { name: 'Se déconnecter' })[0] as HTMLElement);
+    render(
+      <BureauFrame>
+        <PlusPage />
+      </BureauFrame>,
+    );
+    await user.click(await screen.findByRole('button', { name: 'Se déconnecter' }));
 
     await waitFor(() => expect(replace).toHaveBeenCalledWith('/bureau/connexion'));
     expect(calls(fetchMock, 'POST')[0]?.url).toBe('https://api.eventflow.africa/api/v1/admin/logout');

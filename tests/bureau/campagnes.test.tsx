@@ -86,7 +86,7 @@ describe('Campagnes — nouvelle campagne', () => {
     renderInBureau(<CampagnesPage />);
     await user.click(await screen.findByRole('button', { name: 'Nouvelle campagne' }));
 
-    expect(screen.getByRole('radio', { name: 'Les membres qui ne sont pas à jour' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: 'Les membres en retard' })).toBeChecked();
     expect(screen.getByRole('radio', { name: 'Tous les membres actifs' })).not.toBeChecked();
     expect(screen.getByRole('radio', { name: 'Maintenant' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Envoyer aussi un e-mail aux membres qui ont une adresse' })).toBeChecked();

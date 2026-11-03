@@ -7,6 +7,7 @@ import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ReglagesPage from '@/app/bureau/reglages/page';
+import TypesDeMembresPage from '@/app/bureau/types-de-membres/page';
 import { resetSessionCache, saveSession } from '@/lib/bureau/session';
 import { CATEGORIES, calls, fakeServer, fullText, renderInBureau, SESSION, settings } from './fixtures';
 
@@ -28,7 +29,7 @@ const IN_USE = {
   dues: 7,
 };
 
-describe('B11 — les catégories', () => {
+describe('B11 — les types de membres et montants (rangés dans « Plus », F5)', () => {
   it('une suppression refusée propose aussitôt « Désactiver à la place », chiffres à l’appui', async () => {
     const fetchMock = fakeServer([
       { method: 'DELETE', match: 'membership/categories/1', status: 422, body: IN_USE },
@@ -36,12 +37,12 @@ describe('B11 — les catégories', () => {
       { match: 'membership/categories', body: CATEGORIES },
     ]);
     const user = userEvent.setup();
-    renderInBureau(<ReglagesPage />);
+    renderInBureau(<TypesDeMembresPage />);
 
     const row = (await screen.findByText('Membre actif')).closest('li') as HTMLElement;
     await user.click(within(row).getByRole('button', { name: 'Supprimer' }));
-    const dialog = screen.getByRole('dialog', { name: 'Supprimer cette catégorie ?' });
-    await user.click(within(dialog).getByRole('button', { name: 'Supprimer la catégorie' }));
+    const dialog = screen.getByRole('dialog', { name: 'Supprimer ce type de membre ?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Supprimer ce type de membre' }));
 
     await screen.findByText(/utilisée par 6 membres et 7 cotisations/);
     await user.click(screen.getByRole('button', { name: 'Désactiver à la place' }));
@@ -55,25 +56,25 @@ describe('B11 — les catégories', () => {
   it('le barème n’est pas proposé à la création', async () => {
     fakeServer([{ match: 'membership/categories', body: CATEGORIES }]);
     const user = userEvent.setup();
-    renderInBureau(<ReglagesPage />);
-    await user.click(await screen.findByRole('button', { name: 'Ajouter une catégorie' }));
+    renderInBureau(<TypesDeMembresPage />);
+    await user.click(await screen.findByRole('button', { name: 'Ajouter un type de membre' }));
     const mode = screen.getByLabelText(/Mode de calcul/) as HTMLSelectElement;
     const values = Array.from(mode.options).map((o) => o.value);
     expect(values).toEqual(['forfait', 'minimum', 'exonere']);
   });
 
-  it('crée une catégorie avec un montant brut, affiché ensuite tel que servi', async () => {
+  it('crée un type de membre avec un montant brut, affiché ensuite tel que servi', async () => {
     const created = { id: 9, label: 'Jeune', mode: 'forfait', amount: 10000, amount_formatted: '10 000 FCFA', sort_order: 0, is_active: true, is_calculable: true };
     const fetchMock = fakeServer([
       { method: 'POST', match: 'membership/categories', status: 201, body: created },
       { match: 'membership/categories', body: CATEGORIES },
     ]);
     const user = userEvent.setup();
-    renderInBureau(<ReglagesPage />);
-    await user.click(await screen.findByRole('button', { name: 'Ajouter une catégorie' }));
+    renderInBureau(<TypesDeMembresPage />);
+    await user.click(await screen.findByRole('button', { name: 'Ajouter un type de membre' }));
     await user.type(screen.getByLabelText(/^Nom \*$/), 'Jeune');
     await user.type(screen.getByLabelText(/^Montant/), '10000');
-    await user.click(screen.getByRole('button', { name: 'Ajouter la catégorie' }));
+    await user.click(screen.getByRole('button', { name: 'Ajouter ce type de membre' }));
 
     await screen.findByText(fullText('Forfait — 10 000 FCFA'));
     expect(JSON.parse(calls(fetchMock, 'POST')[0]?.init.body as string)).toEqual({
@@ -82,15 +83,14 @@ describe('B11 — les catégories', () => {
   });
 });
 
-describe('F3.2 — « Mon mot de passe » dans Réglages', () => {
-  it('une ligne « Mon mot de passe » mène au même écran que le bloc « Connecté »', async () => {
-    fakeServer([{ match: 'membership/categories', body: [] }]);
-    renderInBureau(<ReglagesPage />);
-    const panel = screen.getByRole('heading', { name: 'Mon mot de passe' }).closest('section') as HTMLElement;
-    expect(within(panel).getByRole('link', { name: 'Changer mon mot de passe' })).toHaveAttribute(
-      'href',
-      '/bureau/mon-mot-de-passe',
-    );
+describe('F5 — « Paramètres de l’association »', () => {
+  it('le titre de « Plus », un « Retour », et ni les types de membres ni le mot de passe', async () => {
+    fakeServer([]);
+    const { value } = renderInBureau(<ReglagesPage />);
+    expect(screen.getByRole('heading', { name: 'Paramètres de l’association' })).toBeInTheDocument();
+    expect(value.setBack).toHaveBeenCalledWith(expect.objectContaining({ href: '/bureau/plus', label: 'Plus' }));
+    expect(screen.queryByRole('heading', { name: 'Types de membres' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Mon mot de passe' })).not.toBeInTheDocument();
   });
 });
 
@@ -152,7 +152,7 @@ describe('B11 — l’association', () => {
   });
 });
 
-describe('F3 — le rapport du lundi', () => {
+describe('F3, §18.6 — les deux messages par e-mail, deux cases', () => {
   it('coché par défaut (absent = true) ; décocher envoie weekly_report_enabled: false, seul', async () => {
     const fetchMock = fakeServer([
       { method: 'PUT', match: 'membership/settings', body: settings({ weekly_report_enabled: false }) },
@@ -161,7 +161,7 @@ describe('F3 — le rapport du lundi', () => {
     const user = userEvent.setup();
     const { value } = renderInBureau(<ReglagesPage />);
     const box = screen.getByRole('checkbox', {
-      name: 'Recevoir chaque lundi le rapport par e-mail (président et trésorier)',
+      name: 'Résumé par e-mail chaque lundi (président et trésorier)',
     });
     expect(box).toBeChecked();
     await user.click(box);
@@ -174,13 +174,37 @@ describe('F3 — le rapport du lundi', () => {
   it('suit la valeur servie', () => {
     fakeServer([{ match: 'membership/categories', body: CATEGORIES }]);
     renderInBureau(<ReglagesPage />, { settings: settings({ weekly_report_enabled: false }) });
-    expect(screen.getByRole('checkbox', { name: /rapport par e-mail/ })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: /chaque lundi/ })).not.toBeChecked();
+  });
+
+  it('l’e-mail du matin : coché par défaut ; décocher envoie verification_digest_enabled: false, seul', async () => {
+    const fetchMock = fakeServer([
+      { method: 'PUT', match: 'membership/settings', body: settings({ verification_digest_enabled: false }) },
+    ]);
+    const user = userEvent.setup();
+    const { value } = renderInBureau(<ReglagesPage />);
+    const box = screen.getByRole('checkbox', { name: /Un e-mail le matin/ });
+    expect(box).toBeChecked();
+    await user.click(box);
+    await screen.findByText('Enregistré.');
+    const [put] = calls(fetchMock, 'PUT');
+    expect(JSON.parse(put?.init.body as string)).toEqual({ verification_digest_enabled: false });
+    expect(value.setSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ verification_digest_enabled: false }),
+    );
+  });
+
+  it('l’e-mail du matin suit la valeur servie', () => {
+    fakeServer([]);
+    renderInBureau(<ReglagesPage />, { settings: settings({ verification_digest_enabled: false }) });
+    expect(screen.getByRole('checkbox', { name: /Un e-mail le matin/ })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: /chaque lundi/ })).toBeChecked();
   });
 });
 
 describe('§12.1 — années de cotisation manquées', () => {
   const RECAP =
-    'Les montants à encaisser et les relances vont changer. Rien n’est effacé ; vous pourrez revenir en arrière à tout moment.';
+    'Les montants à recevoir et les relances vont changer. Rien n’est effacé ; vous pourrez revenir en arrière à tout moment.';
 
   function panel() {
     return screen.getByRole('heading', { name: 'Années de cotisation manquées' }).closest('section') as HTMLElement;
@@ -189,7 +213,7 @@ describe('§12.1 — années de cotisation manquées', () => {
   it('deux choix, chacun expliqué ; le réglage servi est coché (le défaut si absent)', async () => {
     fakeServer([{ match: 'membership/categories', body: CATEGORIES }]);
     renderInBureau(<ReglagesPage />, { settings: settings() });
-    await screen.findByText('Membre actif');
+    await screen.findByRole('heading', { name: 'Années de cotisation manquées' });
     const recommended = within(panel()).getByRole('radio', { name: 'Repartir de l’année en cours (recommandé)' });
     const all = within(panel()).getByRole('radio', { name: 'Réclamer toutes les années manquées' });
     expect(recommended).toBeChecked();
@@ -209,7 +233,7 @@ describe('§12.1 — années de cotisation manquées', () => {
     ]);
     const user = userEvent.setup();
     const { value } = renderInBureau(<ReglagesPage />, { settings: settings({ arrears_policy: 'current_only' }) });
-    await screen.findByText('Membre actif');
+    await screen.findByRole('heading', { name: 'Années de cotisation manquées' });
     await user.click(within(panel()).getByRole('radio', { name: 'Réclamer toutes les années manquées' }));
     await user.click(within(panel()).getByRole('button', { name: 'Enregistrer ce choix' }));
 
@@ -233,7 +257,7 @@ describe('§12.1 — années de cotisation manquées', () => {
     ]);
     const user = userEvent.setup();
     renderInBureau(<ReglagesPage />, { settings: settings({ arrears_policy: 'all' }) });
-    await screen.findByText('Membre actif');
+    await screen.findByRole('heading', { name: 'Années de cotisation manquées' });
     expect(within(panel()).getByRole('radio', { name: 'Réclamer toutes les années manquées' })).toBeChecked();
     await user.click(within(panel()).getByRole('radio', { name: 'Repartir de l’année en cours (recommandé)' }));
     await user.click(within(panel()).getByRole('button', { name: 'Enregistrer ce choix' }));
@@ -263,7 +287,7 @@ describe('§12.1 — années de cotisation manquées', () => {
     ]);
     const user = userEvent.setup();
     renderInBureau(<ReglagesPage />, { settings: settings({ arrears_policy: 'current_only' }) });
-    await screen.findByText('Membre actif');
+    await screen.findByRole('heading', { name: 'Années de cotisation manquées' });
     await user.click(within(panel()).getByRole('radio', { name: 'Réclamer toutes les années manquées' }));
     await user.click(within(panel()).getByRole('button', { name: 'Enregistrer ce choix' }));
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Enregistrer ce choix' }));

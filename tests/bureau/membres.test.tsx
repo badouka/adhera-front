@@ -6,19 +6,9 @@
 import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import MembresPage from '@/app/bureau/membres/page';
+import MembresPage, { readFilter } from '@/app/bureau/membres/page';
 import { resetSessionCache, saveSession } from '@/lib/bureau/session';
-import {
-  CATEGORIES,
-  calls,
-  fakeServer,
-  fullText,
-  memberItem,
-  ORGANISATION,
-  renderInBureau,
-  SESSION,
-  settings,
-} from './fixtures';
+import { calls, fakeServer, memberItem, renderInBureau, SESSION, share } from './fixtures';
 
 vi.mock('next/link', () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
@@ -32,187 +22,222 @@ beforeEach(() => {
   window.sessionStorage.clear();
   resetSessionCache();
   saveSession(SESSION);
+  window.history.replaceState(null, '', '/bureau/membres');
 });
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
-const UP_TO_DATE = memberItem({
-  id: 'm-2',
-  name: 'Awa Diallo (test)',
+const MAME = memberItem({
+  id: 'm-16',
+  name: 'Mame Diarra Lo',
+  first_name: 'Mame Diarra',
+  last_name: 'Lo',
+  category_label: 'Bienfaiteur',
+  member_number: '0016',
+  phone: '77 000 00 16',
+  next_due_date: '2026-09-03',
+  balance_due: 100001,
+  balance_due_formatted: '100 000 FCFA',
+});
+const MARIAMA = memberItem({
+  id: 'm-12',
+  name: 'Mariama Cissé',
+  first_name: 'Mariama',
+  last_name: 'Cissé',
+  member_number: '0012',
+  phone: null,
+  next_due_date: '2026-02-03',
+  balance_due: 25001,
+  balance_due_formatted: '25 000 FCFA',
+});
+const AMINATA = memberItem({
+  id: 'm-1',
+  name: 'Aminata Diop',
+  first_name: 'Aminata',
+  last_name: 'Diop',
+  member_number: '0001',
   is_up_to_date: true,
-  covered_until: '2027-03-13',
+  covered_until: '2027-03-02',
+  balance_due: 0,
+  balance_due_formatted: '0 FCFA',
+});
+const ROKHAYA = memberItem({
+  id: 'm-13',
+  name: 'Rokhaya Sène',
+  first_name: 'Rokhaya',
+  is_up_to_date: true,
+  covered_until: '2026-12-02',
+  next_due_date: '2026-12-03',
   balance_due: 0,
   balance_due_formatted: '0 FCFA',
 });
 
-function server(members = [memberItem(), ORGANISATION, UP_TO_DATE]) {
+/** L'ordre du serveur : volontairement PAS celui des restes à payer. */
+const ALL = [AMINATA, MARIAMA, MAME, ROKHAYA];
+
+function server(extra: Parameters<typeof fakeServer>[0] = []) {
   return fakeServer([
-    { match: 'membership/categories', body: CATEGORIES },
-    { match: 'membership/members', body: members },
+    ...extra,
+    { match: /membership\/members\?.*standing=renewing_soon/, body: [ROKHAYA] },
+    { match: 'membership/members?status=active', body: ALL },
   ]);
 }
 
-function memberUrls(fetchMock: ReturnType<typeof server>) {
-  return calls(fetchMock)
-    .map((c) => c.url)
-    .filter((u) => u.includes('/membership/members'));
-}
-
-describe('B5 — le registre', () => {
-  it('ouvre sur les membres actifs (candidats et anciens ont leurs onglets)', async () => {
+describe('Écran 7 — les membres', () => {
+  it('trois filtres comptés ; « En retard » d’abord, comme la maquette', async () => {
     const fetchMock = server();
     renderInBureau(<MembresPage />);
-    await screen.findAllByText('Moussa Ndiaye (test)');
-    expect(memberUrls(fetchMock)[0]).toBe(
+    const rows = await screen.findByTestId('member-rows');
+    expect(screen.getByRole('button', { name: 'Tous · 4' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: 'En retard · 2' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'À jour · 2' })).toBeInTheDocument();
+    // « À renouveler » n'existe que depuis l'accueil.
+    expect(screen.queryByRole('button', { name: /À renouveler/ })).not.toBeInTheDocument();
+    // L'ordre du serveur, jamais retrié.
+    expect(within(rows).getAllByRole('link').map((a) => a.querySelector('b')?.textContent)).toEqual([
+      'Mariama Cissé',
+      'Mame Diarra Lo',
+    ]);
+    // Les membres ACTIFS seulement : candidats et anciens sont dans « Plus ».
+    expect(calls(fetchMock)[0]?.url).toBe(
       'https://api.eventflow.africa/api/v1/admin/membership/members?status=active',
     );
   });
 
-  it('affiche nom, catégorie, pastille, reste à payer ou couverture', async () => {
+  it('une ligne : le nom, « {type} · n° {numéro} », et « RESTE À PAYER » ou « À jour »', async () => {
     server();
+    const user = userEvent.setup();
     renderInBureau(<MembresPage />);
-    const cards = within(await screen.findByTestId('member-cards'));
-    expect(cards.getByText('Moussa Ndiaye (test)')).toBeInTheDocument();
-    expect(cards.getByText(fullText('Reste à payer 150 000 FCFA'))).toBeInTheDocument();
-    expect(cards.getByText('Couvert jusqu’au 13 mars 2027')).toBeInTheDocument();
-    expect(cards.getAllByText('Pas à jour')).toHaveLength(2);
-    expect(cards.getByText('À jour')).toBeInTheDocument();
-    // Le tableau grand écran porte les mêmes lignes.
-    expect(within(screen.getByTestId('member-table')).getByText('Awa Diallo (test)')).toBeInTheDocument();
+    const rows = await screen.findByTestId('member-rows');
+    const mame = within(rows).getByRole('link', { name: /Mame Diarra Lo/ });
+    expect(mame).toHaveAttribute('href', '/bureau/membres/m-16');
+    expect(mame).toHaveTextContent('Bienfaiteur · n° 0016');
+    expect(mame).toHaveTextContent('Reste à payer');
+    // R1 : le montant servi, jamais le brut.
+    expect(mame).toHaveTextContent('100 000 FCFA');
+    expect(document.body.textContent).not.toContain('100001');
+
+    await user.click(screen.getByRole('button', { name: 'À jour · 2' }));
+    const ok = within(screen.getByTestId('member-rows')).getByRole('link', { name: /Aminata Diop/ });
+    expect(ok).toHaveTextContent('À jour');
+    expect(ok).not.toHaveTextContent('Reste à payer');
   });
 
-  it('garde l’ordre du serveur : aucun retri côté client (v3.5.7)', async () => {
-    // L'ordre mesuré sur demo-asso : par nom de famille, l'organisation
-    // intercalée à la lettre A. Un tri client par `name` le casserait
-    // (« Awa Diallo » passerait avant « Mariama Ba »).
-    const ordered = [
-      memberItem({ id: 'o', type: 'organisation', name: 'Agence Conseil Teranga', first_name: null, last_name: null }),
-      memberItem({ id: 'b', name: 'Mariama Ba', first_name: 'Mariama', last_name: 'Ba' }),
-      memberItem({ id: 'd', name: 'Awa Diallo', first_name: 'Awa', last_name: 'Diallo' }),
-      memberItem({ id: 's', name: 'Fatou Sarr', first_name: 'Fatou', last_name: 'Sarr' }),
-    ];
-    server(ordered);
+  it('« Tous » montre tout le monde, dans l’ordre du serveur', async () => {
+    server();
+    const user = userEvent.setup();
+    renderInBureau(<MembresPage />);
+    await screen.findByTestId('member-rows');
+    await user.click(screen.getByRole('button', { name: 'Tous · 4' }));
+    const names = within(screen.getByTestId('member-rows'))
+      .getAllByRole('link')
+      .map((a) => a.querySelector('b')?.textContent);
+    expect(names).toEqual(['Aminata Diop', 'Mariama Cissé', 'Mame Diarra Lo', 'Rokhaya Sène']);
+  });
+
+  it('?filtre=renouveler (depuis l’accueil) : la liste du SERVEUR, standing=renewing_soon', async () => {
+    window.history.replaceState(null, '', '/bureau/membres?filtre=renouveler');
+    const fetchMock = server();
+    renderInBureau(<MembresPage />);
+    const chip = await screen.findByRole('button', { name: 'À renouveler · 1' });
+    expect(chip).toHaveAttribute('aria-pressed', 'true');
+    const rows = within(screen.getByTestId('member-rows'));
+    expect(rows.getAllByRole('link')).toHaveLength(1);
+    expect(rows.getByText('Rokhaya Sène')).toBeInTheDocument();
+    expect(calls(fetchMock).some((c) => c.url.includes('standing=renewing_soon'))).toBe(true);
+  });
+
+  it('readFilter : « En retard » par défaut, et les quatre valeurs', () => {
+    expect(readFilter('')).toBe('retard');
+    expect(readFilter('?filtre=tous')).toBe('tous');
+    expect(readFilter('?filtre=a-jour')).toBe('a-jour');
+    expect(readFilter('?filtre=renouveler')).toBe('renouveler');
+    expect(readFilter('?filtre=n-importe')).toBe('retard');
+  });
+
+  it('la recherche (nom ou téléphone) part au serveur après 300 ms', async () => {
+    const fetchMock = server();
+    const user = userEvent.setup();
+    renderInBureau(<MembresPage />);
+    await screen.findByTestId('member-rows');
+    await user.type(screen.getByPlaceholderText('Chercher : nom ou téléphone'), '77 000');
+    await waitFor(() =>
+      expect(calls(fetchMock).some((c) => c.url.includes('search=77+000'))).toBe(true),
+    );
+  });
+
+  it('ordinateur : le tableau, « Aurait dû payer le », et les deux gestes de la ligne', async () => {
+    server();
     renderInBureau(<MembresPage />);
     const table = await screen.findByTestId('member-table');
-    const names = within(table).getAllByRole('link').map((a) => a.textContent);
-    expect(names).toEqual(['Agence Conseil Teranga', 'Mariama Ba', 'Awa Diallo', 'Fatou Sarr']);
-  });
-
-  it('balance_due null → « — », jamais « 0 FCFA »', async () => {
-    server([ORGANISATION]);
-    renderInBureau(<MembresPage />);
-    const cards = within(await screen.findByTestId('member-cards'));
-    expect(cards.getByText(fullText('Reste à payer —'))).toBeInTheDocument();
-    expect(cards.queryByText(/0 FCFA/)).not.toBeInTheDocument();
-  });
-
-  it('chaque filtre part au serveur, et se combine', async () => {
-    const fetchMock = server();
-    const user = userEvent.setup();
-    renderInBureau(<MembresPage />);
-    await screen.findByTestId('member-cards');
-
-    await user.selectOptions(screen.getByLabelText('Situation'), 'not_up_to_date');
-    await waitFor(() => expect(memberUrls(fetchMock).at(-1)).toContain('standing=not_up_to_date'));
-
-    await user.selectOptions(screen.getByLabelText('Catégorie'), '1');
-    await user.selectOptions(screen.getByLabelText('Type'), 'organisation');
-    await waitFor(() =>
-      expect(memberUrls(fetchMock).at(-1)).toBe(
-        'https://api.eventflow.africa/api/v1/admin/membership/members?status=active&standing=not_up_to_date&type=organisation&category_id=1',
-      ),
+    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
+      'N°',
+      'Nom',
+      'Téléphone',
+      'Situation',
+      'Aurait dû payer le',
+      'Reste à payer',
+      'Actions',
+    ]);
+    const mame = within(table).getByRole('link', { name: 'Mame Diarra Lo' }).closest('tr') as HTMLElement;
+    expect(mame).toHaveTextContent('3 septembre 2026');
+    expect(within(mame).getByRole('link', { name: 'Mame Diarra a payé' })).toHaveAttribute(
+      'href',
+      '/bureau/enregistrer?membre=m-16',
     );
+    expect(within(mame).getByRole('button', { name: 'Rappel WhatsApp' })).toBeInTheDocument();
+    // Sans téléphone : pas de bouton qui échoue.
+    const mariama = within(table).getByRole('link', { name: 'Mariama Cissé' }).closest('tr') as HTMLElement;
+    expect(mariama).toHaveTextContent('pas de téléphone');
+    expect(within(mariama).queryByRole('button', { name: 'Rappel WhatsApp' })).not.toBeInTheDocument();
   });
 
-  it('la recherche attend 300 ms sans frappe avant de partir', async () => {
-    const fetchMock = server();
+  it('« Rappel WhatsApp » : le message du serveur, ouvert sur `share.whatsapp_url`', async () => {
+    const fetchMock = server([
+      {
+        match: 'membership/members/m-16/whatsapp',
+        body: { message: 'Bonjour', wa_url: 'https://wa.me/ancien', phone_is_usable: true, url: 'x', share: share({ whatsapp_url: 'https://wa.me/221770000016?text=Rappel' }) },
+      },
+    ]);
+    const tab = { opener: {}, closed: false, close: vi.fn(), location: { replace: vi.fn() } };
+    vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window);
     const user = userEvent.setup();
     renderInBureau(<MembresPage />);
-    await screen.findByTestId('member-cards');
-    const before = memberUrls(fetchMock).length;
-
-    await user.type(screen.getByLabelText('Rechercher'), 'Agence');
-    // Six frappes, une seule requête — et pas avant le silence.
-    expect(memberUrls(fetchMock).length).toBe(before);
-    await waitFor(() => expect(memberUrls(fetchMock).at(-1)).toContain('search=Agence'), {
-      timeout: 1500,
-    });
-    expect(memberUrls(fetchMock).filter((u) => u.includes('search=')).length).toBe(1);
+    const table = await screen.findByTestId('member-table');
+    const row = within(table).getByRole('link', { name: 'Mame Diarra Lo' }).closest('tr') as HTMLElement;
+    await user.click(within(row).getByRole('button', { name: 'Rappel WhatsApp' }));
+    await waitFor(() => expect(tab.location.replace).toHaveBeenCalledWith('https://wa.me/221770000016?text=Rappel'));
+    expect(calls(fetchMock, 'POST')).toHaveLength(0);
   });
 
-  it('le type ne se propose que si l’association est mixte', async () => {
+  it('A12 — « Imprimer cette liste » : une feuille propre, le nom, le téléphone et le reste à payer', async () => {
     server();
-    renderInBureau(<MembresPage />, { settings: settings({ member_types: 'personnes' }) });
-    await screen.findByTestId('member-cards');
-    expect(screen.queryByLabelText('Type')).not.toBeInTheDocument();
-  });
-
-  it('« Candidatures » et « Anciens membres » demandent leur statut', async () => {
-    const fetchMock = server();
+    const print = vi.fn();
+    vi.stubGlobal('print', print);
     const user = userEvent.setup();
     renderInBureau(<MembresPage />);
-    await screen.findByTestId('member-cards');
+    await screen.findByTestId('member-rows');
+    await user.click(screen.getByRole('button', { name: 'Imprimer cette liste' }));
+    expect(print).toHaveBeenCalledTimes(1);
 
-    await user.click(screen.getByRole('tab', { name: 'Candidatures' }));
-    await waitFor(() => expect(memberUrls(fetchMock).at(-1)).toContain('status=pending'));
-    await user.click(screen.getByRole('tab', { name: 'Anciens membres' }));
-    await waitFor(() => expect(memberUrls(fetchMock).at(-1)).toContain('status=former'));
-  });
-
-  it('pagine côté client par 50', async () => {
-    const many = Array.from({ length: 120 }, (_, i) =>
-      memberItem({ id: `m-${i}`, name: `Membre ${String(i).padStart(3, '0')}` }),
-    );
-    server(many);
-    const user = userEvent.setup();
-    renderInBureau(<MembresPage />);
-    const cards = await screen.findByTestId('member-cards');
-    expect(within(cards).getAllByRole('link')).toHaveLength(50);
-    expect(screen.getByText('Page 1 sur 3')).toBeInTheDocument();
-    expect(screen.getByText('120 membres')).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: 'Suivants' }));
-    expect(within(screen.getByTestId('member-cards')).getByText('Membre 050')).toBeInTheDocument();
-  });
-
-  it('un filtre refusé (422) se dit, il ne ressemble pas à une liste vide', async () => {
-    fakeServer([
-      { match: 'membership/categories', body: CATEGORIES },
-      { match: 'membership/members', status: 422, body: { message: 'Catégorie inconnue : 9999.', code: 'unknown_category' } },
+    const sheet = screen.getByTestId('print-sheet');
+    // Invisible à l'écran, seule à l'impression.
+    expect(sheet.className).toContain('hidden');
+    expect(sheet.className).toContain('print:block');
+    expect(within(sheet).getByRole('heading', { name: 'Les membres en retard' })).toBeInTheDocument();
+    expect(within(sheet).getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
+      'Nom',
+      'Téléphone',
+      'Reste à payer',
     ]);
-    renderInBureau(<MembresPage />);
-    await screen.findByText('Cette catégorie n’existe plus. Rechargez la page.');
-    expect(screen.queryByText(/Aucun membre/)).not.toBeInTheDocument();
-  });
-
-  it('les anciens membres : aucune pastille « Pas à jour », aucun reste à payer', async () => {
-    const owing = { is_up_to_date: false, balance_due: 150000, balance_due_formatted: '150 000 FCFA' };
-    server([
-      memberItem({ id: 'f-1', name: 'Cheikh Sow (test)', status: 'former', covered_until: '2026-02-28', ...owing }),
-      memberItem({ id: 'f-2', name: 'Fatou Ba (test)', status: 'former', covered_until: null, ...owing }),
-    ]);
-    const user = userEvent.setup();
-    renderInBureau(<MembresPage />);
-    await screen.findByTestId('member-cards');
-    await user.click(screen.getByRole('tab', { name: 'Anciens membres' }));
-    const cards = within(await screen.findByTestId('member-cards'));
-    await cards.findByText('Cheikh Sow (test)');
-    expect(cards.getAllByText('Ancien membre')).toHaveLength(2);
-    expect(cards.getByText('Couvert jusqu’au 28 février 2026')).toBeInTheDocument();
-    expect(screen.queryByText('Pas à jour')).toBeNull();
-    expect(screen.queryByText(/Reste à payer/)).toBeNull();
-    expect(screen.queryByText(/150 000 FCFA/)).toBeNull();
-  });
-
-  it('contre-épreuve : les mêmes membres actifs sont « Pas à jour » avec leur reste à payer', async () => {
-    const owing = { is_up_to_date: false, balance_due: 150000, balance_due_formatted: '150 000 FCFA' };
-    server([memberItem({ id: 'a-1', name: 'Cheikh Sow (test)', status: 'active', covered_until: '2026-02-28', ...owing })]);
-    renderInBureau(<MembresPage />);
-    const cards = within(await screen.findByTestId('member-cards'));
-    expect(cards.getByText('Pas à jour')).toBeInTheDocument();
-    expect(cards.getByText(fullText('Reste à payer 150 000 FCFA'))).toBeInTheDocument();
+    const lines = within(sheet).getAllByRole('row').slice(1).map((r) => r.textContent);
+    expect(lines).toEqual(['Mariama Cissé—25 000 FCFA', 'Mame Diarra Lo77 000 00 16100 000 FCFA']);
+    // Le reste de l'écran disparaît à l'impression.
+    expect(screen.getByTestId('member-rows').className).toContain('print:hidden');
+    expect(screen.getByTestId('member-table').parentElement?.className).toContain('print:hidden');
   });
 });
