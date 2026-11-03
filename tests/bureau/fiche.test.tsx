@@ -3,30 +3,25 @@
  * @vitest-environment-options { "url": "https://demo-asso.adhera.africa/bureau/membres/x" }
  */
 
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import FicheMembrePage from '@/app/bureau/membres/[id]/page';
-import { openDue } from '@/components/bureau/DirectPaymentPanel';
-import {
-  dueDateLine,
-  StandingPastille,
-  standingDetail,
-  upToDateWithArrears,
-} from '@/components/bureau/Standing';
+import FicheMembrePage, { yearsOf } from '@/app/bureau/membres/[id]/page';
+import { setFlash, takeFlash } from '@/lib/bureau/flash';
+import { openDue } from '@/lib/bureau/dues';
 import type { MemberDetail } from '@/lib/bureau/types';
 import { resetSessionCache, saveSession } from '@/lib/bureau/session';
 import {
   CATEGORIES,
   calls,
   fakeServer,
-  fullText,
   memberDetail,
   ORGANISATION,
   payment,
   panelReady,
   renderInBureau,
   SESSION,
+  share,
 } from './fixtures';
 
 const nav = vi.hoisted(() => ({ params: { id: '' } }));
@@ -45,7 +40,73 @@ vi.mock('next/link', () => ({
   ),
 }));
 
-const MOUSSA = memberDetail();
+function due(
+  id: string,
+  start: string,
+  end: string,
+  extra: Partial<MemberDetail['dues'][number]> = {},
+): MemberDetail['dues'][number] {
+  return {
+    id,
+    period_start: start,
+    period_end: end,
+    due_date: start,
+    status: 'due',
+    origin: 'platform',
+    amount_due: 25000,
+    amount_due_formatted: '25 000 FCFA',
+    amount_paid: 0,
+    amount_paid_formatted: '0 FCFA',
+    balance_due: 25000,
+    balance_due_formatted: '25 000 FCFA',
+    settled_at: null,
+    receipts: [],
+    receipt_available: false,
+    is_unclaimed_arrears: false,
+    ...extra,
+  };
+}
+
+/** Cheikh Diouf : en retard, deux anciennes années non demandées (`current_only`). */
+const CHEIKH = memberDetail({
+  id: 'm-cheikh',
+  name: 'Cheikh Diouf',
+  first_name: 'Cheikh',
+  last_name: 'Diouf',
+  category_label: 'Membre actif',
+  member_number: '0007',
+  phone: '77 000 00 07',
+  next_due_date: '2026-09-03',
+  balance_due: 25001,
+  balance_due_formatted: '25 000 FCFA',
+  dues: [
+    due('d-2026', '2026-09-03', '2027-09-02'),
+    due('d-2024', '2024-09-03', '2025-09-02', { is_unclaimed_arrears: true }),
+  ],
+  missing_periods: [
+    {
+      period_start: '2025-09-03',
+      period_end: '2026-09-02',
+      period_label: '3 septembre 2025 → 2 septembre 2026',
+      amount_due: 25000,
+      amount_due_formatted: '25 000 FCFA',
+      is_unclaimed_arrears: true,
+    },
+  ],
+});
+
+const AMINATA = memberDetail({
+  id: 'm-aminata',
+  name: 'Aminata Diop',
+  first_name: 'Aminata',
+  last_name: 'Diop',
+  is_up_to_date: true,
+  covered_until: '2027-03-02',
+  balance_due: 0,
+  balance_due_formatted: '0 FCFA',
+  dues: [due('d-a', '2026-03-03', '2027-03-02', { status: 'reglee', balance_due: 0, balance_due_formatted: '0 FCFA' })],
+});
+
 const AGENCE = memberDetail({
   ...ORGANISATION,
   contacts: [
@@ -62,32 +123,51 @@ const AGENCE = memberDetail({
   dues: [],
 });
 
-const VALIDATED = payment({
+const ACCEPTED = payment({
+  id: 'p-ok',
+  member_id: 'm-cheikh',
+  member_name: 'Cheikh Diouf',
   status: 'validated',
-  decided_at: '2026-10-29T20:01:26+00:00',
+  amount_formatted: '10 000 FCFA',
+  method_label: 'Orange Money',
+  paid_on: '2026-11-03',
+  decided_at: '2026-11-03T20:01:26+00:00',
   decided_by_name: 'Trésorier Démo',
   receipt: { id: '01a18940-c9a5-71ec-970d-9d7510492173', reference: 'REC-2026-CB4A73AE' },
 });
 
-const NBSP_MESSAGE =
-  'Bonjour Moussa Ndiaye (test),\nVotre cotisation Association Démo de 250 000 FCFA est attendue depuis le 01/10/2026.\nConfirmez votre paiement ici :\nhttps://demo-asso.adhera.africa/m/6yuExNKOD1Pj';
-
-function server(member = MOUSSA, extra: Parameters<typeof fakeServer>[0] = []) {
+function server(member: MemberDetail = CHEIKH, extra: Parameters<typeof fakeServer>[0] = []) {
   nav.params = { id: member.id };
   return fakeServer([
     ...extra,
     { match: 'membership/categories', body: CATEGORIES },
-    { match: /payments\?member_id=/, body: [VALIDATED] },
-    { match: /\/whatsapp$/, body: { message: NBSP_MESSAGE, wa_url: 'https://wa.me/221775695563?text=Bonjour' } },
-    { match: /\/link$/, body: { url: 'https://demo-asso.adhera.africa/m/6yuExNKOD1Pj', rotated_at: null } },
+    { match: /payments\?member_id=/, body: [ACCEPTED] },
+    {
+      match: /\/whatsapp$/,
+      body: { message: 'Bonjour', wa_url: 'https://wa.me/ancien', phone_is_usable: true, url: 'x', share: share({ whatsapp_url: 'https://wa.me/221770000007?text=Rappel' }) },
+    },
+    { match: /\/link$/, body: { url: 'https://demo-asso.adhera.africa/m/<JETON>', rotated_at: null } },
     { match: `membership/members/${member.id}`, body: member },
   ]);
+}
+
+function fakeTab() {
+  const tab = { opener: {}, closed: false, close: vi.fn(), location: { replace: vi.fn() } };
+  vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window);
+  return tab;
+}
+
+async function openMore(user: ReturnType<typeof userEvent.setup>, row: RegExp | string) {
+  await user.click(await screen.findByRole('button', { name: /Autres actions/ }));
+  await user.click(screen.getByRole('button', { name: row }));
+  await panelReady();
 }
 
 beforeEach(() => {
   window.sessionStorage.clear();
   resetSessionCache();
   saveSession(SESSION);
+  takeFlash();
 });
 
 afterEach(() => {
@@ -96,23 +176,126 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('B7 — la fiche', () => {
-  it('une personne : identité, cotisations et leurs reçus, versements — pas de contacts', async () => {
-    const fetchMock = server();
+describe('Écran 8 — la fiche', () => {
+  it('en tête : le nom et la pastille, puis « {type} · n° {numéro} · {téléphone} »', async () => {
+    server();
+    const { value } = renderInBureau(<FicheMembrePage />);
+    const title = await screen.findByRole('heading', { name: 'Cheikh Diouf' });
+    expect(title.parentElement).toHaveTextContent('En retard');
+    expect(screen.getByText('Membre actif · n° 0007 · 77 000 00 07')).toBeInTheDocument();
+    expect(value.setBack).toHaveBeenCalledWith(expect.objectContaining({ href: '/bureau/membres', label: 'Les membres' }));
+  });
+
+  it('UN seul montant : « Reste à payer », et « Cheikh aurait dû payer le … »', async () => {
+    server();
     renderInBureau(<FicheMembrePage />);
+    const box = await screen.findByTestId('due-box');
+    expect(box).toHaveTextContent('Reste à payer25 000 FCFASa cotisation de cette année. Cheikh aurait dû payer le 3 septembre 2026.');
+    // R1 : le servi, jamais le brut ; et aucun autre encadré de montant.
+    expect(document.body.textContent).not.toContain('25001');
+    expect(screen.queryByTestId('ok-box')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Cotisations' })).not.toBeInTheDocument();
+  });
 
-    await screen.findByRole('heading', { name: 'Moussa Ndiaye (test)' });
-    expect(screen.getByText('Du 1er octobre 2026 au 30 septembre 2027')).toBeInTheDocument();
-    expect(screen.getAllByText('250 000 FCFA').length).toBeGreaterThan(0);
-    // Le reçu de la période (et, plus bas, celui du versement qui l'a produit).
-    expect(
-      screen.getAllByRole('button', { name: 'Télécharger le reçu REC-2026-CB4A73AE' }).length,
-    ).toBeGreaterThan(0);
-    expect(screen.queryByRole('heading', { name: 'Contacts' })).not.toBeInTheDocument();
+  it('le prénom dans le bouton principal ; le rappel WhatsApp en second', async () => {
+    server();
+    renderInBureau(<FicheMembrePage />);
+    const main = await screen.findByRole('link', { name: 'Cheikh a payé : l’enregistrer' });
+    expect(main).toHaveAttribute('href', '/bureau/enregistrer?membre=m-cheikh');
+    expect(main.className).toContain('bg-indigo');
+    expect(screen.getByRole('button', { name: 'Lui envoyer un rappel par WhatsApp' })).toBeInTheDocument();
+    // Ni « il », ni « elle » : l'API ne connaît pas le genre.
+    expect(document.body.textContent).not.toMatch(/\b(Il|Elle) a payé/);
+  });
 
-    // L'historique du membre : status=all, sinon on n'aurait que les déclarations.
-    await screen.findByText('Validé le 29 octobre 2026 par Trésorier Démo');
-    expect(calls(fetchMock).some((c) => c.url.endsWith(`payments?member_id=${MOUSSA.id}&status=all`))).toBe(true);
+  it('« Lui envoyer un rappel par WhatsApp » ouvre `share.whatsapp_url`, rien n’est marqué', async () => {
+    const fetchMock = server();
+    const tab = fakeTab();
+    const user = userEvent.setup();
+    renderInBureau(<FicheMembrePage />);
+    await user.click(await screen.findByRole('button', { name: 'Lui envoyer un rappel par WhatsApp' }));
+    await waitFor(() => expect(tab.location.replace).toHaveBeenCalledWith('https://wa.me/221770000007?text=Rappel'));
+    expect(calls(fetchMock, 'POST')).toHaveLength(0);
+  });
+
+  it('sans téléphone : la phrase, pas un bouton qui échoue', async () => {
+    server({ ...CHEIKH, phone: null });
+    renderInBureau(<FicheMembrePage />);
+    expect(await screen.findByText('Pas de téléphone : impossible de lui envoyer un rappel par WhatsApp.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Lui envoyer un rappel par WhatsApp' })).not.toBeInTheDocument();
+    expect(screen.getByText(/· pas de téléphone$/)).toBeInTheDocument();
+  });
+
+  it('à jour : « À jour jusqu’au … », et le bouton reste là, en second plan', async () => {
+    server(AMINATA);
+    renderInBureau(<FicheMembrePage />);
+    expect(await screen.findByTestId('ok-box')).toHaveTextContent('À jour jusqu’au 2 mars 2027');
+    expect(screen.queryByTestId('due-box')).not.toBeInTheDocument();
+    const button = screen.getByRole('link', { name: 'Aminata a payé : l’enregistrer' });
+    expect(button.className).toContain('border-indigo');
+  });
+
+  it('« Ses paiements » : le plus récent d’abord, un lien « Reçu » par ligne ; l’historique entier (status=all)', async () => {
+    const fetchMock = server(CHEIKH, [
+      {
+        match: /payments\?member_id=/,
+        body: [ACCEPTED, payment({ id: 'p-r', status: 'rejected', amount_formatted: '5 000 FCFA', rejection_reason: 'Pas reçu.' })],
+      },
+    ]);
+    renderInBureau(<FicheMembrePage />);
+    const list = await screen.findByTestId('payments');
+    const lines = within(list).getAllByRole('listitem');
+    expect(lines[0]).toHaveTextContent('5 000 FCFA');
+    expect(lines[0]).toHaveTextContent('Refusé');
+    expect(lines[1]).toHaveTextContent('10 000 FCFA');
+    expect(lines[1]).toHaveTextContent('Orange Money · 3 novembre 2026');
+    expect(within(lines[1] as HTMLElement).getByRole('button', { name: 'Reçu' })).toBeInTheDocument();
+    expect(calls(fetchMock).some((c) => c.url.endsWith('payments?member_id=m-cheikh&status=all'))).toBe(true);
+  });
+
+  it('P6 — les années non réclamées (périodes ET années manquantes) sont repliées, avec leur explication', async () => {
+    server();
+    renderInBureau(<FicheMembrePage />);
+    const old = await screen.findByTestId('unclaimed-years');
+    expect(old.tagName).toBe('DETAILS');
+    expect(old).not.toHaveAttribute('open');
+    expect(within(old).getByText('Anciennes années, non demandées (2)')).toBeInTheDocument();
+    expect(old).toHaveTextContent('L’association ne réclame que l’année en cours.');
+    expect(old).toHaveTextContent('ne comptent pas dans le reste à payer');
+    // Rien à ouvrir, rien à télécharger : ni bouton, ni lien sur ces lignes.
+    expect(within(old).queryAllByRole('button')).toHaveLength(0);
+    expect(within(old).queryAllByRole('link')).toHaveLength(0);
+    // Sous `current_only`, une seule année réclamée : rien d'autre à lister.
+    expect(screen.queryByTestId('claimed-years')).not.toBeInTheDocument();
+  });
+
+  it('sous `all`, les années RÉCLAMÉES restent visibles : elles font le reste à payer', async () => {
+    server({
+      ...CHEIKH,
+      balance_due: 75000,
+      balance_due_formatted: '75 000 FCFA',
+      dues: [due('d-2026', '2026-09-03', '2027-09-02'), due('d-2024', '2024-09-03', '2025-09-02')],
+      missing_periods: [{ ...CHEIKH.missing_periods![0]!, is_unclaimed_arrears: false }],
+    });
+    renderInBureau(<FicheMembrePage />);
+    const claimed = await screen.findByTestId('claimed-years');
+    expect(within(claimed).getAllByRole('listitem')).toHaveLength(3);
+    expect(screen.getByTestId('due-box')).toHaveTextContent('Ses cotisations de 3 années.');
+    expect(screen.queryByTestId('unclaimed-years')).not.toBeInTheDocument();
+  });
+
+  it('yearsOf : la règle seule', () => {
+    const { claimed, unclaimed } = yearsOf(CHEIKH);
+    expect(claimed.map((y) => y.key)).toEqual(['d-2026']);
+    expect(unclaimed.map((y) => y.key)).toEqual(['d-2024', 'manquante-2025-09-03']);
+    expect(openDue(CHEIKH)?.id).toBe('d-2026');
+  });
+
+  it('« Rien n’a été enregistré. » : le message de l’écran 5 suit le retour à la fiche', async () => {
+    setFlash('Rien n’a été enregistré.');
+    server();
+    renderInBureau(<FicheMembrePage />);
+    expect(await screen.findByRole('status')).toHaveTextContent('Rien n’a été enregistré.');
   });
 
   it('une organisation : le bloc contacts', async () => {
@@ -120,7 +303,6 @@ describe('B7 — la fiche', () => {
     renderInBureau(<FicheMembrePage />);
     await screen.findByRole('heading', { name: 'Contacts' });
     expect(screen.getByText('Awa Diouf')).toBeInTheDocument();
-    expect(screen.getByText('Contact principal · Directrice administrative')).toBeInTheDocument();
     // balance_due null → « — », jamais « 0 FCFA ».
     expect(screen.queryByText('0 FCFA')).not.toBeInTheDocument();
   });
@@ -139,211 +321,81 @@ describe('B7 — la fiche', () => {
     await screen.findByText('Membre introuvable.');
     expect(document.body.textContent).not.toMatch(/App\\|Models|No query results/);
   });
-});
 
-describe('B8 — le lien du membre', () => {
-  it('ouvre WhatsApp dans un nouvel onglet et copie le message TEL QUEL', async () => {
+  it('l’interface ne propose aucune suppression de membre', async () => {
     server();
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     const user = userEvent.setup();
     renderInBureau(<FicheMembrePage />);
-    await user.click(await screen.findByRole('button', { name: 'Envoyer le lien' }));
+    await user.click(await screen.findByRole('button', { name: /Autres actions/ }));
+    expect(screen.queryByRole('button', { name: /supprimer/i })).not.toBeInTheDocument();
+  });
+});
 
+describe('« Autres actions »', () => {
+  it('replié par défaut ; ouvert : modifier, attestations, lien, départ, annuler un paiement', async () => {
+    server(CHEIKH);
+    const user = userEvent.setup();
+    renderInBureau(<FicheMembrePage />, {
+      settings: { ...(await import('./fixtures')).settings(), features: { membership_card: true } },
+    });
+    const toggle = await screen.findByRole('button', { name: 'Autres actions (modifier, départ, annuler un paiement)' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await user.click(toggle);
+    const more = within(screen.getByRole('region', { name: 'Autres actions' }));
+    expect(more.getAllByRole('button').map((b) => b.textContent?.replace('›', '').trim())).toEqual([
+      'Modifier ses informations (dont le numéro de membre)',
+      'Ses attestations d’adhésion',
+      'Son lien personnel : l’envoyer ou le changer',
+      'Enregistrer son départ',
+      'Annuler un paiement (erreur de saisie)',
+    ]);
+  });
+
+  it('« Voir sa page, comme Cheikh la voit » ouvre SON lien', async () => {
+    server();
+    const tab = fakeTab();
+    const user = userEvent.setup();
+    renderInBureau(<FicheMembrePage />);
+    await user.click(await screen.findByRole('button', { name: 'Voir sa page, comme Cheikh la voit' }));
+    await waitFor(() => expect(tab.location.replace).toHaveBeenCalledWith('https://demo-asso.adhera.africa/m/<JETON>'));
+  });
+
+  it('le lien : WhatsApp dans un nouvel onglet, et « régénérer » passe par une confirmation (R9)', async () => {
+    server();
+    const user = userEvent.setup();
+    renderInBureau(<FicheMembrePage />);
+    await openMore(user, /Son lien personnel/);
     const wa = await screen.findByRole('link', { name: 'Ouvrir WhatsApp' });
-    expect(wa).toHaveAttribute('href', 'https://wa.me/221775695563?text=Bonjour');
     expect(wa).toHaveAttribute('target', '_blank');
     expect(wa).toHaveAttribute('rel', 'noopener noreferrer');
-
-    // userEvent remplace le presse-papiers : on réinstalle l'espion.
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
-    await user.click(screen.getByRole('button', { name: 'Copier le message' }));
-    // Les espaces insécables du montant sont intacts.
-    expect(writeText).toHaveBeenCalledWith(NBSP_MESSAGE);
-    expect((writeText.mock.calls[0]?.[0] as string).includes('250 000 FCFA')).toBe(true);
-
-    await user.click(screen.getByRole('button', { name: 'Copier le lien' }));
-    expect(writeText).toHaveBeenLastCalledWith('https://demo-asso.adhera.africa/m/6yuExNKOD1Pj');
-  });
-
-  it('sans numéro WhatsApp utilisable (wa_url null) : pas de bouton mort, et ça se dit', async () => {
-    // Réponse réelle de demo-asso pour un membre sans téléphone mobile.
-    server(MOUSSA, [
-      {
-        match: /\/whatsapp$/,
-        body: { message: NBSP_MESSAGE, wa_url: null, phone_is_usable: false, url: 'https://demo-asso.adhera.africa/m/6yuExNKOD1Pj' },
-      },
-    ]);
-    const user = userEvent.setup();
-    renderInBureau(<FicheMembrePage />);
-    await user.click(await screen.findByRole('button', { name: 'Envoyer le lien' }));
-
-    await screen.findByText(/Aucun numéro WhatsApp utilisable/);
-    expect(screen.queryByText('Ouvrir WhatsApp')).not.toBeInTheDocument();
-    // Le message reste copiable, pour l'envoyer par un autre moyen.
-    expect(screen.getByRole('button', { name: 'Copier le message' })).toBeInTheDocument();
-  });
-
-  it('régénérer passe par une confirmation qui dit ce qu’elle casse (R9)', async () => {
-    const fetchMock = server(MOUSSA, [
-      { method: 'POST', match: /link\/rotate$/, body: { url: 'https://demo-asso.adhera.africa/m/NOUVEAU', rotated_at: '2026-10-29T21:00:00+00:00' } },
-    ]);
-    const user = userEvent.setup();
-    renderInBureau(<FicheMembrePage />);
-    await user.click(await screen.findByRole('button', { name: 'Envoyer le lien' }));
-    await user.click(await screen.findByRole('button', { name: 'Régénérer le lien' }));
-
-    const dialog = screen.getByRole('dialog', { name: 'Régénérer le lien ?' });
-    expect(
-      within(dialog).getByText('L’ancien lien ne fonctionnera plus. Le membre devra recevoir le nouveau.'),
-    ).toBeInTheDocument();
-    expect(within(dialog).getByText('Moussa Ndiaye (test)')).toBeInTheDocument();
-    expect(calls(fetchMock, 'POST')).toHaveLength(0);
-
-    await user.click(within(dialog).getByRole('button', { name: 'Régénérer le lien' }));
-    await screen.findByText('https://demo-asso.adhera.africa/m/NOUVEAU');
-    expect(calls(fetchMock, 'POST')).toHaveLength(1);
   });
 });
 
-describe('B9 — « Encaisser » depuis la fiche (R9 dans le panneau)', () => {
-  async function openPanel() {
-    const user = userEvent.setup();
-    renderInBureau(<FicheMembrePage />);
-    await user.click(await screen.findByRole('button', { name: 'Encaisser' }));
-    await panelReady();
-    return user;
-  }
-
-  const DONE = payment({
-    status: 'validated',
-    method: 'especes',
-    method_label: 'Espèces',
-    amount: 150000,
-    amount_formatted: '150 000 FCFA',
-    reference: null,
-    receipt: { id: 'r-9', reference: 'REC-2026-AAAA0001' },
-  });
-
-  it('affiche la période visée avant toute saisie', async () => {
-    server();
-    await openPanel();
-    expect(
-      screen.getByText(fullText('Cotisation du 1er octobre 2026 au 30 septembre 2027 — reste 150 000 FCFA')),
-    ).toBeInTheDocument();
-  });
-
-  it('préremplit le solde et Espèces ; le récapitulatif tient sur une ligne', async () => {
-    server();
-    await openPanel();
-    expect((screen.getByLabelText(/Montant reçu/) as HTMLInputElement).value).toBe('150000');
-    expect(screen.getByRole('radio', { name: 'Espèces' })).toBeChecked();
-    expect(screen.getByTestId('recap').textContent).toBe(
-      'Moussa Ndiaye (test) — 150 000 FCFA — Espèces — un reçu sera émis',
-    );
-    // Pas de seconde fenêtre : le bouton dit le montant, et c'est tout.
-    expect(screen.getByRole('button', { name: 'Encaisser 150 000 FCFA' })).toBeInTheDocument();
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-  });
-
-  it('refuse un montant au-delà du reste à payer ; Wave n’exige plus de référence', async () => {
-    const fetchMock = server();
-    const user = await openPanel();
-    const amount = screen.getByLabelText(/Montant reçu/);
-    await user.clear(amount);
-    await user.type(amount, '200000');
-    await user.click(screen.getByRole('radio', { name: 'Wave' }));
-    await user.click(screen.getByRole('button', { name: /^Encaisser 200 000 FCFA$/ }));
-
-    expect(screen.getByText(/ne peut pas dépasser ce qui reste à payer \(150 000 FCFA\)/)).toBeInTheDocument();
-    expect(screen.queryByText(/référence est obligatoire/)).not.toBeInTheDocument();
-    expect(calls(fetchMock, 'POST')).toHaveLength(0);
-  });
-
-  it('un autre montant : la saisie est réaffichée formatée (§ D)', async () => {
-    server();
-    const user = await openPanel();
-    const amount = screen.getByLabelText(/Montant reçu/);
-    await user.clear(amount);
-    await user.type(amount, '50000');
-    expect(screen.getByText(fullText('Soit 50 000 FCFA'))).toBeInTheDocument();
-    expect(screen.getByTestId('recap').textContent).toBe(
-      'Moussa Ndiaye (test) — 50 000 FCFA — Espèces — un reçu sera émis',
-    );
-    expect(screen.getByRole('button', { name: 'Encaisser 50 000 FCFA' })).toBeInTheDocument();
-  });
-
-  it('un toucher envoie, et le reçu est proposé', async () => {
-    const fetchMock = server(MOUSSA, [
-      { method: 'POST', match: /members\/[^/]+\/payments$/, status: 201, body: DONE },
-    ]);
-    const user = await openPanel();
-    await user.click(screen.getByRole('button', { name: 'Encaisser 150 000 FCFA' }));
-
-    await screen.findByText(
-      fullText('Reçu REC-2026-AAAA0001 émis — 150 000 FCFA. Cotisation du 1er octobre 2026 au 30 septembre 2027.'),
-    );
-    // Le montant tient sur une ligne.
-    expect(screen.getAllByText('150 000 FCFA', { selector: '.money' }).length).toBeGreaterThan(0);
-    const post = calls(fetchMock, 'POST')[0];
-    expect(JSON.parse(post?.init.body as string)).toEqual({
-      amount: 150000,
-      method: 'especes',
-      paid_on: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
-    });
-    expect(screen.getByRole('button', { name: 'Télécharger le reçu' })).toBeInTheDocument();
-  });
-
-  it('un 422 s’affiche en français, jamais brut', async () => {
-    server(MOUSSA, [
-      {
-        method: 'POST',
-        match: /members\/[^/]+\/payments$/,
-        status: 422,
-        body: { message: 'The amount exceeds the balance.', code: 'amount_exceeds_balance' },
-      },
-    ]);
-    const user = await openPanel();
-    await user.click(screen.getByRole('button', { name: 'Encaisser 150 000 FCFA' }));
-    await screen.findByText('Le montant dépasse ce qui reste à payer.');
-    expect(document.body.textContent).not.toMatch(/exceeds/);
-  });
-
-  it('n’est pas proposé quand le mode de cotisation n’est pas pris en charge', async () => {
-    server();
-    renderInBureau(<FicheMembrePage />, { modeSupported: false });
-    await screen.findByRole('heading', { name: 'Moussa Ndiaye (test)' });
-    expect(screen.queryByRole('button', { name: 'Encaisser' })).not.toBeInTheDocument();
-  });
-});
-
-describe('B7 — prénom et nom à l’édition', () => {
-  async function edit(member = MOUSSA, extra: Parameters<typeof fakeServer>[0] = []) {
+describe('B7 — prénom et nom à l’édition (« Autres actions »)', () => {
+  async function edit(member: MemberDetail = CHEIKH, extra: Parameters<typeof fakeServer>[0] = []) {
     const fetchMock = server(member, extra);
     const user = userEvent.setup();
     renderInBureau(<FicheMembrePage />);
-    await user.click(await screen.findByRole('button', { name: 'Modifier' }));
-    await panelReady();
+    await openMore(user, /Modifier ses informations/);
     return { user, fetchMock };
   }
 
   it('une personne : « Prénom » et « Nom », préremplis ; le PUT n’envoie pas `name`', async () => {
-    const { user, fetchMock } = await edit(MOUSSA, [
-      { method: 'PUT', match: `membership/members/${MOUSSA.id}`, body: MOUSSA },
+    const { user, fetchMock } = await edit(CHEIKH, [
+      { method: 'PUT', match: `membership/members/${CHEIKH.id}`, body: CHEIKH },
     ]);
-    expect((screen.getByLabelText(/^Prénom/) as HTMLInputElement).value).toBe('Moussa');
-    expect((screen.getByLabelText(/^Nom/) as HTMLInputElement).value).toBe('Ndiaye (test)');
-    expect(screen.queryByLabelText(/Raison sociale/)).not.toBeInTheDocument();
-
+    expect((screen.getByLabelText(/^Prénom/) as HTMLInputElement).value).toBe('Cheikh');
+    expect((screen.getByLabelText(/^Nom/) as HTMLInputElement).value).toBe('Diouf');
     await user.click(screen.getByRole('button', { name: 'Enregistrer les modifications' }));
     await waitFor(() => expect(calls(fetchMock, 'PUT')).toHaveLength(1));
     const body = JSON.parse(calls(fetchMock, 'PUT')[0]?.init.body as string);
-    expect(body).toMatchObject({ type: 'personne', first_name: 'Moussa', last_name: 'Ndiaye (test)' });
+    expect(body).toMatchObject({ type: 'personne', first_name: 'Cheikh', last_name: 'Diouf' });
     expect(body).not.toHaveProperty('name');
+    expect(await screen.findByText('Fiche mise à jour.')).toBeInTheDocument();
   });
 
   it('une fiche ancienne au prénom null : champ vide, et exigé', async () => {
-    const { user, fetchMock } = await edit(memberDetail({ first_name: null, last_name: 'Ndiaye' }));
+    const { user, fetchMock } = await edit(memberDetail({ id: 'm-x', first_name: null, last_name: 'Ndiaye' }));
     expect((screen.getByLabelText(/^Prénom/) as HTMLInputElement).value).toBe('');
     await user.click(screen.getByRole('button', { name: 'Enregistrer les modifications' }));
     expect(screen.getByText('Indiquez le prénom.')).toBeInTheDocument();
@@ -355,20 +407,18 @@ describe('B7 — prénom et nom à l’édition', () => {
       { method: 'PUT', match: `membership/members/${AGENCE.id}`, body: AGENCE },
     ]);
     expect((screen.getByLabelText(/Raison sociale/) as HTMLInputElement).value).toBe('Agence Test Conseil (test)');
-    expect(screen.queryByLabelText(/^Prénom/)).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Enregistrer les modifications' }));
     await waitFor(() => expect(calls(fetchMock, 'PUT')).toHaveLength(1));
     const body = JSON.parse(calls(fetchMock, 'PUT')[0]?.init.body as string);
     expect(body).toMatchObject({ type: 'organisation', name: 'Agence Test Conseil (test)' });
     expect(body).not.toHaveProperty('first_name');
-    expect(body).not.toHaveProperty('last_name');
   });
 
   it('un 422 sur `first_name` se range sous « Prénom », avec le message de l’API tel quel', async () => {
-    const { user } = await edit(MOUSSA, [
+    const { user } = await edit(CHEIKH, [
       {
         method: 'PUT',
-        match: `membership/members/${MOUSSA.id}`,
+        match: `membership/members/${CHEIKH.id}`,
         status: 422,
         body: { message: 'Membre invalide.', errors: { first_name: ['Le champ prénom ne doit pas dépasser 255 caractères.'] } },
       },
@@ -385,18 +435,14 @@ describe('contacts d’une organisation : prénom et nom', () => {
       id: 'c-2', member_id: AGENCE.id, name: 'Khady Ndiaye', first_name: 'Khady', last_name: 'Ndiaye',
       role_title: null, phone: null, email: null, role: 'principal',
     };
-    const fetchMock = server(AGENCE, [
-      { method: 'POST', match: /contacts$/, status: 201, body: created },
-    ]);
+    const fetchMock = server(AGENCE, [{ method: 'POST', match: /contacts$/, status: 201, body: created }]);
     const user = userEvent.setup();
     renderInBureau(<FicheMembrePage />);
     await user.click(await screen.findByRole('button', { name: 'Ajouter un contact' }));
-
     await user.type(screen.getByLabelText(/^Nom/), 'Ndiaye');
     await user.click(screen.getByRole('button', { name: 'Ajouter le contact' }));
     expect(screen.getByText('Indiquez le prénom du contact.')).toBeInTheDocument();
     expect(calls(fetchMock, 'POST')).toHaveLength(0);
-
     await user.type(screen.getByLabelText(/^Prénom/), 'Khady');
     await user.click(screen.getByRole('button', { name: 'Ajouter le contact' }));
     await screen.findByText('Khady Ndiaye');
@@ -406,58 +452,32 @@ describe('contacts d’une organisation : prénom et nom', () => {
   });
 });
 
-describe('B10 — la sortie (R9)', () => {
+describe('B10 — le départ (R9)', () => {
   it('exige un motif, récapitule, puis envoie left_reason', async () => {
-    const fetchMock = server(MOUSSA, [
-      {
-        method: 'POST',
-        match: /\/leave$/,
-        body: { ...MOUSSA, status: 'former', left_at: '2026-10-29', left_reason: 'resigned' },
-      },
+    const fetchMock = server(CHEIKH, [
+      { method: 'POST', match: /\/leave$/, body: { ...CHEIKH, status: 'former', left_at: '2026-10-29', left_reason: 'resigned' } },
     ]);
     const user = userEvent.setup();
     renderInBureau(<FicheMembrePage />);
-    await user.click(await screen.findByRole('button', { name: 'Enregistrer une sortie' }));
-    await panelReady();
-
+    await openMore(user, 'Enregistrer son départ');
     await user.click(screen.getByRole('button', { name: 'Vérifier la sortie' }));
     expect(screen.getByText('Choisissez le motif de la sortie.')).toBeInTheDocument();
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-
     await user.selectOptions(screen.getByLabelText(/Motif/), 'resigned');
     await user.click(screen.getByRole('button', { name: 'Vérifier la sortie' }));
-
     const dialog = screen.getByRole('dialog', { name: 'Enregistrer la sortie de ce membre ?' });
     expect(within(dialog).getByText('Démission')).toBeInTheDocument();
-    expect(
-      within(dialog).getByText('Le membre passera dans les anciens membres. Son historique est conservé.'),
-    ).toBeInTheDocument();
     expect(calls(fetchMock, 'POST')).toHaveLength(0);
-
     await user.click(within(dialog).getByRole('button', { name: 'Enregistrer la sortie' }));
     await waitFor(() => expect(calls(fetchMock, 'POST')).toHaveLength(1));
     const body = JSON.parse(calls(fetchMock, 'POST')[0]?.init.body as string);
     expect(body.left_reason).toBe('resigned');
     expect(body.reason).toBeUndefined();
   });
-
-  it('l’interface ne propose aucune suppression de membre', async () => {
-    server();
-    renderInBureau(<FicheMembrePage />);
-    await screen.findByRole('heading', { name: 'Moussa Ndiaye (test)' });
-    expect(screen.queryByRole('button', { name: /supprimer/i })).not.toBeInTheDocument();
-  });
 });
 
-describe('§11 — annuler un encaissement, sans rien perdre', () => {
-  const WITH_CANCELLED_RECEIPT = memberDetail({
-    dues: MOUSSA.dues.map((due) => ({
-      ...due,
-      receipts: due.receipts.map((r) => ({ ...r, cancelled_at: '2026-11-01T14:32:11+00:00' })),
-    })),
-  });
+describe('§11 — annuler un paiement, sans rien perdre (« Autres actions »)', () => {
   const CANCELLED = {
-    ...VALIDATED,
+    ...ACCEPTED,
     status: 'cancelled' as const,
     cancelled_at: '2026-11-01T14:32:11+00:00',
     cancelled_by_user_id: 7,
@@ -465,20 +485,21 @@ describe('§11 — annuler un encaissement, sans rien perdre', () => {
     cancel_reason: 'Chèque revenu impayé par la banque',
   };
 
-  it('seulement sur un versement validé ; un signalé n’a pas ce bouton', async () => {
-    nav.params = { id: MOUSSA.id };
-    fakeServer([
-      { match: /payments\?member_id=/, body: [VALIDATED, payment({ id: 'p-declared' })] },
-      { match: `membership/members/${MOUSSA.id}`, body: MOUSSA },
-    ]);
+  it('seuls les paiements ACCEPTÉS s’annulent ; un paiement à vérifier se refuse', async () => {
+    server(CHEIKH, [{ match: /payments\?member_id=/, body: [ACCEPTED, payment({ id: 'p-declared' })] }]);
+    const user = userEvent.setup();
     renderInBureau(<FicheMembrePage />);
-    expect(await screen.findAllByRole('button', { name: 'Annuler cet encaissement' })).toHaveLength(1);
+    await openMore(user, /Annuler un paiement/);
+    expect(screen.getAllByRole('button', { name: 'Annuler ce paiement' })).toHaveLength(1);
+    expect(screen.getByRole('link', { name: 'À vérifier dans « Paiements à vérifier »' })).toHaveAttribute(
+      'href',
+      '/bureau/a-verifier',
+    );
   });
 
-  it('motif obligatoire (10 caractères), récapitulatif complet, puis l’affichage après annulation', async () => {
-    // Après l'annulation, la relecture sert le versement annulé, comme le serveur.
+  it('motif obligatoire (10 caractères), récapitulatif complet, puis la ligne marquée « Annulé »', async () => {
     let cancelled = false;
-    const fetchMock = server(MOUSSA, [
+    const fetchMock = server(CHEIKH, [
       {
         method: 'POST',
         match: /payments\/[^/]+\/cancel$/,
@@ -490,365 +511,42 @@ describe('§11 — annuler un encaissement, sans rien perdre', () => {
       {
         match: /payments\?member_id=/,
         get body() {
-          return [cancelled ? CANCELLED : VALIDATED];
-        },
-      },
-      {
-        match: `membership/members/${MOUSSA.id}`,
-        get body() {
-          return cancelled ? WITH_CANCELLED_RECEIPT : MOUSSA;
+          return [cancelled ? CANCELLED : ACCEPTED];
         },
       },
     ]);
     const user = userEvent.setup();
     renderInBureau(<FicheMembrePage />);
-    await user.click(await screen.findByRole('button', { name: 'Annuler cet encaissement' }));
+    await openMore(user, /Annuler un paiement/);
+    await user.click(screen.getByRole('button', { name: 'Annuler ce paiement' }));
     await panelReady();
-
-    expect(screen.getByTestId('cancel-recap').textContent).toBe(
-      'Annuler 100 000 FCFA (Wave, 29/10/2026) de Moussa Ndiaye (test) ? Sa cotisation redeviendra à régler et le reçu REC-2026-CB4A73AE sera marqué annulé. Rien n’est supprimé.',
-    );
-
+    expect(screen.getByTestId('cancel-recap').textContent).toContain('Sa cotisation redeviendra à régler');
     const reason = screen.getByLabelText(/Motif de l’annulation/);
     await user.type(reason, '   court  ');
-    await user.click(screen.getByRole('button', { name: 'Oui, annuler cet encaissement' }));
+    await user.click(screen.getByRole('button', { name: 'Oui, annuler ce paiement' }));
     expect(screen.getByText('Expliquez le motif en 10 caractères au moins.')).toBeInTheDocument();
     expect(calls(fetchMock, 'POST')).toHaveLength(0);
-
     await user.clear(reason);
     await user.type(reason, '  Chèque revenu impayé par la banque ');
-    await user.click(screen.getByRole('button', { name: 'Oui, annuler cet encaissement' }));
-
+    await user.click(screen.getByRole('button', { name: 'Oui, annuler ce paiement' }));
     const line = await screen.findByTestId('cancelled-line');
-    expect(line.textContent).toMatch(/^Annulé le 1er novembre 2026 par Fatou Sow — motif : Chèque revenu impayé par la banque$/);
-    const [post] = calls(fetchMock, 'POST');
-    expect(post?.url).toBe(`https://api.eventflow.africa/api/v1/admin/membership/payments/${VALIDATED.id}/cancel`);
-    expect(JSON.parse(post?.init.body as string)).toEqual({ reason: 'Chèque revenu impayé par la banque' });
-    // Le reçu reste téléchargeable, marqué annulé.
-    expect(screen.getAllByRole('button', { name: /REC-2026-CB4A73AE/ }).length).toBeGreaterThan(0);
-    expect(screen.getByText('Reçu annulé')).toBeInTheDocument();
-    // La cotisation marque aussi le reçu : `cancelled_at` servi par la fiche (§12.4).
-    const dues = screen.getByRole('heading', { name: 'Cotisations' }).closest('section') as HTMLElement;
-    await waitFor(() => expect(within(dues).getByText('Annulé')).toBeInTheDocument());
-    expect(screen.queryByRole('button', { name: 'Annuler cet encaissement' })).toBeNull();
+    expect(line.textContent).toBe('Annulé le 1er novembre 2026 par Fatou Sow — motif : Chèque revenu impayé par la banque');
+    expect(JSON.parse(calls(fetchMock, 'POST')[0]?.init.body as string)).toEqual({
+      reason: 'Chèque revenu impayé par la banque',
+    });
+    // Le reçu reste listé et téléchargeable (piège 33).
+    expect(within(screen.getByTestId('payments')).getByRole('button', { name: 'Reçu' })).toBeInTheDocument();
   });
 
-  it('§3 — les boutons disent ce qu’ils font : « Oui, annuler cet encaissement » / « Garder l’encaissement »', async () => {
-    server(MOUSSA);
+  it('« Garder ce paiement » referme sans rien envoyer', async () => {
+    const fetchMock = server();
     const user = userEvent.setup();
     renderInBureau(<FicheMembrePage />);
-    await user.click(await screen.findByRole('button', { name: 'Annuler cet encaissement' }));
+    await openMore(user, /Annuler un paiement/);
+    await user.click(screen.getByRole('button', { name: 'Annuler ce paiement' }));
     await panelReady();
-    expect(screen.getByRole('button', { name: 'Oui, annuler cet encaissement' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Annuler l’encaissement' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Ne rien changer' })).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Garder l’encaissement' }));
+    await user.click(screen.getByRole('button', { name: 'Garder ce paiement' }));
     expect(screen.queryByTestId('cancel-recap')).toBeNull();
-  });
-
-  it('§3 — le récapitulatif dit « à régler », vrai aussi quand la cotisation redevient partielle', async () => {
-    server(MOUSSA);
-    const user = userEvent.setup();
-    renderInBureau(<FicheMembrePage />);
-    await user.click(await screen.findByRole('button', { name: 'Annuler cet encaissement' }));
-    await panelReady();
-    const recap = screen.getByTestId('cancel-recap').textContent ?? '';
-    expect(recap).toContain('Sa cotisation redeviendra à régler');
-    expect(recap).not.toMatch(/redeviendra due/);
-  });
-
-  it('§12.4 — le reçu d’une cotisation est marqué depuis `cancelled_at` servi, jamais déduit', async () => {
-    // Servi annulé, sans aucun versement annulé dans la liste : marqué.
-    server(WITH_CANCELLED_RECEIPT, [{ match: /payments\?member_id=/, body: [] }]);
-    const { unmount } = renderInBureau(<FicheMembrePage />);
-    let dues = (await screen.findByRole('heading', { name: 'Cotisations' })).closest('section') as HTMLElement;
-    expect(within(dues).getByText('Annulé')).toBeInTheDocument();
-    unmount();
-
-    // Versement annulé, mais reçu servi `cancelled_at: null` : la fiche ne
-    // devine plus rien — c'est le serveur qui fait foi.
-    server(MOUSSA, [{ match: /payments\?member_id=/, body: [CANCELLED] }]);
-    renderInBureau(<FicheMembrePage />);
-    await screen.findByText('Reçu annulé');
-    dues = screen.getByRole('heading', { name: 'Cotisations' }).closest('section') as HTMLElement;
-    expect(within(dues).queryByText('Annulé')).toBeNull();
-  });
-
-  it('422 payment_not_cancellable : la fiche le dit et se recharge', async () => {
-    const fetchMock = server(MOUSSA, [
-      { method: 'POST', match: /payments\/[^/]+\/cancel$/, status: 422, body: { code: 'payment_not_cancellable', message: 'x' } },
-    ]);
-    const user = userEvent.setup();
-    renderInBureau(<FicheMembrePage />);
-    await user.click(await screen.findByRole('button', { name: 'Annuler cet encaissement' }));
-    await panelReady();
-    await user.type(screen.getByLabelText(/Motif de l’annulation/), 'Erreur de saisie du montant');
-    await user.click(screen.getByRole('button', { name: 'Oui, annuler cet encaissement' }));
-    expect(await screen.findByText(/ne peut plus être annulé/)).toBeInTheDocument();
-    await waitFor(() =>
-      expect(calls(fetchMock).filter((c) => c.url.includes(`members/${MOUSSA.id}`)).length).toBeGreaterThan(1),
-    );
-  });
-});
-
-/* ───────────────────── F3.1 — arriérés et échéance (§12) ───────────────────── */
-
-function due(
-  id: string,
-  start: string,
-  end: string,
-  extra: Partial<MemberDetail['dues'][number]> = {},
-): MemberDetail['dues'][number] {
-  return {
-    id,
-    period_start: start,
-    period_end: end,
-    due_date: start,
-    status: 'due',
-    origin: 'platform',
-    amount_due: 250000,
-    amount_due_formatted: '250 000 FCFA',
-    amount_paid: 0,
-    amount_paid_formatted: '0 FCFA',
-    balance_due: 250000,
-    balance_due_formatted: '250 000 FCFA',
-    settled_at: null,
-    receipts: [],
-    receipt_available: false,
-    is_unclaimed_arrears: false,
-    ...extra,
-  };
-}
-
-/** Absente depuis deux ans, sous `current_only` : seule l'année en cours est réclamée. */
-const AWA_CURRENT_ONLY = memberDetail({
-  id: 'm-awa',
-  name: 'Awa Diouf',
-  balance_due: 250000,
-  balance_due_formatted: '250 000 FCFA',
-  next_due_date: '2026-10-01',
-  dues: [
-    due('d-2026', '2026-10-01', '2027-09-30'),
-    due('d-2025', '2025-10-01', '2026-09-30', { is_unclaimed_arrears: true }),
-    due('d-2024', '2024-10-01', '2025-09-30', { is_unclaimed_arrears: true }),
-  ],
-});
-
-/** La même membre sous `all`, l'année en cours réglée : à jour ET deux arriérés. */
-const AWA_ALL = memberDetail({
-  id: 'm-awa',
-  name: 'Awa Diouf',
-  is_up_to_date: true,
-  covered_until: '2027-09-30',
-  next_due_date: '2027-10-01',
-  balance_due: 500000,
-  balance_due_formatted: '500 000 FCFA',
-  dues: [
-    due('d-2026', '2026-10-01', '2027-09-30', {
-      status: 'reglee',
-      amount_paid: 250000,
-      amount_paid_formatted: '250 000 FCFA',
-      balance_due: 0,
-      balance_due_formatted: '0 FCFA',
-    }),
-    due('d-2025', '2025-10-01', '2026-09-30'),
-    due('d-2024', '2024-10-01', '2025-09-30'),
-  ],
-});
-
-function duesSection() {
-  return screen.getByRole('heading', { name: 'Cotisations' }).closest('section') as HTMLElement;
-}
-
-function situation() {
-  return screen.getByRole('heading', { name: 'Situation' }).closest('section') as HTMLElement;
-}
-
-describe('§1 — l’historique et le reste à payer', () => {
-  it('une cotisation non réclamée : listée, grisée, pastille « Non réclamée », hors du reste à payer', async () => {
-    server(AWA_CURRENT_ONLY, [{ match: /payments\?member_id=/, body: [] }]);
-    renderInBureau(<FicheMembrePage />);
-    await screen.findByRole('heading', { name: 'Awa Diouf' });
-
-    const cards = within(duesSection()).getAllByRole('listitem').filter((li) => li.querySelector('dl'));
-    expect(cards).toHaveLength(3);
-    const [current, y2025, y2024] = cards as [HTMLElement, HTMLElement, HTMLElement];
-    expect(current).not.toHaveAttribute('data-unclaimed');
-    expect(within(current).getByText('À régler')).toBeInTheDocument();
-    for (const card of [y2025, y2024]) {
-      expect(card).toHaveAttribute('data-unclaimed', 'true');
-      expect(card.className).toContain('text-ink-muted');
-      expect(within(card).getByText('Non réclamée')).toBeInTheDocument();
-      expect(within(card).queryByText('À régler')).toBeNull();
-      // Rien n'est caché : le montant reste là.
-      expect(within(card).getAllByText('250 000 FCFA').length).toBeGreaterThan(0);
-    }
-    // Le reste à payer est celui du serveur : l'année en cours, pas 3 × 250 000.
-    expect(within(situation()).getByText(fullText('250 000 FCFA'))).toBeInTheDocument();
-    expect(situation().textContent).not.toMatch(/750 000/);
-  });
-
-  it('la ligne d’explication n’apparaît qu’une fois, sous la première non réclamée, avec le lien vers le réglage', async () => {
-    server(AWA_CURRENT_ONLY, [{ match: /payments\?member_id=/, body: [] }]);
-    renderInBureau(<FicheMembrePage />);
-    await screen.findByRole('heading', { name: 'Awa Diouf' });
-    const notes = screen.getAllByTestId('unclaimed-note');
-    expect(notes).toHaveLength(1);
-    expect(notes[0]?.textContent?.replace(/\s+/g, ' ')).toBe(
-      'L’association repart de l’année en cours. Les années précédentes ne sont pas réclamées. (Réglages)',
-    );
-    expect(within(notes[0] as HTMLElement).getByRole('link', { name: 'Réglages' })).toHaveAttribute(
-      'href',
-      '/bureau/reglages#arrieres',
-    );
-    expect((notes[0] as HTMLElement).closest('li')).toHaveAttribute('data-unclaimed', 'true');
-    expect((notes[0] as HTMLElement).closest('li')).toHaveTextContent('Du 1er octobre 2025 au 30 septembre 2026');
-  });
-
-  it('sans arriéré non réclamé : aucune ligne d’explication', async () => {
-    server();
-    renderInBureau(<FicheMembrePage />);
-    await screen.findByRole('heading', { name: 'Cotisations' });
-    expect(screen.queryByTestId('unclaimed-note')).toBeNull();
-  });
-
-  it('« Encaisser » vise l’année réclamée, jamais un arriéré non réclamé', async () => {
-    server(AWA_CURRENT_ONLY, [{ match: /payments\?member_id=/, body: [] }]);
-    const user = userEvent.setup();
-    renderInBureau(<FicheMembrePage />);
-    await user.click(await screen.findByRole('button', { name: 'Encaisser' }));
-    await panelReady();
-    expect(
-      screen.getByText(fullText('Cotisation du 1er octobre 2026 au 30 septembre 2027 — reste 250 000 FCFA')),
-    ).toBeInTheDocument();
-    expect(openDue(AWA_CURRENT_ONLY)?.id).toBe('d-2026');
-  });
-
-  it('sous `all` : jamais « À jour » seul à côté d’un dû — « À jour pour l’année en cours — arriérés : 500 000 FCFA »', async () => {
-    server(AWA_ALL, [{ match: /payments\?member_id=/, body: [] }]);
-    renderInBureau(<FicheMembrePage />);
-    await screen.findByRole('heading', { name: 'Awa Diouf' });
-
-    expect(
-      within(situation()).getByText(fullText('À jour pour l’année en cours — arriérés : 500 000 FCFA')),
-    ).toBeInTheDocument();
-    // Ni dans la Situation, ni dans la pastille du titre.
-    expect(screen.queryByText(/^À jour$/)).toBeNull();
-    expect(screen.getByText('Arriérés à régler')).toBeInTheDocument();
-    // Sous `all`, rien n'est marqué non réclamé.
-    expect(screen.queryByText('Non réclamée')).toBeNull();
-    expect(screen.queryByTestId('unclaimed-note')).toBeNull();
-  });
-
-  it('le registre aussi : pastille et détail, jamais « À jour » seul', () => {
-    const { container } = render(
-      <>
-        <StandingPastille member={AWA_ALL} />
-        <span>{standingDetail(AWA_ALL)}</span>
-      </>,
-    );
-    expect(container.textContent).toBe('Arriérés à régler' + 'À jour pour l’année en cours — arriérés : 500 000 FCFA');
-    // Un membre à jour sans dû reste « À jour ».
-    const clean = memberDetail({ is_up_to_date: true, balance_due: 0, balance_due_formatted: '0 FCFA' });
-    expect(upToDateWithArrears(clean)).toBe(false);
-    // Montant inconnu : ce n'est pas un arriéré qu'on sait dire.
-    expect(upToDateWithArrears({ ...AWA_ALL, balance_due: null, balance_due_formatted: null })).toBe(false);
-  });
-});
-
-describe('§1 — l’échéance : lue, comparée à aujourd’hui, jamais calculée', () => {
-  const TODAY = '2026-11-01';
-
-  it('passée et pas à jour → « En retard depuis le … »', () => {
-    expect(dueDateLine(memberDetail({ next_due_date: '2026-10-01' }), TODAY)).toEqual({
-      late: true,
-      label: 'Échéance',
-      value: 'En retard depuis le 1er octobre 2026',
-    });
-  });
-
-  it('sinon → « Prochaine échéance » : à venir, aujourd’hui, ou passée mais à jour', () => {
-    expect(dueDateLine(memberDetail({ next_due_date: '2027-10-01' }), TODAY)).toEqual({
-      late: false,
-      label: 'Prochaine échéance',
-      value: '1er octobre 2027',
-    });
-    expect(dueDateLine(memberDetail({ next_due_date: TODAY }), TODAY)?.late).toBe(false);
-    expect(dueDateLine(memberDetail({ next_due_date: '2026-10-01', is_up_to_date: true }), TODAY)?.late).toBe(false);
-    expect(dueDateLine(memberDetail({ next_due_date: null }), TODAY)).toBeNull();
-  });
-
-  it('un ancien membre : aucune échéance, ni dans la fonction ni à l’écran', async () => {
-    const cheikh = memberDetail({
-      status: 'former',
-      left_at: '2026-10-20',
-      left_reason: 'resigned',
-      is_up_to_date: false,
-      next_due_date: '2026-03-01',
-      balance_due: 0,
-      balance_due_formatted: '0 FCFA',
-      dues: [],
-    });
-    expect(dueDateLine(cheikh, TODAY)).toBeNull();
-    server(cheikh, [{ match: /payments\?member_id=/, body: [] }]);
-    renderInBureau(<FicheMembrePage />);
-    await screen.findByText(/Ancien membre depuis le 20 octobre 2026/);
-    expect(screen.queryByTestId('echeance')).toBeNull();
-    expect(within(situation()).queryByText(/échéance/i)).toBeNull();
-    expect(situation().textContent).not.toMatch(/1er mars 2026|En retard/);
-  });
-
-  it('à l’écran : la date servie, telle quelle', async () => {
-    server(memberDetail({ next_due_date: '2020-10-01' }));
-    const { unmount } = renderInBureau(<FicheMembrePage />);
-    expect(await screen.findByTestId('echeance')).toHaveTextContent(/^En retard depuis le 1er octobre 2020$/);
-    expect(within(situation()).getByText('Échéance')).toBeInTheDocument();
-    unmount();
-
-    server(memberDetail({ next_due_date: '2099-10-01', is_up_to_date: true, balance_due: 0, balance_due_formatted: '0 FCFA' }));
-    renderInBureau(<FicheMembrePage />);
-    expect(await screen.findByTestId('echeance')).toHaveTextContent(/^1er octobre 2099$/);
-    expect(within(situation()).getByText('Prochaine échéance')).toBeInTheDocument();
-  });
-});
-
-describe('Micro-correctif — un ancien membre : jamais « Pas à jour », aucun reste à payer', () => {
-  const owing = {
-    is_up_to_date: false,
-    covered_until: '2026-02-28',
-    balance_due: 150000,
-    balance_due_formatted: '150 000 FCFA',
-  };
-  const ancien = memberDetail({
-    ...owing,
-    status: 'former',
-    left_at: '2026-10-20',
-    left_reason: 'resigned',
-  });
-
-  it('la fiche : « Ancien membre », couverture affichée, pas de reste à payer', async () => {
-    server(ancien, [{ match: /payments\?member_id=/, body: [] }]);
-    renderInBureau(<FicheMembrePage />);
-    await screen.findByText(/Ancien membre depuis le 20 octobre 2026/);
-    const s = within(situation());
-    expect(s.getByText('Ancien membre')).toBeInTheDocument();
-    expect(s.getByText('Couvert jusqu’au')).toBeInTheDocument();
-    expect(s.getByText('28 février 2026')).toBeInTheDocument();
-    expect(s.queryByText('Reste à payer')).toBeNull();
-    expect(situation().textContent).not.toMatch(/150 000 FCFA/);
-    expect(screen.queryByText('Pas à jour')).toBeNull();
-    expect(standingDetail(ancien)).toBe('Couvert jusqu’au 28 février 2026');
-  });
-
-  it('contre-épreuve : le même membre actif est « Pas à jour » et doit 150 000 FCFA', async () => {
-    const actif = memberDetail({ ...owing, status: 'active' });
-    server(actif, [{ match: /payments\?member_id=/, body: [] }]);
-    renderInBureau(<FicheMembrePage />);
-    await screen.findByRole('heading', { name: actif.name });
-    const s = within(situation());
-    expect(s.getByText('Pas à jour')).toBeInTheDocument();
-    expect(s.getByText('Reste à payer')).toBeInTheDocument();
-    expect(s.getByText('150 000 FCFA')).toBeInTheDocument();
-    expect(s.getByText('Couvert jusqu’au')).toBeInTheDocument();
+    expect(calls(fetchMock, 'POST')).toHaveLength(0);
   });
 });

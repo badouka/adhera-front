@@ -7,7 +7,7 @@ import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import FicheMembrePage from '@/app/bureau/membres/[id]/page';
-import MembresPage from '@/app/bureau/membres/page';
+import { Registry } from '@/components/bureau/Registry';
 import { NO_LONGER_VALID_HELP } from '@/components/bureau/AttestationsPanel';
 import * as documents from '@/components/bureau/Documents';
 import { ROTATE_CARD_WARNING } from '@/components/bureau/MemberLinkPanel';
@@ -78,6 +78,13 @@ function server(member: MemberDetail, extra: Parameters<typeof fakeServer>[0] = 
   ]);
 }
 
+/** F5 : les gestes rares de la fiche vivent dans « Autres actions ». */
+async function openMore(user: ReturnType<typeof userEvent.setup>, row: RegExp) {
+  await user.click(await screen.findByRole('button', { name: /Autres actions/ }));
+  await user.click(screen.getByRole('button', { name: row }));
+  await panelReady();
+}
+
 /* ──────────────────────────── § 3.1 — le numéro ─────────────────────────── */
 
 describe('F4 § 3.1 — le numéro de membre', () => {
@@ -93,7 +100,8 @@ describe('F4 § 3.1 — le numéro de membre', () => {
         ],
       },
     ]);
-    renderInBureau(<MembresPage />);
+    // Le registre complet (« Demandes d’adhésion », « Anciens membres ») et sa colonne « N° ».
+    renderInBureau(<Registry status="active" />);
     const table = await screen.findByTestId('member-table');
     expect(within(table).getAllByRole('columnheader')[0]).toHaveTextContent('N°');
     const cells = within(table).getAllByTestId('member-number').map((c) => c.textContent);
@@ -109,13 +117,16 @@ describe('F4 § 3.1 — le numéro de membre', () => {
   it('la fiche affiche le numéro ; un candidat, une ligne vide', async () => {
     server(AMINATA);
     renderInBureau(<FicheMembrePage />);
-    expect(await screen.findByTestId('member-number')).toHaveTextContent('0001');
+    await screen.findByRole('heading', { name: 'Aminata Diop' });
+    expect(screen.getByText(/· n° 0001 ·/)).toBeInTheDocument();
     cleanup();
 
+    // F5 : la ligne « {type} · n° {numéro} · {téléphone} » — sans numéro, la mention disparaît.
     server({ ...AMINATA, id: 'cand', status: 'pending', member_number: null });
     renderInBureau(<FicheMembrePage />);
-    const cell = await screen.findByTestId('member-number');
-    expect(cell.textContent).toBe('');
+    await screen.findByRole('heading', { name: 'Aminata Diop' });
+    expect(document.body.textContent).not.toMatch(/n° (0000|—)/);
+    expect(screen.queryByText(/n° /)).not.toBeInTheDocument();
   });
 
   it('le champ « Numéro de membre » à l’édition ; envoyé seulement s’il a changé', async () => {
@@ -124,8 +135,7 @@ describe('F4 § 3.1 — le numéro de membre', () => {
     ]);
     const user = userEvent.setup();
     renderInBureau(<FicheMembrePage />);
-    await user.click(await screen.findByRole('button', { name: 'Modifier' }));
-    await panelReady();
+    await openMore(user, /Modifier ses informations/);
     const field = screen.getByLabelText(/Numéro de membre/) as HTMLInputElement;
     expect(field.value).toBe('0001');
     expect(field.maxLength).toBe(32);
@@ -147,8 +157,7 @@ describe('F4 § 3.1 — le numéro de membre', () => {
     ]);
     const user = userEvent.setup();
     renderInBureau(<FicheMembrePage />);
-    await user.click(await screen.findByRole('button', { name: 'Modifier' }));
-    await panelReady();
+    await openMore(user, /Modifier ses informations/);
     const field = screen.getByLabelText(/Numéro de membre/);
     await user.clear(field);
     await user.type(field, '0002');
@@ -179,16 +188,18 @@ describe('F4 § 3.2 — les attestations sur la fiche', () => {
   it('sans `features.membership_card` (serveur antérieur à v3.8.1) : aucun bloc', async () => {
     server(AMINATA);
     renderInBureau(<FicheMembrePage />);
-    await screen.findByRole('heading', { name: 'Aminata Diop' });
-    expect(screen.queryByRole('heading', { name: 'Attestations' })).not.toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /Autres actions/ }));
+    expect(screen.queryByRole('button', { name: /Ses attestations/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Délivrer une attestation' })).not.toBeInTheDocument();
   });
 
   it('`membership_card: false` : aucun bloc non plus', async () => {
     server(AMINATA);
     renderInBureau(<FicheMembrePage />, { settings: settings({ features: { membership_card: false } }) });
-    await screen.findByRole('heading', { name: 'Aminata Diop' });
-    expect(screen.queryByRole('heading', { name: 'Attestations' })).not.toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /Autres actions/ }));
+    expect(screen.queryByRole('button', { name: /Ses attestations/ })).not.toBeInTheDocument();
   });
 
   it('la liste : référence, délivrance, validité, badges « Valide » et « Plus valide » avec l’aide', async () => {
@@ -212,6 +223,7 @@ describe('F4 § 3.2 — les attestations sur la fiche', () => {
       ],
     });
     renderInBureau(<FicheMembrePage />, CARD_ON);
+    await openMore(userEvent.setup(), /Ses attestations/);
     await screen.findByRole('heading', { name: 'Attestations' });
     const items = screen.getAllByRole('listitem').filter((li) => li.hasAttribute('data-valid'));
     expect(items.map((li) => li.getAttribute('data-valid'))).toEqual(['true', 'false']);
@@ -241,6 +253,7 @@ describe('F4 § 3.2 — les attestations sur la fiche', () => {
     ]);
     const user = userEvent.setup();
     renderInBureau(<FicheMembrePage />, CARD_ON);
+    await openMore(user, /Ses attestations/);
     await user.click(await screen.findByRole('button', { name: 'Délivrer une attestation' }));
 
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
@@ -268,6 +281,7 @@ describe('F4 § 3.2 — les attestations sur la fiche', () => {
     ]);
     const user = userEvent.setup();
     renderInBureau(<FicheMembrePage />, CARD_ON);
+    await openMore(user, /Ses attestations/);
     await user.click(await screen.findByRole('button', { name: 'Délivrer une attestation' }));
     expect(await screen.findByText(message)).toBeInTheDocument();
     // Aucun forçage.
@@ -277,6 +291,7 @@ describe('F4 § 3.2 — les attestations sur la fiche', () => {
   it('un ancien membre : la liste, sans bouton', async () => {
     server({ ...AMINATA, status: 'former', left_at: '2026-10-01', left_reason: 'resigned' });
     renderInBureau(<FicheMembrePage />, CARD_ON);
+    await openMore(userEvent.setup(), /Ses attestations/);
     await screen.findByRole('heading', { name: 'Attestations' });
     expect(screen.queryByRole('button', { name: 'Délivrer une attestation' })).not.toBeInTheDocument();
   });
@@ -289,7 +304,7 @@ describe('F4 § 3.3 — régénérer le lien', () => {
     server(AMINATA);
     const user = userEvent.setup();
     renderInBureau(<FicheMembrePage />, overrides);
-    await user.click(await screen.findByRole('button', { name: 'Envoyer le lien' }));
+    await openMore(user, /Son lien personnel/);
     await user.click(await screen.findByRole('button', { name: 'Régénérer le lien' }));
     return screen.findByRole('dialog');
   }
@@ -309,151 +324,8 @@ describe('F4 § 3.3 — régénérer le lien', () => {
   });
 });
 
-/* ─────────────────────── § 3.4 — les années manquantes ─────────────────── */
-
-const DUE_2026 = {
-  ...memberDetail().dues[0]!,
-  id: 'due-2026',
-  period_start: '2026-06-10',
-  period_end: '2027-06-09',
-  status: 'due' as const,
-  amount_due: 25000,
-  amount_due_formatted: '25 000 FCFA',
-  amount_paid: 0,
-  amount_paid_formatted: '0 FCFA',
-  balance_due: 25000,
-  balance_due_formatted: '25 000 FCFA',
-  receipts: [],
-  is_unclaimed_arrears: false,
-};
-const DUE_2023 = { ...DUE_2026, id: 'due-2023', period_start: '2023-06-10', period_end: '2024-06-09' };
-
-/** Le décor du §12.9, sous `all` : 2023 et 2026 en base, 2024 et 2025 manquantes. */
-const CHEIKH = memberDetail({
-  id: 'cheikh',
-  name: 'Cheikh Diouf',
-  balance_due: 100000,
-  balance_due_formatted: '100 000 FCFA',
-  dues: [DUE_2026, DUE_2023],
-  missing_periods: [
-    {
-      period_start: '2024-06-10',
-      period_end: '2025-06-09',
-      period_label: '10 juin 2024 → 9 juin 2025',
-      amount_due: 25000,
-      amount_due_formatted: '25 000 FCFA',
-      is_unclaimed_arrears: false,
-    },
-    {
-      period_start: '2025-06-10',
-      period_end: '2026-06-09',
-      period_label: '10 juin 2025 → 9 juin 2026',
-      amount_due: 25000,
-      amount_due_formatted: '25 000 FCFA',
-      is_unclaimed_arrears: false,
-    },
-  ],
-});
-
-/** Le même membre sous `current_only` : les trous NON RÉCLAMÉS ; un tarif incalculable. */
-const CHEIKH_CURRENT_ONLY = memberDetail({
-  ...CHEIKH,
-  balance_due: 25000,
-  balance_due_formatted: '25 000 FCFA',
-  dues: [DUE_2026, { ...DUE_2023, is_unclaimed_arrears: true }],
-  missing_periods: [
-    { ...CHEIKH.missing_periods![0]!, is_unclaimed_arrears: true },
-    { ...CHEIKH.missing_periods![1]!, amount_due: null, amount_due_formatted: null, is_unclaimed_arrears: true },
-  ],
-});
-
-/** Les francs d'un « 25 000 FCFA » — dans le TEST seulement, pour additionner. */
-function francs(text: string | null | undefined): number {
-  return Number((text ?? '').replace(/\D/g, ''));
-}
-
-describe('F4 § 3.4 — « Années sans période enregistrée »', () => {
-  it('sous l’historique, de la plus ancienne à la plus récente, badge « À régler » sous `all`', async () => {
-    server(CHEIKH);
-    renderInBureau(<FicheMembrePage />);
-    const heading = await screen.findByRole('heading', { name: 'Années sans période enregistrée' });
-    const list = await screen.findByTestId('missing-periods');
-    const rows = within(list).getAllByRole('listitem');
-    expect(rows.map((r) => r.firstChild?.textContent)).toEqual([
-      '10 juin 2024 → 9 juin 2025',
-      '10 juin 2025 → 9 juin 2026',
-    ]);
-    for (const row of rows) {
-      expect(within(row).getByText('25 000 FCFA')).toBeInTheDocument();
-      expect(within(row).getByText('À régler')).toBeInTheDocument();
-    }
-    // Sous l'historique des périodes.
-    const cotisations = screen.getByRole('heading', { name: 'Cotisations' });
-    expect(cotisations.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  });
-
-  it('sous `current_only` : badge « Non réclamée », et un tarif incalculable rend un tiret', async () => {
-    server(CHEIKH_CURRENT_ONLY);
-    renderInBureau(<FicheMembrePage />);
-    const rows = within(await screen.findByTestId('missing-periods')).getAllByRole('listitem');
-    expect(rows.map((r) => within(r).getByText(/Non réclamée|À régler/).textContent)).toEqual([
-      'Non réclamée',
-      'Non réclamée',
-    ]);
-    expect(within(rows[1]!).getByText('—')).toBeInTheDocument();
-    expect(rows[1]!.textContent).not.toContain('0 FCFA');
-  });
-
-  it('aucune action sur ces lignes : ni bouton, ni lien, ni reçu', async () => {
-    server(CHEIKH);
-    renderInBureau(<FicheMembrePage />);
-    const list = await screen.findByTestId('missing-periods');
-    expect(within(list).queryAllByRole('button')).toHaveLength(0);
-    expect(within(list).queryAllByRole('link')).toHaveLength(0);
-  });
-
-  it.each([
-    ['all', CHEIKH, 100000],
-    ['current_only', CHEIKH_CURRENT_ONLY, 25000],
-  ] as const)(
-    'sous `%s`, le reste à payer se retrouve en additionnant ce qui est à l’écran (§12.9)',
-    async (_policy, member, expected) => {
-      server(member);
-      renderInBureau(<FicheMembrePage />);
-      await screen.findByTestId('missing-periods');
-
-      const total = francs(screen.getByText('Reste à payer').nextElementSibling?.textContent);
-      expect(total).toBe(expected);
-
-      // Les « Reste » des périodes RÉCLAMÉES…
-      const dues = screen
-        .getAllByRole('listitem')
-        .filter((li) => li.querySelector('dt')?.textContent === 'Cotisation' && !li.hasAttribute('data-unclaimed'));
-      const fromDues = dues.reduce(
-        (sum, li) => sum + francs(within(li).getByText('Reste').nextElementSibling?.textContent),
-        0,
-      );
-      // … plus les années manquantes réclamées.
-      const fromGaps = within(screen.getByTestId('missing-periods'))
-        .getAllByRole('listitem')
-        .filter((li) => !li.hasAttribute('data-unclaimed'))
-        .reduce((sum, li) => sum + francs(within(li).getByText(/FCFA/).textContent), 0);
-      expect(fromDues + fromGaps).toBe(total);
-    },
-  );
-
-  it('une liste vide : aucun bloc', async () => {
-    server({ ...CHEIKH, missing_periods: [] });
-    renderInBureau(<FicheMembrePage />);
-    await screen.findByRole('heading', { name: 'Cotisations' });
-    expect(screen.queryByRole('heading', { name: 'Années sans période enregistrée' })).not.toBeInTheDocument();
-  });
-
-  it('une clé absente (serveur antérieur) : aucun bloc non plus', async () => {
-    const { missing_periods: _omit, ...older } = CHEIKH;
-    server(older as MemberDetail);
-    renderInBureau(<FicheMembrePage />);
-    await screen.findByRole('heading', { name: 'Cotisations' });
-    expect(screen.queryByTestId('missing-periods')).not.toBeInTheDocument();
-  });
-});
+/*
+ * § 3.4 — les années sans période (`missing_periods`) : F5 les range avec les
+ * autres années de la fiche (repliées si non réclamées, visibles sous `all`).
+ * Voir tests/bureau/fiche.test.tsx, « P6 » et « sous `all` ».
+ */

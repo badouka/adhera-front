@@ -4,48 +4,48 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { useBureau } from '@/components/bureau/BureauContext';
+import { RECORD_PATH, VERIFY_PATH } from '@/components/bureau/BureauFrame';
+import { useBackBar, useBureau } from '@/components/bureau/BureauContext';
 import { ContactsPanel } from '@/components/bureau/ContactsPanel';
 import { ReceiptButton } from '@/components/bureau/Documents';
 import { decisionLabel, isModeUnsupported, periodLabel } from '@/components/bureau/format';
-import { CashIcon, ChatIcon, ChevronLeftIcon } from '@/components/bureau/Icons';
+import { ChatIcon } from '@/components/bureau/Icons';
 import {
-  ArrearsLine,
-  dueDateLine,
-  StandingPastille,
-  upToDateWithArrears,
-} from '@/components/bureau/Standing';
-import {
+  bigButtonClass,
   Button,
   EmptyState,
+  Label,
+  LINK_BUTTON,
   Notice,
-  PageTitle,
-  Panel,
-  Row,
   Skeleton,
+  Toast,
 } from '@/components/bureau/ui';
 import { Pastille } from '@/components/Pastille';
 import { ApiError } from '@/lib/api';
-import { getMember, isSessionError, listPayments, updateMember } from '@/lib/bureau/api';
-import { errorMessage } from '@/lib/bureau/messages';
 import {
-  DUE_STATUS_LABELS,
+  getMember,
+  getMemberLink,
+  isSessionError,
+  listPayments,
+  updateMember,
+} from '@/lib/bureau/api';
+import { takeFlash } from '@/lib/bureau/flash';
+import { errorMessage } from '@/lib/bureau/messages';
+import { openPendingTab } from '@/lib/bureau/pendingTab';
+import { remindByWhatsapp } from '@/lib/bureau/remind';
+import {
   hasMembershipCard,
   LEFT_REASONS,
   PAYMENT_STATUS_LABELS,
   type MemberDetail,
-  type MemberDue,
   type Payment,
 } from '@/lib/bureau/types';
+import { firstName } from '@/lib/bureau/words';
 import { formatDate, formatDateTime } from '@/lib/dates';
 
 /**
- * Chargés à la demande (F4 § 4) : la fiche pèse près du plafond de 200 Ko.
- *
- * - les panneaux d'un GESTE (modifier, envoyer le lien, encaisser, sortie,
- *   annuler un encaissement) : ils ne s'ouvrent qu'au toucher d'un bouton ;
- * - les attestations et les années manquantes : elles n'existent que pour une
- *   partie des membres.
+ * Chargés à la demande (F4 § 4) : les panneaux d'« Autres actions » ne
+ * s'ouvrent qu'au toucher d'un bouton.
  */
 const panelLoading = () => <p className="small m-0 text-ink-muted">Chargement…</p>;
 const MemberForm = dynamic(
@@ -54,10 +54,6 @@ const MemberForm = dynamic(
 );
 const MemberLinkPanel = dynamic(
   () => import('@/components/bureau/MemberLinkPanel').then((m) => m.MemberLinkPanel),
-  { loading: panelLoading },
-);
-const DirectPaymentPanel = dynamic(
-  () => import('@/components/bureau/DirectPaymentPanel').then((m) => m.DirectPaymentPanel),
   { loading: panelLoading },
 );
 const LeavePanel = dynamic(
@@ -71,7 +67,6 @@ const CancelPaymentPanel = dynamic(
 const AttestationsPanel = dynamic(() => import('@/components/bureau/AttestationsPanel'), {
   loading: () => <p className="small m-0 text-ink-muted">Chargement des attestations…</p>,
 });
-const MissingPeriodsPanel = dynamic(() => import('@/components/bureau/MissingPeriodsPanel'));
 
 type Load<T> =
   | { kind: 'loading' }
@@ -79,44 +74,75 @@ type Load<T> =
   | { kind: 'error'; message: string }
   | { kind: 'ready'; value: T };
 
-type Action = 'link' | 'payment' | 'leave' | null;
+type Action = 'edit' | 'attest' | 'link' | 'leave' | 'cancel';
 
-type Notice_ = { tone: 'paid' | 'info'; text: ReactNode; receipt?: Payment['receipt'] };
+/** Une année que la fiche montre : une période en base, ou une année manquante. */
+type Year = { key: string; label: string; amount: string | null };
 
 /**
- * B7 — la fiche d'un membre : identité, situation, cotisations (et leurs
- * reçus), versements, contacts pour une organisation. Les trois gestes du
- * bureau partent d'ici : envoyer le lien, enregistrer un versement, déclarer
- * une sortie.
+ * Les années de la fiche (§12.3, §12.8). Les arriérés NON RÉCLAMÉS — périodes
+ * en base ou années manquantes — sont repliés (P6) ; sous `all`, les années
+ * RÉCLAMÉES restent visibles, puisqu'elles font le reste à payer.
+ */
+export function yearsOf(member: MemberDetail): { claimed: Year[]; unclaimed: Year[] } {
+  const claimed: Year[] = [];
+  const unclaimed: Year[] = [];
+  for (const due of member.dues) {
+    if (due.status !== 'due' && due.status !== 'partielle') continue;
+    const year = {
+      key: due.id,
+      label: periodLabel(due.period_start, due.period_end),
+      amount: due.balance_due_formatted,
+    };
+    (due.is_unclaimed_arrears ? unclaimed : claimed).push(year);
+  }
+  for (const gap of member.missing_periods ?? []) {
+    const year = {
+      key: `manquante-${gap.period_start}`,
+      label: gap.period_label?.trim() || periodLabel(gap.period_start, gap.period_end),
+      amount: gap.amount_due_formatted,
+    };
+    (gap.is_unclaimed_arrears ? unclaimed : claimed).push(year);
+  }
+  return { claimed, unclaimed };
+}
+
+/** Le membre doit quelque chose (un arriéré réclamé compte, sous `all`). */
+function owes(member: MemberDetail): boolean {
+  return !member.is_up_to_date || (member.balance_due !== null && member.balance_due > 0);
+}
+
+/**
+ * Écran 8 — la fiche d'un membre. UN seul montant (« Reste à payer » ou « À
+ * jour jusqu'au … »), un seul bouton principal (« {prénom} a payé :
+ * l'enregistrer »), ses paiements, et le reste dans « Autres actions ». Le
+ * prénom remplace « il » et « elle » : l'API ne connaît pas le genre.
  */
 export default function FicheMembrePage() {
   const params = useParams<{ id: string }>();
   const id = typeof params?.id === 'string' ? safeDecode(params.id) : '';
   const { settings, modeSupported, markModeUnsupported } = useBureau();
+  useBackBar({ href: '/bureau/membres', label: 'Les membres' });
 
   const [member, setMember] = useState<Load<MemberDetail>>({ kind: 'loading' });
   const [payments, setPayments] = useState<Load<Payment[]>>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
-  const [action, setAction] = useState<Action>(null);
-  const [editing, setEditing] = useState(false);
-  const [notice, setNotice] = useState<Notice_ | null>(null);
+  const [more, setMore] = useState(false);
+  const [action, setAction] = useState<Action | null>(null);
+  const [notice, setNotice] = useState<ReactNode | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [blocked, setBlocked] = useState<string | null>(null);
 
   useEffect(() => {
+    const flash = takeFlash();
+    if (flash) setToast(flash);
     if (new URLSearchParams(window.location.search).get('cree') === '1') {
-      setNotice({ tone: 'paid', text: 'Membre ajouté. Envoyez-lui maintenant son lien.' });
+      setNotice('Membre ajouté. Envoyez-lui maintenant son lien : « Autres actions ».');
     }
   }, []);
 
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
-
-  // `#versement-{id}` (depuis un `409 duplicate_payment`) : la ligne est
-  // amenée à l'écran une fois les versements chargés.
-  useEffect(() => {
-    if (payments.kind !== 'ready') return;
-    const hash = window.location.hash;
-    if (!hash.startsWith('#versement-')) return;
-    document.getElementById(hash.slice(1))?.scrollIntoView?.({ block: 'center' });
-  }, [payments]);
+  const clearToast = useCallback(() => setToast(null), []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -153,7 +179,7 @@ export default function FicheMembrePage() {
         }
         setPayments({
           kind: 'error',
-          message: errorMessage(error, 'Les versements n’ont pas pu être chargés.'),
+          message: errorMessage(error, 'Ses paiements n’ont pas pu être chargés.'),
         });
       }
     })();
@@ -163,64 +189,76 @@ export default function FicheMembrePage() {
 
   if (member.kind === 'loading') return <Skeleton label="Chargement de la fiche…" />;
 
-  if (member.kind === 'not-found') {
-    return (
-      <>
-        <BackLink />
-        <EmptyState>Membre introuvable.</EmptyState>
-      </>
-    );
-  }
+  if (member.kind === 'not-found') return <EmptyState>Membre introuvable.</EmptyState>;
 
   if (member.kind === 'error') {
     return (
-      <>
-        <BackLink />
-        <Notice tone="late">
-          <span>{member.message}</span>
-          <span>
-            <Button onClick={reload}>Réessayer</Button>
-          </span>
-        </Notice>
-      </>
+      <Notice tone="late">
+        <span>{member.message}</span>
+        <span>
+          <Button onClick={reload}>Réessayer</Button>
+        </span>
+      </Notice>
     );
   }
 
   const m = member.value;
+  const who = firstName(m);
   const former = m.status === 'former';
-  const echeance = dueDateLine(m);
   const cardEnabled = hasMembershipCard(settings);
-  const missing = m.missing_periods ?? [];
+  const { claimed, unclaimed } = yearsOf(m);
+  const late = !former && owes(m);
+  const dueOn = formatDate(m.next_due_date);
+
+  async function remind() {
+    setBlocked(null);
+    const outcome = await remindByWhatsapp(m.id);
+    if (outcome.kind === 'no-phone') setToast(`${who} n’a pas de téléphone.`);
+    if (outcome.kind === 'error') setToast(outcome.message);
+    if (outcome.kind === 'blocked') setBlocked(outcome.url);
+  }
+
+  async function openPage() {
+    const tab = openPendingTab();
+    try {
+      const link = await getMemberLink(m.id);
+      if (!tab.go(link.url)) setBlocked(link.url);
+    } catch (cause) {
+      tab.close();
+      if (!isSessionError(cause)) setToast(errorMessage(cause, 'Sa page n’a pas pu être ouverte.'));
+    }
+  }
+
+  function openAction(next: Action) {
+    setAction((current) => (current === next ? null : next));
+  }
 
   return (
-    <>
-      <BackLink />
-      <PageTitle
-        title={m.name}
-        subtitle={[
-          m.type === 'organisation' ? 'Organisation' : 'Personne',
-          m.category_label,
-        ]
-          .filter(Boolean)
-          .join(' · ')}
-        actions={<StandingPastille member={m} />}
-      />
+    <div className="mx-auto flex w-full max-w-[600px] flex-col gap-4">
+      <div>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="title m-0 min-w-0 break-words">{m.name}</h1>
+          <MemberPastille member={m} late={late} />
+        </div>
+        <p className="m-0 text-ink-muted">
+          {[
+            m.category_label,
+            m.member_number ? `n° ${m.member_number}` : null,
+            m.phone ?? 'pas de téléphone',
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        </p>
+      </div>
 
-      {notice ? (
-        <Notice tone={notice.tone}>
-          <span>{notice.text}</span>
-          <span className="flex flex-wrap gap-2">
-            {notice.receipt ? (
-              <ReceiptButton
-                receiptId={notice.receipt.id}
-                reference={notice.receipt.reference}
-                tone="primary"
-              />
-            ) : null}
-            <Button tone="ghost" onClick={() => setNotice(null)}>
-              Fermer
-            </Button>
-          </span>
+      {notice ? <Notice tone="paid">{notice}</Notice> : null}
+
+      {blocked ? (
+        <Notice tone="info">
+          <span>L’onglet ne s’est pas ouvert tout seul.</span>
+          <a href={blocked} target="_blank" rel="noopener noreferrer" className="font-semibold">
+            L’ouvrir maintenant
+          </a>
         </Notice>
       ) : null}
 
@@ -233,218 +271,223 @@ export default function FicheMembrePage() {
             : ''}
           . Son historique est conservé.
         </Notice>
-      ) : (
-        <div className="flex flex-wrap gap-2">
-          <Button
-            tone={action === 'link' ? 'primary' : 'secondary'}
-            onClick={() => setAction(action === 'link' ? null : 'link')}
-            aria-expanded={action === 'link'}
-          >
-            <ChatIcon />
-            Envoyer le lien
-          </Button>
-          {modeSupported ? (
-            <Button
-              tone={action === 'payment' ? 'primary' : 'secondary'}
-              onClick={() => setAction(action === 'payment' ? null : 'payment')}
-              aria-expanded={action === 'payment'}
+      ) : !modeSupported ? (
+        <p className="m-0 text-ink-muted">
+          Sa situation s’affichera quand le mode de cotisation sera pris en charge.
+        </p>
+      ) : late ? (
+        <>
+          <section className="flex flex-col gap-1 rounded-[var(--radius-md)] bg-due-soft p-4" data-testid="due-box">
+            <Label className="text-due">Reste à payer</Label>
+            {/* UN seul montant. null = INCONNU, jamais « 0 FCFA » (piège 4). */}
+            <span className="amount text-due">{m.balance_due_formatted ?? '—'}</span>
+            <span>
+              {claimed.length > 1
+                ? `Ses cotisations de ${claimed.length} années.`
+                : 'Sa cotisation de cette année.'}
+              {dueOn ? ` ${who} aurait dû payer le ${dueOn}.` : ''}
+            </span>
+          </section>
+          <div className="flex flex-col gap-[10px]">
+            <Link
+              href={`${RECORD_PATH}?membre=${encodeURIComponent(m.id)}`}
+              className={bigButtonClass('primary')}
             >
-              <CashIcon size={18} />
-              Encaisser
-            </Button>
-          ) : null}
-          <Button
-            tone="ghost"
-            onClick={() => setAction(action === 'leave' ? null : 'leave')}
-            aria-expanded={action === 'leave'}
+              {who} a payé : l’enregistrer
+            </Link>
+            {m.phone ? (
+              <button type="button" onClick={() => void remind()} className={bigButtonClass('outline')}>
+                <ChatIcon size={22} />
+                Lui envoyer un rappel par WhatsApp
+              </button>
+            ) : (
+              <p className="small m-0 text-ink-muted">
+                Pas de téléphone : impossible de lui envoyer un rappel par WhatsApp.
+              </p>
+            )}
+          </div>
+        </>
+      ) : (
+        <>
+          <section className="flex flex-col items-start gap-1 rounded-[var(--radius-md)] bg-paid-soft px-4 py-5" data-testid="ok-box">
+            <Label className="text-paid">Cotisation</Label>
+            <b className="text-paid">
+              {formatDate(m.covered_until)
+                ? `À jour jusqu’au ${formatDate(m.covered_until)}`
+                : m.status === 'pending'
+                  ? 'Demande d’adhésion en attente'
+                  : 'À jour'}
+            </b>
+          </section>
+          <Link
+            href={`${RECORD_PATH}?membre=${encodeURIComponent(m.id)}`}
+            className={bigButtonClass('outline-indigo')}
           >
-            Enregistrer une sortie
-          </Button>
-        </div>
+            {who} a payé : l’enregistrer
+          </Link>
+        </>
       )}
 
-      {action === 'link' && !former ? (
-        <MemberLinkPanel
-          memberId={m.id}
-          memberName={m.name}
-          cardEnabled={cardEnabled}
-          onClose={() => setAction(null)}
-        />
+      <PaymentsSection payments={payments} onRetry={reload} />
+
+      {modeSupported && claimed.length > 1 ? (
+        <section className="flex flex-col gap-2" data-testid="claimed-years">
+          <h2 className="heading m-0">Les années à payer</h2>
+          <ul className="m-0 flex list-none flex-col rounded-[var(--radius-md)] border border-line bg-surface-raised px-4 py-1">
+            {claimed.map((year) => (
+              <li key={year.key} className="flex justify-between gap-3 border-b border-line py-[10px] last:border-b-0">
+                <span>{year.label || '—'}</span>
+                <b className="money tnum">{year.amount ?? '—'}</b>
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
 
-      {action === 'payment' && !former && modeSupported ? (
-        <DirectPaymentPanel
-          member={m}
-          onClose={() => setAction(null)}
-          onModeUnsupported={markModeUnsupported}
-          onDuplicate={reload}
-          onDone={(payment) => {
-            setAction(null);
-            const period = periodLabel(payment.due?.period_start, payment.due?.period_end);
-            setNotice({
-              tone: 'paid',
-              text: (
-                <>
-                  {payment.receipt ? `Reçu ${payment.receipt.reference} émis` : 'Paiement encaissé'}
-                  {' — '}
-                  <span className="money">{payment.amount_formatted}</span>.
-                  {period ? ` Cotisation ${period}.` : ''}
-                </>
-              ),
-              receipt: payment.receipt,
-            });
-            reload();
-          }}
-        />
-      ) : null}
-
-      {action === 'leave' && !former ? (
-        <LeavePanel
-          member={m}
-          onClose={() => setAction(null)}
-          onDone={(updated) => {
-            setAction(null);
-            setMember({ kind: 'ready', value: { ...m, ...updated } });
-            setNotice({ tone: 'info', text: 'Sortie enregistrée. Le membre figure désormais dans les anciens membres.' });
-            reload();
-          }}
-        />
-      ) : null}
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Panel
-          title="Identité"
-          actions={
-            editing ? null : (
-              <Button tone="ghost" onClick={() => setEditing(true)}>
-                Modifier
-              </Button>
-            )
-          }
+      {modeSupported && unclaimed.length > 0 ? (
+        <details
+          className="group rounded-[var(--radius-md)] border border-line bg-surface-raised px-4"
+          data-testid="unclaimed-years"
         >
-          {editing ? (
+          <summary className="flex min-h-[52px] cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+            <span>Anciennes années, non demandées ({unclaimed.length})</span>
+            <span className="small font-semibold text-indigo group-open:hidden">Voir</span>
+            <span className="small hidden font-semibold text-indigo group-open:inline">Masquer</span>
+          </summary>
+          <div className="flex flex-col gap-2 pb-[14px]">
+            <p className="small m-0 text-ink-muted">
+              L’association ne réclame que l’année en cours. Ces années restent notées
+              ici, pour mémoire : elles ne comptent pas dans le reste à payer.
+            </p>
+            <ul className="m-0 flex list-none flex-col p-0">
+              {unclaimed.map((year) => (
+                <li key={year.key} className="small flex justify-between gap-3 border-t border-line py-2">
+                  <span>{year.label || '—'}</span>
+                  <span className="money tnum text-ink-muted">{year.amount ?? '—'}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </details>
+      ) : null}
+
+      {former ? null : (
+        <button type="button" onClick={() => void openPage()} className={LINK_BUTTON}>
+          Voir sa page, comme {who} la voit
+        </button>
+      )}
+
+      <button
+        type="button"
+        className={LINK_BUTTON}
+        aria-expanded={more}
+        aria-controls="autres-actions"
+        onClick={() => setMore((v) => !v)}
+      >
+        Autres actions (modifier, départ, annuler un paiement)
+      </button>
+
+      {more ? (
+        <section id="autres-actions" className="flex flex-col gap-3" aria-label="Autres actions">
+          <div className="flex flex-col overflow-hidden rounded-[var(--radius-md)] border border-line bg-surface-raised">
+            <MoreRow on={action === 'edit'} onClick={() => openAction('edit')}>
+              Modifier ses informations (dont le numéro de membre)
+            </MoreRow>
+            {cardEnabled ? (
+              <MoreRow on={action === 'attest'} onClick={() => openAction('attest')}>
+                Ses attestations d’adhésion
+              </MoreRow>
+            ) : null}
+            {former ? null : (
+              <MoreRow on={action === 'link'} onClick={() => openAction('link')}>
+                Son lien personnel : l’envoyer ou le changer
+              </MoreRow>
+            )}
+            {former ? null : (
+              <MoreRow on={action === 'leave'} onClick={() => openAction('leave')}>
+                Enregistrer son départ
+              </MoreRow>
+            )}
+            {modeSupported ? (
+              <MoreRow on={action === 'cancel'} onClick={() => openAction('cancel')}>
+                Annuler un paiement (erreur de saisie)
+              </MoreRow>
+            ) : null}
+          </div>
+
+          {action === 'edit' ? (
             <MemberForm
               memberTypes={settings.member_types}
               initial={m}
               submitLabel="Enregistrer les modifications"
-              onCancel={() => setEditing(false)}
+              onCancel={() => setAction(null)}
               onSubmit={async (input) => {
                 const updated = await updateMember(m.id, input);
-                setEditing(false);
+                setAction(null);
                 setMember({ kind: 'ready', value: { ...m, ...updated } });
-                setNotice({ tone: 'paid', text: 'Fiche mise à jour.' });
+                setNotice('Fiche mise à jour.');
                 reload();
               }}
             />
-          ) : (
-            <dl className="m-0 flex flex-col gap-2">
-              {/* Un candidat n'a pas de numéro : la ligne reste vide, jamais « 0000 ». */}
-              {m.member_number === undefined ? null : (
-                <Row label="N° de membre">
-                  <span className="tnum" data-testid="member-number">{m.member_number ?? ''}</span>
-                </Row>
-              )}
-              <Row label="Téléphone">{m.phone ?? '—'}</Row>
-              <Row label="E-mail">{m.email ?? '—'}</Row>
-              <Row label="Région">{m.region ?? '—'}</Row>
-              <Row label="Catégorie">{m.category_label ?? '—'}</Row>
-              <Row label="Adhésion">{formatDate(m.joined_at) || '—'}</Row>
-            </dl>
-          )}
-        </Panel>
+          ) : null}
 
-        <Panel title="Situation">
-          {modeSupported ? (
-            <dl className="m-0 flex flex-col gap-2">
-              <Row label="Situation">
-                {m.status === 'pending' ? (
-                  'Candidature'
-                ) : former ? (
-                  // Jamais « Pas à jour » : on ne réclame rien à un ancien membre.
-                  'Ancien membre'
-                ) : upToDateWithArrears(m) ? (
-                  // Jamais « À jour » seul à côté d'un montant dû (§12.1, `all`).
-                  <ArrearsLine member={m} />
-                ) : m.is_up_to_date ? (
-                  'À jour'
-                ) : (
-                  'Pas à jour'
-                )}
-              </Row>
-              <Row label="Couvert jusqu’au">{formatDate(m.covered_until) || '—'}</Row>
-              {/* L'échéance RÉCLAMÉE (§12.7) : lue, jamais calculée. Aucune pour un ancien. */}
-              {former ? null : (
-                <Row label={echeance?.label ?? 'Prochaine échéance'}>
-                  <span className={echeance?.late ? 'text-late' : undefined} data-testid="echeance">
-                    {echeance?.value ?? '—'}
-                  </span>
-                </Row>
-              )}
-              {/* null = INCONNU, jamais « 0 FCFA » (piège 4). Rien n'est réclamé à un ancien. */}
-              {former ? null : (
-                <Row label="Reste à payer">
-                  <span className="money">{m.balance_due_formatted ?? '—'}</span>
-                </Row>
-              )}
-            </dl>
-          ) : (
-            <p className="m-0 text-ink-muted">
-              La situation de cotisation s’affichera quand le mode de cotisation
-              sera pris en charge.
-            </p>
-          )}
-        </Panel>
-      </div>
+          {action === 'attest' && cardEnabled ? (
+            <AttestationsPanel
+              attestations={m.attestations ?? []}
+              memberId={m.id}
+              canIssue={!former}
+              onIssued={(issued) => {
+                setNotice(`Attestation ${issued.reference} délivrée.`);
+                reload();
+              }}
+            />
+          ) : null}
 
-      {modeSupported ? (
-        <DuesPanel dues={m.dues} />
+          {action === 'link' && !former ? (
+            <MemberLinkPanel
+              memberId={m.id}
+              memberName={m.name}
+              cardEnabled={cardEnabled}
+              onClose={() => setAction(null)}
+            />
+          ) : null}
+
+          {action === 'leave' && !former ? (
+            <LeavePanel
+              member={m}
+              onClose={() => setAction(null)}
+              onDone={(updated) => {
+                setAction(null);
+                setMember({ kind: 'ready', value: { ...m, ...updated } });
+                setNotice('Départ enregistré. Ce membre figure désormais dans les anciens membres.');
+                reload();
+              }}
+            />
+          ) : null}
+
+          {action === 'cancel' ? (
+            <CancelSection
+              payments={payments}
+              memberName={m.name}
+              onCancelled={(cancelled) => {
+                setNotice(
+                  <>
+                    Paiement de <span className="money">{cancelled.amount_formatted}</span> annulé.
+                    {cancelled.receipt ? ` Le reçu ${cancelled.receipt.reference} est marqué annulé.` : ''}{' '}
+                    Rien n’a été supprimé.
+                  </>,
+                );
+                setAction(null);
+                reload();
+              }}
+              onStale={(message) => {
+                setNotice(message);
+                reload();
+              }}
+            />
+          ) : null}
+        </section>
       ) : null}
-
-      {modeSupported && missing.length > 0 ? <MissingPeriodsPanel periods={missing} /> : null}
-
-      {cardEnabled ? (
-        <AttestationsPanel
-          attestations={m.attestations ?? []}
-          memberId={m.id}
-          canIssue={!former}
-          onIssued={(issued) => {
-            setNotice({
-              tone: 'paid',
-              text: `Attestation ${issued.reference} délivrée.`,
-            });
-            reload();
-          }}
-        />
-      ) : null}
-
-      <PaymentsPanel
-        payments={payments}
-        onRetry={reload}
-        memberName={m.name}
-        canCancel={modeSupported}
-        onCancelled={(cancelled) => {
-          setPayments((prev) =>
-            prev.kind === 'ready'
-              ? { ...prev, value: prev.value.map((p) => (p.id === cancelled.id ? cancelled : p)) }
-              : prev,
-          );
-          setNotice({
-            tone: 'info',
-            text: (
-              <>
-                Encaissement de <span className="money">{cancelled.amount_formatted}</span> annulé.
-                {cancelled.receipt ? ` Le reçu ${cancelled.receipt.reference} est marqué annulé.` : ''}{' '}
-                Rien n’a été supprimé.
-              </>
-            ),
-          });
-          reload();
-        }}
-        onStale={(message) => {
-          setNotice({ tone: 'info', text: message });
-          reload();
-        }}
-      />
 
       {m.type === 'organisation' ? (
         <ContactsPanel
@@ -453,7 +496,9 @@ export default function FicheMembrePage() {
           onChange={(contacts) => setMember({ kind: 'ready', value: { ...m, contacts } })}
         />
       ) : null}
-    </>
+
+      <Toast message={toast} onDone={clearToast} />
+    </div>
   );
 }
 
@@ -465,118 +510,35 @@ function safeDecode(value: string): string {
   }
 }
 
-function BackLink() {
-  return (
-    <Link href="/bureau/membres" className="small inline-flex items-center gap-1 font-semibold">
-      <ChevronLeftIcon />
-      Membres
-    </Link>
-  );
+function MemberPastille({ member, late }: { member: MemberDetail; late: boolean }) {
+  if (member.status === 'former') return <Pastille tone="due">Ancien membre</Pastille>;
+  if (member.status === 'pending') return <Pastille tone="info">Demande d’adhésion</Pastille>;
+  return late ? <Pastille tone="late">En retard</Pastille> : <Pastille tone="paid">À jour</Pastille>;
 }
 
-const DUE_TONE: Record<MemberDue['status'], 'paid' | 'due' | 'late' | 'info'> = {
-  due: 'late',
-  partielle: 'due',
-  reglee: 'paid',
-  exoneree: 'info',
-};
-
-/**
- * Les cotisations, avec les reçus téléchargeables de chaque période.
- *
- * Une cotisation NON RÉCLAMÉE (§12.3) reste listée, grisée, pastille « Non
- * réclamée » : son montant n'est pas dans le reste à payer de la fiche, et une
- * seule ligne, sous la première, dit pourquoi et où se règle la politique.
- *
- * Un reçu annulé reste listé, marqué (piège 33). `cancelled_at` est servi sur
- * chaque reçu d'une période depuis S3d (§12.4) : la fiche le LIT, elle ne le
- * déduit plus de ses versements.
- */
-function DuesPanel({ dues }: { dues: MemberDue[] }) {
-  const firstUnclaimed = dues.find((d) => d.is_unclaimed_arrears)?.id;
+function MoreRow({
+  on,
+  onClick,
+  children,
+}: {
+  on: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
   return (
-    <Panel title="Cotisations">
-      {dues.length === 0 ? (
-        <EmptyState>Aucune cotisation enregistrée.</EmptyState>
-      ) : (
-        <ul className="m-0 flex list-none flex-col gap-2 p-0">
-          {dues.map((due) => (
-            <li
-              key={due.id}
-              data-unclaimed={due.is_unclaimed_arrears ? 'true' : undefined}
-              className={`flex flex-col gap-2 rounded-[var(--radius-sm)] border border-line p-3 ${
-                due.is_unclaimed_arrears ? 'border-dashed bg-surface text-ink-muted' : ''
-              }`}
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="font-semibold">
-                  {periodLabel(due.period_start, due.period_end)
-                    ? `Du ${formatDate(due.period_start)} au ${formatDate(due.period_end)}`
-                    : '—'}
-                </span>
-                {due.is_unclaimed_arrears ? (
-                  <Pastille tone="muted">Non réclamée</Pastille>
-                ) : (
-                  <Pastille tone={DUE_TONE[due.status] ?? 'info'}>
-                    {DUE_STATUS_LABELS[due.status] ?? due.status}
-                  </Pastille>
-                )}
-              </div>
-              {/* R1 : *_formatted seulement ; null = inconnu → « — ». */}
-              <dl className="small tnum m-0 flex flex-wrap gap-x-6 gap-y-2">
-                <div className="flex flex-col">
-                  <dt className="text-ink-muted">Cotisation</dt>
-                  <dd className="money m-0 font-semibold">{due.amount_due_formatted ?? '—'}</dd>
-                </div>
-                <div className="flex flex-col">
-                  <dt className="text-ink-muted">Payé</dt>
-                  <dd className="money m-0 font-semibold">{due.amount_paid_formatted ?? '—'}</dd>
-                </div>
-                <div className="flex flex-col">
-                  <dt className="text-ink-muted">Reste</dt>
-                  <dd className="money m-0 font-semibold">{due.balance_due_formatted ?? '—'}</dd>
-                </div>
-              </dl>
-              {due.receipts.length > 0 ? (
-                <div className="flex flex-col gap-1">
-                  <span className="label text-ink-muted">REÇUS</span>
-                  <ul className="m-0 flex list-none flex-col gap-1 p-0">
-                    {due.receipts.map((receipt) => (
-                      <li key={receipt.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                        <ReceiptButton
-                          receiptId={receipt.id}
-                          reference={receipt.reference}
-                          compact
-                        />
-                        {receipt.cancelled_at ? (
-                          <span className="small font-semibold text-late">Annulé</span>
-                        ) : null}
-                        <span className="small tnum text-ink-muted">
-                          <span className="money">{receipt.amount_formatted}</span>
-                          {formatDateTime(receipt.issued_at)
-                            ? `, le ${formatDateTime(receipt.issued_at)}`
-                            : ''}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-              {due.id === firstUnclaimed ? (
-                <p className="small m-0" data-testid="unclaimed-note">
-                  L’association repart de l’année en cours. Les années précédentes
-                  ne sont pas réclamées. (
-                  <Link href="/bureau/reglages#arrieres" className="font-semibold">
-                    Réglages
-                  </Link>
-                  )
-                </p>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      )}
-    </Panel>
+    <button
+      type="button"
+      aria-expanded={on}
+      onClick={onClick}
+      className={`flex min-h-14 w-full items-center justify-between gap-3 border-b border-line px-4 py-2 text-left text-[16px] last:border-b-0 ${
+        on ? 'bg-indigo-soft font-semibold text-indigo' : 'bg-surface-raised text-ink'
+      }`}
+    >
+      <span>{children}</span>
+      <span aria-hidden="true" className="font-semibold text-indigo">
+        ›
+      </span>
+    </button>
   );
 }
 
@@ -587,32 +549,19 @@ const PAYMENT_TONE: Record<Payment['status'], 'paid' | 'late' | 'info' | 'due'> 
   cancelled: 'due',
 };
 
-function PaymentsPanel({
-  payments,
-  onRetry,
-  memberName,
-  canCancel,
-  onCancelled,
-  onStale,
-}: {
-  payments: Load<Payment[]>;
-  onRetry: () => void;
-  memberName: string;
-  /** Faux si le mode de cotisation n'est pas pris en charge (l'annulation recalcule la période). */
-  canCancel: boolean;
-  onCancelled: (payment: Payment) => void;
-  onStale: (message: string) => void;
-}) {
-  const [cancelling, setCancelling] = useState<string | null>(null);
-
+/**
+ * « Ses paiements » — le plus récent d'abord, un lien « Reçu » par ligne. Un
+ * paiement annulé reste listé, marqué (piège 33) ; un paiement à vérifier
+ * conduit à « Paiements à vérifier ».
+ */
+function PaymentsSection({ payments, onRetry }: { payments: Load<Payment[]>; onRetry: () => void }) {
   return (
-    <Panel title="Versements">
+    <section className="flex flex-col gap-2">
+      <h2 className="heading m-0">Ses paiements</h2>
       {payments.kind === 'loading' ? (
-        <p className="small m-0 text-ink-muted">Chargement des versements…</p>
+        <p className="small m-0 text-ink-muted">Chargement de ses paiements…</p>
       ) : null}
-      {payments.kind === 'not-found' ? (
-        <p className="m-0 text-ink-muted">Membre introuvable.</p>
-      ) : null}
+      {payments.kind === 'not-found' ? <p className="m-0 text-ink-muted">Membre introuvable.</p> : null}
       {payments.kind === 'error' ? (
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-semibold text-late">{payments.message}</span>
@@ -620,96 +569,117 @@ function PaymentsPanel({
         </div>
       ) : null}
       {payments.kind === 'ready' && payments.value.length === 0 ? (
-        <EmptyState>Aucun versement pour ce membre.</EmptyState>
+        <p className="m-0 text-ink-muted">Aucun paiement pour le moment.</p>
       ) : null}
       {payments.kind === 'ready' && payments.value.length > 0 ? (
-        <ul className="m-0 flex list-none flex-col gap-2 p-0">
-          {[...payments.value].reverse().map((payment) => (
-            <li
-              key={payment.id}
-              id={`versement-${payment.id}`}
-              className="flex scroll-mt-20 flex-col gap-1 rounded-[var(--radius-sm)] border border-line p-3 target:border-2 target:border-indigo"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="money tnum font-bold">{payment.amount_formatted}</span>
-                <Pastille tone={PAYMENT_TONE[payment.status]}>
-                  {PAYMENT_STATUS_LABELS[payment.status] ?? payment.status}
-                </Pastille>
-              </div>
-              <span className="small">
-                {[
-                  payment.method_label,
-                  payment.reference?.trim() ? `réf. ${payment.reference.trim()}` : null,
-                  formatDate(payment.paid_on) ? `payé le ${formatDate(payment.paid_on)}` : null,
-                ]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </span>
-              {payment.status === 'validated' ? (
-                <span className="small text-ink-muted">
-                  {decisionLabel('Validé', payment.decided_at, payment.decided_by_name)}
-                </span>
-              ) : null}
-              {payment.status === 'rejected' ? (
-                <span className="small text-ink-muted">
-                  {decisionLabel('Refusé', payment.decided_at, payment.decided_by_name)}
-                  {payment.rejection_reason ? ` — ${payment.rejection_reason}` : ''}
-                </span>
-              ) : null}
-              {payment.status === 'cancelled' ? (
-                <span className="small font-semibold text-late" data-testid="cancelled-line">
-                  {decisionLabel('Annulé', payment.cancelled_at ?? null, payment.cancelled_by_name ?? null)}
-                  {payment.cancel_reason ? ` — motif : ${payment.cancel_reason}` : ''}
-                </span>
-              ) : null}
-              {payment.status === 'declared' ? (
-                <Link href="/bureau/a-valider" className="small font-semibold">
-                  À valider dans « À valider »
-                </Link>
-              ) : null}
-              {payment.receipt ? (
-                <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <ReceiptButton
-                    receiptId={payment.receipt.id}
-                    reference={payment.receipt.reference}
-                    compact
-                  />
-                  {payment.status === 'cancelled' ? (
-                    <span className="small font-semibold text-late">Reçu annulé</span>
-                  ) : null}
-                </span>
-              ) : null}
-              {/* Un VALIDÉ s'annule ; un signalé se refuse depuis « À valider ». */}
-              {payment.status === 'validated' && canCancel && cancelling !== payment.id ? (
-                <span>
-                  <Button
-                    tone="ghost"
-                    className="px-0 text-late!"
-                    onClick={() => setCancelling(payment.id)}
-                  >
-                    Annuler cet encaissement
-                  </Button>
-                </span>
-              ) : null}
-              {payment.status === 'validated' && cancelling === payment.id ? (
-                <CancelPaymentPanel
-                  payment={payment}
-                  memberName={memberName}
-                  onClose={() => setCancelling(null)}
-                  onDone={(cancelled) => {
-                    setCancelling(null);
-                    onCancelled(cancelled);
-                  }}
-                  onStale={(message) => {
-                    setCancelling(null);
-                    onStale(message);
-                  }}
-                />
-              ) : null}
-            </li>
-          ))}
+        <ul className="m-0 flex list-none flex-col rounded-[var(--radius-md)] border border-line bg-surface-raised px-4 py-1" data-testid="payments">
+          {[...payments.value].reverse().map((payment) => {
+            const when = formatDate(payment.paid_on) || formatDateTime(payment.declared_at);
+            return (
+              <li
+                key={payment.id}
+                id={`paiement-${payment.id}`}
+                className="flex flex-col gap-1 border-b border-line py-[10px] last:border-b-0"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <span>
+                    <b className="money tnum">{payment.amount_formatted}</b>
+                    <br />
+                    <span className="small text-ink-muted">
+                      {[payment.method_label, when].filter(Boolean).join(' · ')}
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 flex-col items-end gap-1">
+                    {payment.status === 'validated' ? null : (
+                      <Pastille tone={PAYMENT_TONE[payment.status]}>
+                        {PAYMENT_STATUS_LABELS[payment.status] ?? payment.status}
+                      </Pastille>
+                    )}
+                    {payment.receipt ? (
+                      <ReceiptButton
+                        receiptId={payment.receipt.id}
+                        reference={payment.receipt.reference}
+                        label="Reçu"
+                        className={`${LINK_BUTTON} px-0 py-1`}
+                      />
+                    ) : null}
+                  </span>
+                </div>
+                {payment.status === 'rejected' && payment.rejection_reason ? (
+                  <span className="small text-ink-muted">
+                    {decisionLabel('Refusé', payment.decided_at, payment.decided_by_name)} —{' '}
+                    {payment.rejection_reason}
+                  </span>
+                ) : null}
+                {payment.status === 'cancelled' ? (
+                  <span className="small font-semibold text-late" data-testid="cancelled-line">
+                    {decisionLabel('Annulé', payment.cancelled_at ?? null, payment.cancelled_by_name ?? null)}
+                    {payment.cancel_reason ? ` — motif : ${payment.cancel_reason}` : ''}
+                  </span>
+                ) : null}
+                {payment.status === 'declared' ? (
+                  <Link href={VERIFY_PATH} className="small font-semibold">
+                    À vérifier dans « Paiements à vérifier »
+                  </Link>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       ) : null}
-    </Panel>
+    </section>
+  );
+}
+
+/** « Annuler un paiement » : un paiement ACCEPTÉ s'annule ; un signalé se refuse. */
+function CancelSection({
+  payments,
+  memberName,
+  onCancelled,
+  onStale,
+}: {
+  payments: Load<Payment[]>;
+  memberName: string;
+  onCancelled: (payment: Payment) => void;
+  onStale: (message: string) => void;
+}) {
+  const [cancelling, setCancelling] = useState<string | null>(null);
+  if (payments.kind !== 'ready') return null;
+  const accepted = [...payments.value].reverse().filter((p) => p.status === 'validated');
+  if (accepted.length === 0) {
+    return <p className="m-0 text-ink-muted">Aucun paiement accepté à annuler.</p>;
+  }
+  return (
+    <ul className="m-0 flex list-none flex-col gap-2 p-0">
+      {accepted.map((payment) => (
+        <li key={payment.id} className="flex flex-col gap-2 rounded-[var(--radius-sm)] border border-line bg-surface-raised p-3">
+          <span>
+            <b className="money tnum">{payment.amount_formatted}</b> · {payment.method_label}
+            {formatDate(payment.paid_on) ? ` · ${formatDate(payment.paid_on)}` : ''}
+          </span>
+          {cancelling === payment.id ? (
+            <CancelPaymentPanel
+              payment={payment}
+              memberName={memberName}
+              onClose={() => setCancelling(null)}
+              onDone={(cancelled) => {
+                setCancelling(null);
+                onCancelled(cancelled);
+              }}
+              onStale={(message) => {
+                setCancelling(null);
+                onStale(message);
+              }}
+            />
+          ) : (
+            <span>
+              <Button tone="ghost" className="px-0 text-late!" onClick={() => setCancelling(payment.id)}>
+                Annuler ce paiement
+              </Button>
+            </span>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }
