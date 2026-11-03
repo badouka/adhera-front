@@ -31,6 +31,14 @@ export const SESSION: BureauSession = {
   admin: { id: 3, name: 'Trésorier Démo', email: 'tresorier@demo-asso.test', role: 'tresorier' },
 };
 
+/** `GET admin/me` (§18.7). */
+export const ME = {
+  name: 'Fatim Diarra',
+  email: 'tresorier@demo-asso.test',
+  role: 'tresorier',
+  role_label: 'Trésorière',
+};
+
 export function settings(overrides: Partial<Settings> = {}): Settings {
   return {
     issuer_name: 'Association Démo',
@@ -233,6 +241,11 @@ export function renderInBureau(
     setSettings: vi.fn(),
     modeSupported: true,
     markModeUnsupported: vi.fn(),
+    me: ME,
+    setMe: vi.fn(),
+    toVerify: null,
+    refreshToVerify: vi.fn(),
+    setBack: vi.fn(),
     ...overrides,
   };
   return { value, ...render(<BureauContext.Provider value={value}>{ui}</BureauContext.Provider>) };
@@ -327,6 +340,59 @@ export function campaign(overrides: Partial<Campaign> & { id: string }): Campaig
       email: { total: 7, sent: 7, pending: 0, skipped: 0, failed: 0 },
     },
     cancellable: false,
+    ...overrides,
+  };
+}
+
+/* ───────────────────────────── F5 (§18) ───────────────────────────── */
+
+/** §18.5 — un message WhatsApp déjà rédigé. Le jeton du lien est masqué. */
+export function share(overrides: Partial<import('@/lib/bureau/types').Share> = {}) {
+  return {
+    phone: '77 000 00 07',
+    text: 'Bonjour Cheikh,\nAssociation Recette a bien reçu votre paiement de 10 000 FCFA par Orange Money. Merci.\nVotre reçu : https://demo-asso.adhera.africa/m/<JETON>\nIl vous reste 15 000 FCFA à payer.',
+    whatsapp_url: 'https://wa.me/221770000007?text=Bonjour%20Cheikh',
+    ...overrides,
+  };
+}
+
+/** §18.1 — le paiement déjà enregistré d'un `409 possible_duplicate`. */
+export const EXISTING = {
+  payment_id: '01a1a321-4dfe-7365-b635-1c01e1eada5d',
+  amount: 10001,
+  amount_formatted: '10 000 FCFA',
+  method_label: 'Orange Money',
+  recorded_at: '2026-11-03T20:37:11+00:00',
+  receipt_reference: 'REC-2026-E1EADA5D',
+};
+
+export const POSSIBLE_DUPLICATE = {
+  message: 'Un paiement identique est déjà enregistré aujourd’hui pour ce membre.',
+  code: 'possible_duplicate',
+  existing: EXISTING,
+};
+
+/**
+ * §18.3 — le bloc `simple`. Les bruts diffèrent de leurs `*_formatted` : un
+ * écran qui afficherait le brut se verrait.
+ */
+export function simple(
+  overrides: Partial<import('@/lib/bureau/types').DashboardSimple> = {},
+): import('@/lib/bureau/types').DashboardSimple {
+  return {
+    active_count: 15,
+    up_to_date_count: 7,
+    late_count: 8,
+    remaining: 290001,
+    remaining_formatted: '290 000 FCFA',
+    received_this_year: 235001,
+    received_this_year_formatted: '235 000 FCFA',
+    year: 2026,
+    renewing_soon_count: 1,
+    renewing_soon_days: 30,
+    to_verify_count: 2,
+    to_verify_total: 45001,
+    to_verify_total_formatted: '45 000 FCFA',
     ...overrides,
   };
 }

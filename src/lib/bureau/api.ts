@@ -36,6 +36,7 @@ import type {
   LaunchedCampaign,
   LeftReason,
   LoginData,
+  Me,
   MemberDetail,
   MemberFilters,
   MemberInput,
@@ -45,7 +46,9 @@ import type {
   OutreachItem,
   Payment,
   PaymentFilterStatus,
+  PaymentWithShare,
   ProofUrl,
+  RejectInput,
   Settings,
   SettingsInput,
   WhatsappMessage,
@@ -383,6 +386,25 @@ export async function changePassword(input: PasswordChange): Promise<void> {
   });
 }
 
+/* ──────────────────────────── Mon profil ──────────────────────────── */
+
+/**
+ * `GET /admin/me` (§18.7) — route PARTAGÉE avec EventFlow, sans enveloppe.
+ * Le nom et `role_label` de l'en-tête viennent d'ici.
+ */
+export function getMe(signal?: AbortSignal) {
+  return request<Me>('me', { signal });
+}
+
+/**
+ * `PUT /admin/me` — le NOM et rien d'autre : `email` et `role` seraient ignorés
+ * par le serveur, ils ne partent donc pas. Un `422` porte `errors.name`, en
+ * français, affichable tel quel.
+ */
+export function updateMe(name: string) {
+  return request<Me & { message?: string }>('me', { method: 'PUT', json: { name } });
+}
+
 /* ───────────────────────────── Réglages ───────────────────────────── */
 
 export function getSettings(signal?: AbortSignal) {
@@ -502,17 +524,36 @@ export function listPayments(
   return request<Payment[]>('membership/payments', { query: filters, signal });
 }
 
-export function validatePayment(id: string, paidOn: string) {
-  return request<Payment>(`membership/payments/${seg(id)}/validate`, {
+/**
+ * « J'ai bien reçu cet argent ». `paid_on` est facultatif : sans lui, le
+ * serveur garde la date que le membre a signalée. `409 possible_duplicate`
+ * (§18.1) si un paiement identique est déjà enregistré ce jour-là ;
+ * `confirmDuplicate` est la RÉPONSE du trésorier à cette question, jamais un
+ * défaut.
+ */
+export function validatePayment(
+  id: string,
+  options: { paidOn?: string | null; confirmDuplicate?: boolean } = {},
+) {
+  const json: Record<string, unknown> = {};
+  if (options.paidOn) json.paid_on = options.paidOn;
+  if (options.confirmDuplicate) json.confirm_duplicate = true;
+  return request<PaymentWithShare>(`membership/payments/${seg(id)}/validate`, {
     method: 'POST',
-    json: { paid_on: paidOn },
+    json,
   });
 }
 
-export function rejectPayment(id: string, reason: string) {
-  return request<Payment>(`membership/payments/${seg(id)}/reject`, {
+/**
+ * Refuser (§18.4) : une raison toute prête (`reason_code`), dont le SERVEUR
+ * compose la phrase que le membre lira, ou un texte libre de 10 caractères.
+ * La réponse porte `share`, le message WhatsApp du refus.
+ */
+export function rejectPayment(id: string, input: RejectInput | string) {
+  const json = typeof input === 'string' ? { reason: input } : input;
+  return request<PaymentWithShare>(`membership/payments/${seg(id)}/reject`, {
     method: 'POST',
-    json: { reason },
+    json,
   });
 }
 
@@ -541,12 +582,15 @@ export async function getProofUrl(id: string): Promise<string> {
  * `idempotencyKey` est la clé du PANNEAU (§11.1) : la même tant que l'envoi
  * n'a pas réussi. Un rejeu rend `201` et le versement d'origine ; un contenu
  * différent sous la même clé, `422 idempotency_key_reused` ; un doublon sans
- * clé, `409 duplicate_payment`.
+ * clé, `409 duplicate_payment`. Le même paiement saisi deux fois le même jour,
+ * avec ou sans clé, `409 possible_duplicate` (§18.1) : on le rejoue avec
+ * `confirmDuplicate` ET une clé neuve (même clé, autre corps : refusé).
  */
 export function createDirectPayment(
   memberId: string,
   input: DirectPaymentInput,
   idempotencyKey?: string,
+  options: { confirmDuplicate?: boolean } = {},
 ) {
   const json: Record<string, unknown> = {
     amount: input.amount,
@@ -554,7 +598,9 @@ export function createDirectPayment(
     paid_on: input.paid_on,
   };
   if (input.reference) json.reference = input.reference;
-  return request<Payment>(`membership/members/${seg(memberId)}/payments`, {
+  // §18.1 : la réponse « Non, il a payé deux fois », jamais posée par défaut.
+  if (options.confirmDuplicate) json.confirm_duplicate = true;
+  return request<PaymentWithShare>(`membership/members/${seg(memberId)}/payments`, {
     method: 'POST',
     json,
     headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
@@ -660,6 +706,14 @@ export function setArrearsPolicy(policy: ArrearsPolicy) {
   return request<Settings>('membership/settings', {
     method: 'PUT',
     json: { arrears_policy: policy },
+  });
+}
+
+/** L'e-mail du matin aux vérificateurs (§18.6). */
+export function setVerificationDigest(enabled: boolean) {
+  return request<Settings>('membership/settings', {
+    method: 'PUT',
+    json: { verification_digest_enabled: enabled },
   });
 }
 

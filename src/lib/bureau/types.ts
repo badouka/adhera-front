@@ -1,7 +1,7 @@
 /**
  * Le contrat de l'API bureau, recopié de `_handoff/adhera-api-bureau.md`
  * (v3.7.3-adhera-S3d : relances §9, tableau de bord §10, encaissements §11,
- * arriérés §12).
+ * arriérés §12 ; v3.8.4-adhera-simple : l'espace simplifié, §18).
  *
  * R1 : les champs `*_formatted` sont les SEULS montants affichables. Les champs
  * numériques ne servent qu'au calcul (borne d'un formulaire), jamais au rendu.
@@ -26,6 +26,17 @@ export type Admin = {
   name: string;
   email: string;
   role: AdminRole | string;
+};
+
+/**
+ * `GET /admin/me` (§18.7) — route PARTAGÉE avec EventFlow. `role_label` est
+ * composé par le serveur : aucune table de rôles ici.
+ */
+export type Me = {
+  name: string;
+  email: string;
+  role: AdminRole | string;
+  role_label: string;
 };
 
 /** `POST /admin/login` → `data` de l'enveloppe EventFlow. */
@@ -66,6 +77,11 @@ export type Settings = {
   weekly_report_enabled?: boolean;
   /** §12.1 — absent d'un serveur antérieur à S3d, lu alors comme le défaut. */
   arrears_policy?: ArrearsPolicy;
+  /**
+   * §18.6 — l'e-mail du matin, seulement s'il y a des paiements à vérifier.
+   * `true` par défaut ; absent d'un serveur antérieur, lu alors comme `true`.
+   */
+  verification_digest_enabled?: boolean;
   /**
    * Les options vendables allumées pour l'association (v3.8.1). Clé absente
    * d'un serveur antérieur : chaque option est alors lue comme ÉTEINTE.
@@ -283,9 +299,15 @@ export type MemberInput = {
   member_number?: string | null;
 };
 
+/**
+ * `renewing_soon` (§18.3) : des membres À JOUR dont la couverture se termine
+ * dans les `renewing_soon_days` jours. Renouveler n'est pas être en retard.
+ */
+export type MemberStanding = 'up_to_date' | 'not_up_to_date' | 'renewing_soon';
+
 export type MemberFilters = {
   status?: MemberStatus | '';
-  standing?: 'up_to_date' | 'not_up_to_date' | '';
+  standing?: MemberStanding | '';
   type?: MemberType | '';
   category_id?: number | '';
   search?: string;
@@ -305,6 +327,21 @@ export type WhatsappMessage = {
    */
   wa_url: string | null;
   phone_is_usable?: boolean;
+  /** §18.5 — le même message, sous la forme commune. `null` : pas de numéro. */
+  share?: Share | null;
+};
+
+/**
+ * §18.5 — un message WhatsApp DÉJÀ RÉDIGÉ par le serveur : le reçu, le refus
+ * ou le rappel. `null` quand le membre n'a pas de numéro utilisable : l'écran
+ * le dit, il ne propose pas un bouton qui échoue.
+ */
+export type Share = {
+  /** Le numéro tel que la fiche le porte, pour être relu avant l'envoi. */
+  phone: string;
+  text: string;
+  /** L'adresse `wa.me` — jamais le lien du membre. */
+  whatsapp_url: string;
 };
 
 /* ───────────────────────────── Versements ─────────────────────────── */
@@ -349,6 +386,31 @@ export type Payment = {
   cancelled_by_name?: string | null;
   cancel_reason?: string | null;
 };
+
+/**
+ * La réponse de `POST members/{id}/payments`, de `validate` et de `reject`
+ * (§18.5) : le paiement, et le message WhatsApp déjà rédigé. `share` est
+ * absent d'un serveur antérieur à v3.8.4, lu alors comme `null`.
+ */
+export type PaymentWithShare = Payment & { share?: Share | null };
+
+/** §18.1 — le paiement déjà enregistré, dans un `409 possible_duplicate`. */
+export type ExistingPayment = {
+  payment_id: string;
+  amount: number;
+  amount_formatted: string;
+  method_label: string;
+  /** L'heure de SAISIE (ISO 8601), pas la date de paiement. */
+  recorded_at: string;
+  /** `null` sur une déclaration en attente. */
+  receipt_reference: string | null;
+};
+
+/** §18.4 — les trois raisons toutes prêtes d'un refus. */
+export type RejectReasonCode = 'not_found' | 'wrong_amount' | 'unreadable_proof';
+
+/** Un refus : une raison toute prête, OU un texte libre de 10 caractères. */
+export type RejectInput = { reason_code: RejectReasonCode } | { reason: string };
 
 export type DirectPaymentInput = {
   amount: number;
@@ -421,6 +483,30 @@ export type Dashboard = {
   }>;
   upcoming: { days: number; count: number };
   outreach: OutreachSummary;
+  /** §18.3 — les chiffres de l'accueil. Absent d'un serveur antérieur à v3.8.4. */
+  simple?: DashboardSimple | null;
+};
+
+/**
+ * §18.3 — les six chiffres de l'accueil, tous calculés par le serveur. Le
+ * « reste à recevoir » ne compte que les membres `active` (D2). `year` est
+ * l'exercice dans le fuseau de l'association : jamais `getFullYear()` ici.
+ */
+export type DashboardSimple = {
+  active_count: number;
+  up_to_date_count: number;
+  late_count: number;
+  remaining: number;
+  remaining_formatted: string;
+  /** L'année CIVILE : ce chiffre ignore le filtre de période. */
+  received_this_year: number;
+  received_this_year_formatted: string;
+  year: number;
+  renewing_soon_count: number;
+  renewing_soon_days: number;
+  to_verify_count: number;
+  to_verify_total: number;
+  to_verify_total_formatted: string;
 };
 
 /* ─────────────────────── Relances et file WhatsApp (§9) ─────────────── */
@@ -550,9 +636,10 @@ export const DUE_STATUS_LABELS: Record<DueStatus, string> = {
   exoneree: 'Exonérée',
 };
 
+/** Le lexique (§18.8) : « à vérifier », « accepté », « refusé ». */
 export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
-  declared: 'À valider',
-  validated: 'Validé',
+  declared: 'À vérifier',
+  validated: 'Accepté',
   rejected: 'Refusé',
   cancelled: 'Annulé',
 };
