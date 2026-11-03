@@ -311,16 +311,16 @@ function MemberTable({
 }) {
   return (
     <div className="hidden overflow-x-auto rounded-[var(--radius-md)] border border-line bg-surface-raised lg:block print:hidden">
-      <table className="w-full border-collapse text-left" data-testid="member-table">
+      <table className="w-full border-collapse text-left text-[15px]" data-testid="member-table">
         <thead>
           <tr className="small border-b border-line text-ink-muted">
-            <th scope="col" className="px-4 py-3 font-semibold">N°</th>
-            <th scope="col" className="px-4 py-3 font-semibold">Nom</th>
-            <th scope="col" className="px-4 py-3 font-semibold">Téléphone</th>
-            <th scope="col" className="px-4 py-3 font-semibold">Situation</th>
-            <th scope="col" className="px-4 py-3 font-semibold">Aurait dû payer le</th>
-            <th scope="col" className="px-4 py-3 text-right font-semibold">Reste à payer</th>
-            <th scope="col" className="px-4 py-3 font-semibold">
+            <th scope="col" className="px-3 py-3 font-semibold">N°</th>
+            <th scope="col" className="px-3 py-3 font-semibold">Nom</th>
+            <th scope="col" className="px-3 py-3 font-semibold">Téléphone</th>
+            <th scope="col" className="px-3 py-3 font-semibold">Situation</th>
+            <th scope="col" className="px-3 py-3 font-semibold">Aurait dû payer le</th>
+            <th scope="col" className="px-3 py-3 text-right font-semibold">Reste à payer</th>
+            <th scope="col" className="px-3 py-3 font-semibold">
               <span className="sr-only">Actions</span>
             </th>
           </tr>
@@ -328,7 +328,7 @@ function MemberTable({
         <tbody>
           {members.length === 0 ? (
             <tr>
-              <td colSpan={7} className="px-4 py-3 text-ink-muted">
+              <td colSpan={7} className="px-3 py-3 text-ink-muted">
                 Aucun membre ne correspond.
               </td>
             </tr>
@@ -341,30 +341,30 @@ function MemberTable({
                   : '';
               return (
                 <tr key={member.id} className="border-b border-line last:border-b-0">
-                  <td className="tnum px-4 py-3 whitespace-nowrap" data-testid="member-number">
+                  <td className="tnum px-3 py-3 whitespace-nowrap" data-testid="member-number">
                     {member.member_number ?? ''}
                   </td>
-                  <td className="min-w-[170px] px-4 py-3">
+                  <td className="min-w-[150px] px-3 py-3">
                     <Link href={memberHref(member)} className="font-semibold break-words">
                       {member.name}
                     </Link>
                     <span className="small block text-ink-muted">{member.category_label ?? ''}</span>
                   </td>
-                  <td className="tnum px-4 py-3 whitespace-nowrap">
+                  <td className="tnum px-3 py-3 whitespace-nowrap">
                     {member.phone ?? <span className="text-ink-muted">pas de téléphone</span>}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-3">
                     {late ? <Pill tone="late">En retard</Pill> : <Pill tone="ok">À jour</Pill>}
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap">{due || '—'}</td>
-                  <td className="money tnum px-4 py-3 text-right font-bold text-due">
+                  <td className="px-3 py-3">{due || '—'}</td>
+                  <td className="money tnum px-3 py-3 text-right font-bold text-due">
                     {late ? (member.balance_due_formatted ?? '—') : ''}
                   </td>
-                  <td className="px-4 py-3">
-                    <span className="flex flex-wrap justify-end gap-2">
+                  <td className="px-3 py-3">
+                    <span className="flex flex-col items-stretch gap-[6px]">
                       <Link
                         href={`${RECORD_PATH}?membre=${encodeURIComponent(member.id)}`}
-                        className="inline-flex min-h-10 items-center rounded-[var(--radius-md)] border-2 border-indigo px-3 text-[14px] font-semibold whitespace-nowrap text-indigo! no-underline"
+                        className="inline-flex min-h-9 items-center justify-center rounded-[var(--radius-md)] border-2 border-indigo px-2 text-[13px] font-semibold whitespace-nowrap text-indigo! no-underline"
                       >
                         {firstName(member)} a payé
                       </Link>
@@ -372,7 +372,7 @@ function MemberTable({
                         <button
                           type="button"
                           onClick={() => onRemind(member)}
-                          className="inline-flex min-h-10 items-center gap-1 rounded-[var(--radius-md)] border border-line-strong bg-surface-raised px-3 text-[14px] font-semibold whitespace-nowrap text-ink"
+                          className="inline-flex min-h-9 items-center justify-center gap-1 rounded-[var(--radius-md)] border border-line-strong bg-surface-raised px-2 text-[13px] font-semibold whitespace-nowrap text-ink"
                         >
                           <ChatIcon size={16} />
                           Rappel WhatsApp
