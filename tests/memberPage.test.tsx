@@ -52,7 +52,7 @@ describe('le tenant et l’en-tête', () => {
       fakeResponse(200, payload({ organisation: { name: '', logo_url: null, om_merchant_number: null, wave_merchant_number: null, payment_instructions: null } })),
     );
 
-    await screen.findByText(/Bonjour Awa Diallo/);
+    await screen.findByText(/Bonjour Awa/);
     expect(screen.queryByRole('banner')?.textContent).toBe('');
   });
 
@@ -199,11 +199,11 @@ describe('E3 — cotisation due', () => {
       ),
     );
 
-    await screen.findByText('À PAYER');
+    await screen.findByText('Votre cotisation à payer');
     expect(screen.getByText('250 000 FCFA')).toBeInTheDocument();
     // `period_label` et `category_label`, tels que servis.
     expect(
-      screen.getByText('Cotisation du 5 novembre 2025 au 4 novembre 2026'),
+      screen.getByText('pour l’année du 5 novembre 2025 au 4 novembre 2026'),
     ).toBeInTheDocument();
     expect(screen.getByText('Membre actif')).toBeInTheDocument();
     expect(screen.getByText('77 000 00 00')).toBeInTheDocument();
@@ -222,7 +222,7 @@ describe('E3 — cotisation due', () => {
         }),
       ),
     );
-    await screen.findByText('Cotisation du 5 novembre 2025 au 4 novembre 2026');
+    await screen.findByText('pour l’année du 5 novembre 2025 au 4 novembre 2026');
   });
 
   it('un seul bouton principal : « J’ai payé », jamais « Payer »', async () => {
@@ -236,18 +236,18 @@ describe('E3 — cotisation due', () => {
       ),
     );
 
-    await screen.findByRole('button', { name: 'J’ai payé' });
+    await screen.findByRole('button', { name: 'J’ai payé : le signaler' });
     expect(
       screen.queryByRole('button', { name: /^Payer$/ }),
     ).not.toBeInTheDocument();
     // Les autres boutons sont des « Copier » : un seul geste principal.
     const others = screen
       .getAllByRole('button')
-      .filter((b) => b.textContent !== 'J’ai payé' && !/Copier/.test(b.textContent ?? ''));
+      .filter((b) => b.textContent !== 'J’ai payé : le signaler' && !/Copier/.test(b.textContent ?? ''));
     expect(others).toEqual([]);
   });
 
-  it('marque « En retard » quand la fin de période est passée', async () => {
+  it('dit « Attendue depuis » quand la fin de période est passée', async () => {
     vi.setSystemTime(new Date('2026-12-01T10:00:00Z'));
     renderWith(
       fakeResponse(
@@ -259,14 +259,12 @@ describe('E3 — cotisation due', () => {
       ),
     );
 
-    await screen.findByText('En retard');
-    expect(
-      screen.getByText(/Attendue depuis le 5 novembre 2025\./),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/Attendue depuis le 5 novembre 2025\./)).toBeInTheDocument();
+    expect(screen.getByTestId('due-block')).toHaveAttribute('data-late', 'true');
     vi.useRealTimers();
   });
 
-  it('marque « À régler » quand la période court encore', async () => {
+  it('ne dit rien du retard quand la période court encore', async () => {
     vi.setSystemTime(new Date('2026-06-01T10:00:00Z'));
     renderWith(
       fakeResponse(
@@ -278,8 +276,9 @@ describe('E3 — cotisation due', () => {
       ),
     );
 
-    await screen.findByText('À régler');
-    expect(screen.queryByText('En retard')).not.toBeInTheDocument();
+    await screen.findByText('Votre cotisation à payer');
+    expect(screen.queryByText(/Attendue depuis/)).not.toBeInTheDocument();
+    expect(screen.getByTestId('due-block')).not.toHaveAttribute('data-late');
     vi.useRealTimers();
   });
 
@@ -349,10 +348,10 @@ describe('E3b — partiel', () => {
       ),
     );
 
-    await screen.findByText('RESTE À PAYER');
+    await screen.findByText('Il vous reste à payer');
     expect(screen.getByText('150 000 FCFA')).toBeInTheDocument();
     expect(
-      screen.getByText((_, el) => el?.tagName === 'SPAN' && el.textContent === 'Déjà réglé : 100 000 FCFA sur 250 000 FCFA'),
+      screen.getByText((_, el) => el?.tagName === 'SPAN' && el.textContent === 'Déjà payé : 100 000 FCFA sur 250 000 FCFA'),
     ).toBeInTheDocument();
   });
 });
@@ -400,7 +399,7 @@ describe('E4 — paiement signalé, en attente', () => {
     renderWith(fakeResponse(200, pending));
 
     await screen.findByText('En attente de confirmation');
-    expect(screen.queryByRole('button', { name: 'J’ai payé' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'J’ai payé : le signaler' })).not.toBeInTheDocument();
   });
 });
 
@@ -432,7 +431,7 @@ describe('le rejet est visible (`last_rejection`)', () => {
     const amount = screen.getByText('250 000 FCFA');
     expect(region.compareDocumentPosition(amount) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // « J'ai payé » reste le geste suivant.
-    expect(screen.getByRole('button', { name: 'J’ai payé' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'J’ai payé : le signaler' })).toBeInTheDocument();
   });
 
   it('en partiel, le sous-titre « acompte reçu » se tait devant l’encart', async () => {
@@ -468,7 +467,7 @@ describe('le rejet est visible (`last_rejection`)', () => {
 
   it('se masque quand `last_rejection` vaut null', async () => {
     renderWith(fakeResponse(200, { ...rejected, last_rejection: null }));
-    await screen.findByText('À PAYER');
+    await screen.findByText('Votre cotisation à payer');
     expect(rejectionText()).toBeUndefined();
   });
 
@@ -492,7 +491,7 @@ describe('le rejet est visible (`last_rejection`)', () => {
     render(<MemberPage token={TOKEN} />);
 
     await screen.findByRole('region', { name: 'Paiement non confirmé' });
-    await user.click(screen.getByRole('button', { name: 'J’ai payé' }));
+    await user.click(screen.getByRole('button', { name: 'J’ai payé : le signaler' }));
     await user.click(screen.getByRole('button', { name: 'Confirmer' }));
 
     await screen.findByText('En attente de confirmation');
@@ -532,7 +531,7 @@ describe('vocabulaire — ce que lit le membre', () => {
       standing: { is_up_to_date: false, covered_until: null }, due: DUE,
     })));
     render(<MemberPage token={TOKEN} />);
-    await user.click(await screen.findByRole('button', { name: 'J’ai payé' }));
+    await user.click(await screen.findByRole('button', { name: 'J’ai payé : le signaler' }));
     const dialog = screen.getByRole('dialog');
     for (const name of [
       'Payer un autre montant ?',

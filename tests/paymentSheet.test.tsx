@@ -72,7 +72,7 @@ afterEach(() => {
 async function openSheet() {
   const user = userEvent.setup();
   render(<MemberPage token={TOKEN} />);
-  await user.click(await screen.findByRole('button', { name: 'J’ai payé' }));
+  await user.click(await screen.findByRole('button', { name: 'J’ai payé : le signaler' }));
   await screen.findByRole('dialog', { name: 'Signaler mon paiement' });
   return user;
 }
@@ -375,7 +375,7 @@ describe('les réponses du serveur', () => {
 
     await screen.findByText('Un paiement est déjà en attente de confirmation par le bureau.');
     await screen.findByText('En attente de confirmation');
-    expect(screen.queryByRole('button', { name: 'J’ai payé' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'J’ai payé : le signaler' })).not.toBeInTheDocument();
   });
 
   it('429 : parle de tentatives sans fermer la feuille', async () => {
@@ -429,7 +429,7 @@ describe('Idempotency-Key — « J’ai payé » ne signale pas deux fois (§11)
     await user.click(confirmButton());
     await screen.findByText(/n’a pas pu être signalé/);
     await user.click(screen.getByRole('button', { name: 'Annuler' }));
-    await user.click(screen.getByRole('button', { name: 'J’ai payé' }));
+    await user.click(screen.getByRole('button', { name: 'J’ai payé : le signaler' }));
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     await user.click(confirmButton());
     await waitFor(() => expect(posts()).toHaveLength(2));

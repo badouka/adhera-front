@@ -8,9 +8,18 @@ import {
   Unavailable,
 } from '@/components/Fallbacks';
 import { AttestationAction } from '@/components/card/AttestationAction';
-import { KeepOnPhone } from '@/components/card/KeepOnPhone';
 import { MemberCardView } from '@/components/card/MemberCardView';
+import { SaveCard } from '@/components/card/SaveCard';
 import { CheckIcon, ClockIcon } from '@/components/Icons';
+
+/** « ‹ » du retour, comme la barre de la maquette. */
+function ChevronLeft() {
+  return (
+    <svg aria-hidden="true" width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+      <path d="m15 18-6-6 6-6" />
+    </svg>
+  );
+}
 import { Pastille } from '@/components/Pastille';
 import { PaymentHowTo } from '@/components/PaymentHowTo';
 import { PaymentSheet } from '@/components/PaymentSheet';
@@ -18,7 +27,6 @@ import { ReceiptList } from '@/components/ReceiptList';
 import { Card, Shell } from '@/components/Shell';
 import { API_BASE, fetchMember } from '@/lib/api';
 import { formatDate, formatInstant, isPast } from '@/lib/dates';
-import { listenForInstallPrompt } from '@/lib/install';
 import { homeIconUrl, manifestHref } from '@/lib/manifest';
 import { resolveMemberState, screenForError } from '@/lib/state';
 import { resolveTenant } from '@/lib/tenant';
@@ -90,11 +98,6 @@ export function MemberPage({ token }: { token: string }) {
   const [view, setView] = useState<MemberView | null>(null);
   const [offlineSince, setOfflineSince] = useState<string | null>(null);
   const noticeRef = useRef<HTMLParagraphElement>(null);
-
-  // L'invite d'installation de Chrome peut arriver avant le bouton.
-  useEffect(() => {
-    listenForInstallPrompt();
-  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -232,9 +235,18 @@ export function MemberPage({ token }: { token: string }) {
     return (
       <Shell header={false} footer={null}>
         {installLinks}
+        <button
+          type="button"
+          onClick={() => setView('cotisation')}
+          className="-mx-4 -mt-4 flex h-14 items-center gap-[6px] border-b border-line bg-surface-raised px-4 text-left font-semibold text-indigo"
+        >
+          <ChevronLeft />
+          Ma cotisation
+        </button>
         {offlineBanner}
-        <ViewSwitch value="carte" onChange={setView} />
         <MemberCardView card={card} />
+        {/* F5 : l'image dans les photos, à la place de l'installation. */}
+        <SaveCard card={card} />
         {card.is_up_to_date ? null : (
           <button
             type="button"
@@ -250,7 +262,6 @@ export function MemberPage({ token }: { token: string }) {
           available={payload.attestation_available === true}
           upToDate={card.is_up_to_date}
         />
-        <KeepOnPhone />
       </Shell>
     );
   }
@@ -262,7 +273,6 @@ export function MemberPage({ token }: { token: string }) {
     >
       {installLinks}
       {offlineBanner}
-      {card ? <ViewSwitch value="cotisation" onChange={setView} /> : null}
       {notice ? (
         <p
           ref={noticeRef}
@@ -281,7 +291,7 @@ export function MemberPage({ token }: { token: string }) {
 
       <Greeting
         state={state}
-        memberName={payload.member.name}
+        memberName={payload.member.first_name?.trim() || payload.member.name}
         // « Votre acompte a bien été reçu » contredirait l'encart de refus.
         quiet={!!payload.last_rejection}
       />
@@ -303,7 +313,21 @@ export function MemberPage({ token }: { token: string }) {
         </>
       ) : null}
 
+      {card ? (
+        <button
+          type="button"
+          onClick={() => setView('carte')}
+          className="flex min-h-14 w-full items-center justify-center rounded-[var(--radius-md)] border border-line-strong bg-surface-raised px-4 text-[16px] font-semibold text-ink"
+        >
+          Ma carte de membre
+        </button>
+      ) : null}
+
       <ReceiptList receipts={payload.receipts} token={token} tenant={tenant} />
+
+      <p className="small m-0 text-center text-ink-muted">
+        Gardez le message qui contient ce lien : c’est votre accès personnel.
+      </p>
 
       <div className="grow" />
 
@@ -320,14 +344,10 @@ export function MemberPage({ token }: { token: string }) {
             }}
             className="flex h-14 w-full items-center justify-center rounded-[var(--radius-md)] bg-indigo text-[18px] font-bold text-on-indigo"
           >
-            J’ai payé
+            J’ai payé : le signaler
           </button>
         </div>
-      ) : (
-        <p className="small m-0 text-center text-ink-muted">
-          Gardez ce lien : il vous servira pour vos prochaines cotisations.
-        </p>
-      )}
+      ) : null}
 
       {sheetOpen && due && (state === 'E3' || state === 'E3b') ? (
         <PaymentSheet
@@ -370,45 +390,6 @@ function CardHeadLinks({
       <meta name="mobile-web-app-capable" content="yes" />
       <meta name="apple-mobile-web-app-title" content="Ma carte" />
     </>
-  );
-}
-
-/** « Ma carte » / « Ma cotisation » : on passe de l'une à l'autre sans rien recharger. */
-function ViewSwitch({
-  value,
-  onChange,
-}: {
-  value: MemberView;
-  onChange: (next: MemberView) => void;
-}) {
-  const options: ReadonlyArray<{ value: MemberView; label: string }> = [
-    { value: 'carte', label: 'Ma carte' },
-    { value: 'cotisation', label: 'Ma cotisation' },
-  ];
-  return (
-    <div
-      role="tablist"
-      aria-label="Ma page de membre"
-      className="grid grid-cols-2 gap-1 rounded-[var(--radius-md)] border border-line bg-surface-raised p-1"
-    >
-      {options.map((option) => {
-        const selected = option.value === value;
-        return (
-          <button
-            key={option.value}
-            type="button"
-            role="tab"
-            aria-selected={selected}
-            onClick={() => onChange(option.value)}
-            className={`min-h-11 rounded-[var(--radius-sm)] font-bold ${
-              selected ? 'bg-indigo text-on-indigo' : 'bg-transparent text-ink-muted'
-            }`}
-          >
-            {option.label}
-          </button>
-        );
-      })}
-    </div>
   );
 }
 
@@ -562,7 +543,7 @@ function NothingDue() {
   );
 }
 
-/** E3 / E3b — le montant, en très gros, et ce qu'il couvre. */
+/** E3 / E3b — « Votre cotisation à payer » : le montant, en très gros, et ce qu'il couvre. */
 function DueBlock({
   payload,
   partial,
@@ -573,7 +554,6 @@ function DueBlock({
   const due = payload.due;
   if (!due) return null;
 
-  // --late est réservé à E3 quand la fin de période est passée.
   const late = isPast(due.period_end);
   const periodStart = formatDate(due.period_start);
   const periodEnd = formatDate(due.period_end);
@@ -583,25 +563,22 @@ function DueBlock({
     (periodStart && periodEnd ? `du ${periodStart} au ${periodEnd}` : '');
 
   return (
-    <Card>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="label text-ink-muted">
-          {partial ? 'RESTE À PAYER' : 'À PAYER'}
-        </span>
-        <Pastille tone={late ? 'late' : 'due'}>
-          {late ? 'En retard' : 'À régler'}
-        </Pastille>
-      </div>
+    <section
+      className="flex flex-col gap-1 rounded-[var(--radius-md)] bg-due-soft p-4"
+      data-testid="due-block"
+      data-late={late ? 'true' : undefined}
+    >
+      <span>{partial ? 'Il vous reste à payer' : 'Votre cotisation à payer'}</span>
 
       {/* R1 : jamais de montant recalculé, seulement le champ *_formatted. */}
-      <div className="amount text-[clamp(28px,10vw,40px)] leading-[1.15]">{due.balance_formatted}</div>
+      <div className="amount text-[clamp(28px,10vw,40px)] leading-[1.15] text-due">{due.balance_formatted}</div>
 
-      <div className="small flex flex-col text-ink-muted">
-        {period ? <span>Cotisation {period}</span> : null}
-        {due.category_label?.trim() ? <span>{due.category_label}</span> : null}
+      <div className="flex flex-col text-ink-muted">
+        {period ? <span>pour l’année {period}</span> : null}
+        {due.category_label?.trim() ? <span className="small">{due.category_label}</span> : null}
         {partial ? (
-          <span>
-            Déjà réglé : <span className="money">{due.amount_paid_formatted}</span>
+          <span className="small">
+            Déjà payé : <span className="money">{due.amount_paid_formatted}</span>
             {due.amount_due_formatted ? (
               <>
                 {' '}
@@ -610,8 +587,8 @@ function DueBlock({
             ) : null}
           </span>
         ) : null}
-        {late && periodStart ? <span>Attendue depuis le {periodStart}.</span> : null}
+        {late && periodStart ? <span className="small">Attendue depuis le {periodStart}.</span> : null}
       </div>
-    </Card>
+    </section>
   );
 }

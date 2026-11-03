@@ -57,10 +57,10 @@ function serve(body: MemberPayload) {
 }
 
 describe('F4 § 1.1 — deux vues', () => {
-  it('sans carte (`card: null`), la page reste celle d’aujourd’hui : ni onglets, ni carte', async () => {
+  it('sans carte (`card: null`), la page reste celle d’aujourd’hui : ni bouton de carte, ni carte', async () => {
     serve(payload({ card: null, attestation_available: false }));
-    await screen.findByText(/Bonjour Awa Diallo/);
-    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+    await screen.findByText(/Bonjour Awa/);
+    expect(screen.queryByRole('button', { name: 'Ma carte de membre' })).not.toBeInTheDocument();
     expect(screen.queryByTestId('member-card')).not.toBeInTheDocument();
     expect(screen.getByText('Propulsé par Adhera')).toBeInTheDocument();
     expect(document.head.querySelector('link[rel="manifest"]')).toBeNull();
@@ -68,14 +68,16 @@ describe('F4 § 1.1 — deux vues', () => {
 
   it('un serveur antérieur à v3.8 (clé absente) : même chose', async () => {
     serve(payload());
-    await screen.findByText(/Bonjour Awa Diallo/);
-    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+    await screen.findByText(/Bonjour Awa/);
+    expect(screen.queryByRole('button', { name: 'Ma carte de membre' })).not.toBeInTheDocument();
   });
 
   it('à jour : la page s’ouvre sur « Ma carte »', async () => {
     serve(UP_TO_DATE);
     await screen.findByTestId('member-card');
-    expect(screen.getByRole('tab', { name: 'Ma carte' })).toHaveAttribute('aria-selected', 'true');
+    // F5 : « ‹ Ma cotisation » ramène à la cotisation, et la carte s'enregistre en image.
+    expect(screen.getByRole('button', { name: 'Ma cotisation' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Enregistrer ma carte dans mes photos' })).toBeInTheDocument();
     // La vue carte ne porte que l'association : ni en-tête doublé, ni pied de page.
     expect(screen.queryByText('Propulsé par Adhera')).not.toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/adhera|eventflow|digissol/i);
@@ -84,7 +86,7 @@ describe('F4 § 1.1 — deux vues', () => {
   it('pas à jour : la page s’ouvre sur « Ma cotisation »', async () => {
     serve(LATE);
     await screen.findByText('250 000 FCFA');
-    expect(screen.getByRole('tab', { name: 'Ma cotisation' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('button', { name: 'Ma carte de membre' })).toBeInTheDocument();
     expect(screen.queryByTestId('member-card')).not.toBeInTheDocument();
   });
 
@@ -108,12 +110,12 @@ describe('F4 § 1.1 — deux vues', () => {
     await screen.findByText('250 000 FCFA');
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
-    await user.click(screen.getByRole('tab', { name: 'Ma carte' }));
+    await user.click(screen.getByRole('button', { name: 'Ma carte de membre' }));
     expect(screen.getByTestId('member-card')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Régler ma cotisation' }));
     expect(await screen.findByText('250 000 FCFA')).toBeInTheDocument();
-    await user.click(screen.getByRole('tab', { name: 'Ma carte' }));
-    await user.click(screen.getByRole('tab', { name: 'Ma cotisation' }));
+    await user.click(screen.getByRole('button', { name: 'Ma carte de membre' }));
+    await user.click(screen.getByRole('button', { name: 'Ma cotisation' }));
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 

@@ -3,10 +3,10 @@
  * @vitest-environment-options { "url": "https://demo-asso.adhera.africa/m/aaaa" }
  */
 
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { KeepOnPhone } from '@/components/card/KeepOnPhone';
+import { SaveCard } from '@/components/card/SaveCard';
 import { detectInstallEnv, resetInstallPromptForTests } from '@/lib/install';
 
 const UA = {
@@ -78,60 +78,100 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('« Garder sur mon téléphone » — les quatre cas', () => {
-  it('Android et Chrome : le bouton apparaît avec l’invite, et la déclenche', async () => {
-    setUserAgent(UA.androidChrome);
-    render(<KeepOnPhone />);
-    expect(screen.queryByRole('button', { name: 'Garder sur mon téléphone' })).not.toBeInTheDocument();
+const draw = vi.hoisted(() => ({
+  drawCard: vi.fn(),
+  cardFileName: vi.fn(() => 'carte-aminata-diop.png'),
+}));
+vi.mock('@/components/card/cardImage', () => draw);
 
-    const prompt = vi.fn(async () => undefined);
-    const event = Object.assign(new Event('beforeinstallprompt', { cancelable: true }), {
-      prompt,
-      userChoice: Promise.resolve({ outcome: 'accepted' as const }),
-    });
-    act(() => {
-      window.dispatchEvent(event);
-    });
-    expect(event.defaultPrevented).toBe(true);
+const CARD = {
+  organisation_name: 'Cercle des Administrateurs Publics',
+  logo_url: null,
+  icon_url: null,
+  display_name: 'Aminata Diop',
+  first_name: 'Aminata',
+  last_name: 'Diop',
+  type: 'personne' as const,
+  category_label: 'Membre actif',
+  member_number: '0001',
+  member_since: '2026-03-10',
+  is_up_to_date: true,
+  valid_until: '2027-03-09',
+  standing_label: 'À jour',
+  verify_url: 'https://demo-asso.adhera.africa/v/5RGF6J9Z2UJX',
+};
 
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Garder sur mon téléphone' }));
-    expect(prompt).toHaveBeenCalledTimes(1);
-    // L'invite ne sert qu'une fois : le bouton s'en va.
-    expect(screen.queryByRole('button', { name: 'Garder sur mon téléphone' })).not.toBeInTheDocument();
+/**
+ * F5 — « Enregistrer ma carte dans mes photos » remplace « Garder sur mon
+ * téléphone » : l'image PNG sort par trois chemins, selon le téléphone.
+ */
+function stubShare(share: unknown, canShare: unknown) {
+  Object.defineProperty(navigator, 'share', { value: share, configurable: true, writable: true });
+  Object.defineProperty(navigator, 'canShare', { value: canShare, configurable: true, writable: true });
+}
+
+describe('« Enregistrer ma carte dans mes photos » — les trois chemins', () => {
+  afterEach(() => {
+    delete (navigator as unknown as Record<string, unknown>).share;
+    delete (navigator as unknown as Record<string, unknown>).canShare;
   });
 
-  it('iPhone et Safari : la notice « Touchez Partager, puis “Sur l’écran d’accueil” »', async () => {
-    setUserAgent(UA.iphoneSafari);
-    render(<KeepOnPhone />);
-    const button = screen.getByRole('button', { name: 'Garder sur mon téléphone' });
-    expect(button).toHaveAttribute('aria-expanded', 'false');
-    await userEvent.setup().click(button);
-    const text = screen.getByTestId('keep-ios').textContent ?? '';
-    expect(text).toContain('Touchez Partager');
-    expect(text).toContain('« Sur l’écran d’accueil »');
+  beforeEach(() => {
+    draw.drawCard.mockResolvedValue({
+      blob: new Blob(['png'], { type: 'image/png' }),
+      dataUrl: 'data:image/png;base64,AAAA',
+    });
   });
 
-  it('le navigateur intégré de WhatsApp : rouvrir dans Chrome ou Safari, et « Copier le lien »', async () => {
+  it('dans WhatsApp : l’image en plein écran, « Appuyez longuement », ni partage ni téléchargement', async () => {
     setUserAgent(UA.whatsappAndroid);
-    const writeText = vi.fn(async () => undefined);
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
-    render(<KeepOnPhone />);
-    expect(
-      screen.getByText('Ouvrez ce lien dans Chrome (ou Safari sur iPhone) pour garder votre carte.'),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Garder sur mon téléphone' })).not.toBeInTheDocument();
-    const user = userEvent.setup();
-    // userEvent remplace le presse-papiers : on réinstalle l'espion.
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
-    await user.click(screen.getByRole('button', { name: 'Copier le lien de ma carte' }));
-    expect(writeText).toHaveBeenCalledWith('https://demo-asso.adhera.africa/m/aaaa');
-    expect(screen.getByText('Copié')).toBeInTheDocument();
+    const share = vi.fn();
+    stubShare(share, () => true);
+    render(<SaveCard card={CARD} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Enregistrer ma carte dans mes photos' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Ma carte, à enregistrer' });
+    expect(dialog).toHaveTextContent('Appuyez longuement sur l’image, puis Enregistrer');
+    expect(screen.getByRole('img', { name: 'Ma carte de membre' })).toHaveAttribute(
+      'src',
+      'data:image/png;base64,AAAA',
+    );
+    expect(share).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Fermer' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('déjà installée (display-mode: standalone) : le bouton disparaît', () => {
-    setUserAgent(UA.iphoneSafari);
-    setStandalone(true);
-    const { container } = render(<KeepOnPhone />);
-    expect(container).toBeEmptyDOMElement();
+  it('quand le téléphone sait partager un fichier : navigator.share({ files })', async () => {
+    const share = vi.fn().mockResolvedValue(undefined);
+    setUserAgent(UA.androidChrome);
+    stubShare(share, () => true);
+    render(<SaveCard card={CARD} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Enregistrer ma carte dans mes photos' }));
+    await vi.waitFor(() => expect(share).toHaveBeenCalledTimes(1));
+    const files = share.mock.calls[0]?.[0].files as File[];
+    expect(files[0]?.name).toBe('carte-aminata-diop.png');
+    expect(files[0]?.type).toBe('image/png');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('sinon : un téléchargement carte-{prenom}-{nom}.png', async () => {
+    setUserAgent(UA.desktopFirefox);
+    const createObjectURL = vi.fn(() => 'blob:carte');
+    Object.defineProperty(URL, 'createObjectURL', { value: createObjectURL, configurable: true, writable: true });
+    Object.defineProperty(URL, 'revokeObjectURL', { value: vi.fn(), configurable: true, writable: true });
+    const clicked: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      clicked.push(this.download);
+    });
+    render(<SaveCard card={CARD} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Enregistrer ma carte dans mes photos' }));
+    await vi.waitFor(() => expect(clicked).toEqual(['carte-aminata-diop.png']));
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+  });
+
+  it('un dessin impossible se dit, et propose la capture d’écran', async () => {
+    draw.drawCard.mockRejectedValue(new Error('Canvas indisponible'));
+    render(<SaveCard card={CARD} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Enregistrer ma carte dans mes photos' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Faites une capture d’écran de la carte.');
   });
 });
