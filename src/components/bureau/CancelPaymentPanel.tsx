@@ -71,7 +71,7 @@ export function CancelPaymentPanel({
       if (cause instanceof ApiError && cause.code === 'reason_required') {
         setFieldError(errorMessage(cause, ''));
       } else {
-        setError(errorMessage(cause, 'L’encaissement n’a pas pu être annulé.'));
+        setError(errorMessage(cause, 'Le paiement n’a pas pu être annulé.'));
       }
       setBusy(false);
     }
@@ -114,10 +114,10 @@ export function CancelPaymentPanel({
       ) : null}
       <div className="flex flex-col gap-2 sm:flex-row">
         <Button tone="danger" onClick={() => void confirm()} disabled={busy}>
-          {busy ? 'Envoi…' : 'Oui, annuler cet encaissement'}
+          {busy ? 'Envoi…' : 'Oui, annuler ce paiement'}
         </Button>
         <Button tone="ghost" onClick={onClose} disabled={busy}>
-          Garder l’encaissement
+          Garder ce paiement
         </Button>
       </div>
     </div>

@@ -11,7 +11,7 @@ import { pdfName, ReceiptButton, saveBlob } from './Documents';
 import { Button, EmptyState, Notice, Panel } from './ui';
 
 export const NO_LONGER_VALID_HELP =
-  'Un encaissement a été annulé, ou la date est dépassée. Prévenez le membre avant qu’il ne présente ce document.';
+  'Un paiement a été annulé, ou la date est dépassée. Prévenez le membre avant qu’il ne présente ce document.';
 
 /**
  * Un refus de délivrance (403 `not_up_to_date`, `not_a_member`,

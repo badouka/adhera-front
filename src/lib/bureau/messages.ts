@@ -41,7 +41,7 @@ const BY_CODE: Record<string, string> = {
   cotisation_mode_unsupported:
     'Le mode de cotisation de votre association n’est pas encore pris en charge. Contactez DIGISSOL.',
   category_in_use:
-    'Cette catégorie est utilisée : désactivez-la plutôt que de la supprimer.',
+    'Ce type de membre est utilisé : désactivez-le plutôt que de le supprimer.',
   mime_not_allowed: 'Ce type de fichier n’est pas accepté : envoyez un JPEG ou un PNG.',
   file_too_large: 'Le fichier dépasse 2 Mo.',
   logo_missing: 'Aucun fichier n’a été reçu. Choisissez une image, puis réessayez.',
@@ -50,11 +50,11 @@ const BY_CODE: Record<string, string> = {
   member_is_not_an_organisation:
     'Seule une organisation peut avoir des contacts rattachés.',
   unknown_member: 'Membre introuvable.',
-  unknown_category: 'Cette catégorie n’existe plus. Rechargez la page.',
+  unknown_category: 'Ce type de membre n’existe plus. Rechargez la page.',
   nothing_due: 'Aucune cotisation n’est réclamée à ce membre pour le moment.',
   amount_exceeds_balance: 'Le montant dépasse ce qui reste à payer.',
   amount_due_unknown:
-    'Le montant de la cotisation de ce membre n’est pas fixé : vérifiez sa catégorie.',
+    'Le montant de la cotisation de ce membre n’est pas fixé : vérifiez son type de membre.',
   // F3 — tableau de bord, relances, campagnes, encaissements (§9 à §11).
   invalid_period: 'Les dates de la période ne sont pas valides.',
   adhera_domain_missing:
@@ -62,10 +62,10 @@ const BY_CODE: Record<string, string> = {
   message_not_pending: 'Ce message a déjà été traité, peut-être depuis un autre téléphone.',
   campaign_already_sent: 'Cette campagne est déjà partie : elle ne peut plus être annulée.',
   invalid_campaign: 'Vérifiez la campagne : la date doit être à venir.',
-  duplicate_payment: 'Ce versement vient d’être enregistré.',
+  duplicate_payment: 'Ce paiement vient d’être enregistré.',
   idempotency_key_reused: 'Le formulaire a changé : vérifiez puis confirmez à nouveau.',
   payment_not_cancellable:
-    'Ce versement ne peut plus être annulé : il l’a peut-être déjà été. La fiche a été rechargée.',
+    'Ce paiement ne peut plus être annulé : il l’a peut-être déjà été. La fiche a été rechargée.',
   reason_required: 'Indiquez un motif de 10 caractères au moins.',
 };
 
@@ -76,7 +76,7 @@ const BY_CODE: Record<string, string> = {
  * deux gestes qui envoient cette clé : ailleurs, la phrase serait fausse.
  */
 export const PAYMENT_NETWORK_MESSAGE =
-  'Connexion impossible. Vous pouvez réessayer sans risque : un même encaissement n’est jamais enregistré deux fois.';
+  'Connexion impossible. Vous pouvez réessayer sans risque : un même paiement n’est jamais enregistré deux fois.';
 
 /**
  * Le message à afficher pour un échec. `fallback` dit ce qui a échoué, dans

@@ -80,7 +80,7 @@ export function EvolutionChart({ months }: { months: Month[] }) {
           height={HEIGHT}
           viewBox={`0 0 ${width} ${HEIGHT}`}
           role="group"
-          aria-label="Encaissé par mois, sur les 12 derniers mois"
+          aria-label="Reçu par mois, sur les 12 derniers mois"
           className="block max-w-full"
         >
           <line
@@ -139,7 +139,7 @@ export function EvolutionChart({ months }: { months: Month[] }) {
       </div>
 
       {max === 0 ? (
-        <p className="small m-0 text-ink-muted">Rien n’a été encaissé sur ces 12 mois.</p>
+        <p className="small m-0 text-ink-muted">Rien n’a été reçu sur ces 12 mois.</p>
       ) : null}
 
       {/*
@@ -150,7 +150,7 @@ export function EvolutionChart({ months }: { months: Month[] }) {
       */}
       <div className="sr-only">
         <table>
-          <caption>Encaissé par mois</caption>
+          <caption>Reçu par mois</caption>
           <tbody>
             {months.map((month) => (
               <tr key={month.month}>

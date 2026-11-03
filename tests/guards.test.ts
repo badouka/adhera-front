@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 const SRC = join(process.cwd(), 'src');
@@ -119,7 +120,8 @@ describe('R1 — aucun formatage de montant côté client', () => {
 const TYPED_AMOUNT = join(SRC, 'lib', 'typedAmount.ts');
 const TYPED_AMOUNT_ALLOWED = [
   join(SRC, 'components', 'PaymentSheet.tsx'),
-  join(SRC, 'components', 'bureau', 'DirectPaymentPanel.tsx'),
+  // F5 — « Un membre a payé » : la saisie, et la phrase « Vous allez enregistrer ».
+  join(SRC, 'app', 'bureau', 'enregistrer', 'page.tsx'),
 ];
 
 /** Vrai si le code importe le helper, quel que soit le chemin employé. */
@@ -386,7 +388,8 @@ describe('vocabulaire — l’écran du membre', () => {
     // F4 — la carte et la vérification.
     join(SRC, 'components', 'card', 'MemberCardView.tsx'),
     join(SRC, 'components', 'card', 'AttestationAction.tsx'),
-    join(SRC, 'components', 'card', 'KeepOnPhone.tsx'),
+    join(SRC, 'components', 'card', 'SaveCard.tsx'),
+    join(SRC, 'components', 'card', 'cardImage.ts'),
     join(SRC, 'components', 'card', 'QrCode.tsx'),
     join(SRC, 'app', 'v', '[code]', 'VerifyPage.tsx'),
   ];
@@ -587,9 +590,11 @@ export function deducesCancelledReceipts(code: string): boolean {
 }
 
 describe('§12.4 — le reçu annulé se lit, il ne se déduit pas', () => {
-  it('la fiche lit `receipt.cancelled_at` et ne déduit rien des versements', () => {
+  it('la fiche marque un paiement annulé par SON statut, et ne déduit rien des reçus (F5)', () => {
+    // F5 : la fiche montre « Ses paiements », chacun avec son reçu ; un paiement
+    // annulé y est marqué par son propre `status`, jamais par déduction.
     const code = stripComments(readFileSync(FICHE, 'utf8'));
-    expect(code).toContain('receipt.cancelled_at');
+    expect(code).toContain("payment.status === 'cancelled'");
     expect(deducesCancelledReceipts(code)).toBe(false);
   });
 
@@ -609,7 +614,7 @@ describe('§12.4 — le reçu annulé se lit, il ne se déduit pas', () => {
  * de vérification dit, en pied de page, « Vérification assurée par Adhera ».
  */
 describe('marque — la carte ne nomme que l’association', () => {
-  const CARD_FILES = ['MemberCardView.tsx', 'AttestationAction.tsx', 'KeepOnPhone.tsx', 'QrCode.tsx'].map(
+  const CARD_FILES = ['MemberCardView.tsx', 'AttestationAction.tsx', 'SaveCard.tsx', 'cardImage.ts', 'QrCode.tsx'].map(
     (f) => join(SRC, 'components', 'card', f),
   );
   const BRANDS = /adhera|eventflow|digissol/i;
@@ -742,5 +747,146 @@ describe('libellés par code — un code nouveau affiche le message de l’API',
   it('contre-épreuve : un code ajouté serait vu', () => {
     const code = "const BY_CODE: Record<string, string> = {\n  nothing_due: 'x',\n  code_neuf: 'y',\n};\n";
     expect(tableKeys(code, 'BY_CODE')).toEqual(['nothing_due', 'code_neuf']);
+  });
+});
+
+/**
+ * F5 — un mot par chose (A11). La liste vit ICI, une seule fois : ce sont les
+ * mots que le lexique d'Adhera interdit (`docs/adhera-lexique.md` côté
+ * backend, résumé au §18.8 du contrat `_handoff/adhera-api-bureau.md`). On dit
+ * « paiement », « enregistrer un paiement », « vérifier », « accepté » /
+ * « refusé », « reste à payer » / « reste à recevoir », « à jour » / « en
+ * retard », « type de membre » — et « a payé », jamais « m'a payé ».
+ *
+ * Elle porte sur TOUT texte affiché de `src/` : bureau, page du membre, carte,
+ * vérification. Les clés, les `code` et les identifiants ne sont pas des mots
+ * affichés (`'validated'`, `category_id`), et ne sont pas vus.
+ */
+export const LEXIQUE_BANNIS: ReadonlyArray<{ mot: string; pattern: RegExp }> = [
+  { mot: 'versement', pattern: /(?<!\p{L})versements?(?!\p{L})/iu },
+  { mot: 'règlement', pattern: /(?<!\p{L})r[èe]glements?(?!\p{L})/iu },
+  { mot: 'encaissement', pattern: /(?<!\p{L})encaissements?(?!\p{L})/iu },
+  { mot: 'encaisser', pattern: /(?<!\p{L})encaiss(?:er|é|ée|és|ées|e|es|ent|ons|ez)(?!\p{L})/iu },
+  { mot: 'valider', pattern: /(?<!\p{L})valid(?:er|ez|ons|ent)(?!\p{L})/iu },
+  { mot: 'validé', pattern: /(?<!\p{L})validé(?:e|s|es)?(?!\p{L})/iu },
+  { mot: 'rejeté', pattern: /(?<!\p{L})rejeté(?:e|s|es)?(?!\p{L})/iu },
+  { mot: 'reste dû', pattern: /(?<!\p{L})restes?\s+d[ûu](?!\p{L})/iu },
+  { mot: 'reste à encaisser', pattern: /(?<!\p{L})reste\s+à\s+encaisser/iu },
+  { mot: 'couvert', pattern: /(?<!\p{L})couverte?s?(?!\p{L})/iu },
+  { mot: 'pas à jour', pattern: /(?<!\p{L})pas\s+à\s+jour(?!\p{L})/iu },
+  { mot: 'catégorie', pattern: /(?<!\p{L})catégories?(?!\p{L})/iu },
+  { mot: 'mode de règlement', pattern: /(?<!\p{L})modes?\s+de\s+r[èe]glement/iu },
+  { mot: 'm’a payé', pattern: /(?<!\p{L})m[’']a\s+payé/iu },
+];
+
+/** Les attributs JSX qui ne sont jamais lus : de la mise en forme, des adresses, des clés. */
+const UNREAD_ATTRIBUTES = /^(className|href|src|id|key|type|name|role|rel|target|method|inputMode|autoComplete|htmlFor|referrerPolicy|accept|data-[\w-]+|aria-(controls|describedby|labelledby|current|live|hidden))$/;
+
+/**
+ * Les textes AFFICHABLES d'un fichier, lus par l'analyseur de TypeScript :
+ * chaînes, gabarits et texte JSX — ni commentaire, ni chemin d'import, ni
+ * attribut de mise en forme. Une chaîne en minuscules sans espace
+ * (`'validated'`, `'not_found'`) est un code, pas un mot affiché.
+ */
+export function displayedTexts(code: string, fileName = 'x.tsx'): string[] {
+  const source = ts.createSourceFile(fileName, code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const out: string[] = [];
+  const keep = (text: string) => {
+    const t = text.trim();
+    if (t && !/^[a-z0-9_./@:\-[\]#?=&%]*$/.test(t)) out.push(t);
+  };
+  const visit = (node: ts.Node) => {
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) return;
+    if (ts.isLiteralTypeNode(node)) return;
+    if (ts.isJsxAttribute(node) && UNREAD_ATTRIBUTES.test(node.name.getText(source))) return;
+    if (ts.isCallExpression(node) && /^(import|require)$/.test(node.expression.getText(source))) return;
+    if (ts.isJsxText(node)) keep(node.text);
+    else if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) keep(node.text);
+    else if (ts.isTemplateExpression(node)) {
+      keep([node.head.text, ...node.templateSpans.map((span) => span.literal.text)].join(' … '));
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return out;
+}
+
+/** Les mots bannis d'un fichier, nommés : « encaisser → Encaisser ». */
+export function lexiqueOffenders(code: string, fileName?: string): string[] {
+  const out: string[] = [];
+  for (const text of displayedTexts(code, fileName)) {
+    for (const { mot, pattern } of LEXIQUE_BANNIS) {
+      if (pattern.test(text)) out.push(`${mot} → ${text}`);
+    }
+  }
+  return out;
+}
+
+describe('lexique — un mot par chose, dans tout texte affiché (A11)', () => {
+  it('aucun fichier de src/ n’affiche un mot banni', () => {
+    const offenders: string[] = [];
+    let files = 0;
+    for (const file of walk(SRC, ['.ts', '.tsx'])) {
+      files += 1;
+      for (const hit of lexiqueOffenders(readFileSync(file, 'utf8'), file)) {
+        offenders.push(`${relative(process.cwd(), file)} : ${hit}`);
+      }
+    }
+    expect(files).toBeGreaterThan(80);
+    expect(offenders).toEqual([]);
+  });
+
+  it('contre-épreuve : « Encaisser » réinjecté dans un bouton est nommé', () => {
+    expect(lexiqueOffenders('<Button tone="primary">Encaisser</Button>')).toEqual([
+      'encaisser → Encaisser',
+    ]);
+    expect(lexiqueOffenders("setError('Le versement a été rejeté.');")).toEqual([
+      'versement → Le versement a été rejeté.',
+      'rejeté → Le versement a été rejeté.',
+    ]);
+    expect(lexiqueOffenders('<p>Cheikh m’a payé</p>')).toEqual(['m’a payé → Cheikh m’a payé']);
+    expect(lexiqueOffenders('<span>Pas à jour</span>')).toEqual(['pas à jour → Pas à jour']);
+  });
+
+  it('contre-épreuve : une clé, un code ou un commentaire ne sont pas des mots affichés', () => {
+    expect(lexiqueOffenders("if (p.status === 'validated') setCategory(category_id);")).toEqual([]);
+    expect(lexiqueOffenders('// Encaisser : ancien nom du geste')).toEqual([]);
+    expect(lexiqueOffenders('<Pastille>Valide</Pastille>')).toEqual([]);
+    expect(lexiqueOffenders('<p>Une couverture, une découverte</p>')).toEqual([]);
+  });
+});
+
+/**
+ * F5 — « Enregistrer ma carte dans mes photos » : le code qui DESSINE la carte
+ * (`cardImage.ts`) n'est chargé qu'au toucher, par `import()`. Aucun import
+ * statique : il n'entre dans le premier chargement d'aucune page.
+ */
+describe('carte en PNG — le dessin est chargé à la demande', () => {
+  const imports = (code: string) => ({
+    static: /(?:from\s+|import\s+)['"][^'"]*\/cardImage['"]/.test(code),
+    dynamic: /import\(\s*['"][^'"]*\/cardImage['"]\s*\)/.test(code),
+  });
+
+  it('cardImage.ts n’est importé que par SaveCard.tsx, et par import()', () => {
+    const found: string[] = [];
+    for (const file of walk(SRC, ['.ts', '.tsx'])) {
+      const hit = imports(stripComments(readFileSync(file, 'utf8')));
+      if (hit.static) found.push(`${relative(process.cwd(), file)} → statique`);
+      if (hit.dynamic) found.push(`${relative(process.cwd(), file)} → import()`);
+    }
+    expect(found).toEqual([
+      `${relative(process.cwd(), join(SRC, 'components', 'card', 'SaveCard.tsx'))} → import()`,
+    ]);
+  });
+
+  it('contre-épreuve : un import statique serait vu', () => {
+    expect(imports("import { drawCard } from './cardImage';").static).toBe(true);
+    expect(imports("const m = await import('./cardImage');").dynamic).toBe(true);
+  });
+
+  it('« Garder sur mon téléphone » a disparu de la page du membre', () => {
+    const code = stripComments(readFileSync(join(SRC, 'app', 'm', '[token]', 'MemberPage.tsx'), 'utf8'));
+    expect(code).not.toMatch(/KeepOnPhone|Garder sur mon téléphone/);
+    expect(code).toContain('<SaveCard');
   });
 });

@@ -89,8 +89,8 @@ export function ExportButtons({
         run={downloadMembersExport}
       />
       <ExportButton
-        label="Versements de la période (Excel)"
-        fallbackName={`versements-${window_}.xlsx`}
+        label="Paiements de la période (Excel)"
+        fallbackName={`paiements-${window_}.xlsx`}
         run={() => downloadPaymentsExport(query)}
       />
     </div>

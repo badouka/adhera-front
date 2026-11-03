@@ -63,7 +63,7 @@ export function CategoriesPanel() {
       .catch((cause) => {
         if (cause instanceof DOMException && cause.name === 'AbortError') return;
         if (isSessionError(cause)) return;
-        setLoadError(errorMessage(cause, 'Les catégories n’ont pas pu être chargées.'));
+        setLoadError(errorMessage(cause, 'Les types de membres n’ont pas pu être chargés.'));
       });
     return () => controller.abort();
   }, [attempt]);
@@ -84,7 +84,7 @@ export function CategoriesPanel() {
       setNotice(active ? `« ${next.label} » est réactivée.` : `« ${next.label} » est désactivée : elle ne se propose plus aux nouveaux membres.`);
     } catch (cause) {
       if (isSessionError(cause)) return;
-      setError(errorMessage(cause, 'La catégorie n’a pas pu être modifiée.'));
+      setError(errorMessage(cause, 'Le type de membre n’a pas pu être modifié.'));
     } finally {
       setBusy(false);
     }
@@ -110,7 +110,7 @@ export function CategoriesPanel() {
         });
         setDeleting(null);
       } else {
-        setError(errorMessage(cause, 'La catégorie n’a pas pu être supprimée.'));
+        setError(errorMessage(cause, 'Le type de membre n’a pas pu être supprimé.'));
       }
     } finally {
       setBusy(false);
@@ -119,12 +119,12 @@ export function CategoriesPanel() {
 
   return (
     <Panel
-      title="Catégories"
+      title="Types de membres"
       actions={
         editing === 'new' ? null : (
           <Button onClick={() => setEditing('new')}>
             <PlusIcon />
-            Ajouter une catégorie
+            Ajouter un type de membre
           </Button>
         )
       }
@@ -174,11 +174,11 @@ export function CategoriesPanel() {
       ) : null}
 
       {categories === null && !loadError ? (
-        <p className="small m-0 text-ink-muted">Chargement des catégories…</p>
+        <p className="small m-0 text-ink-muted">Chargement des types de membres…</p>
       ) : null}
 
       {categories && categories.length === 0 && editing !== 'new' ? (
-        <EmptyState>Aucune catégorie. Ajoutez-en une pour fixer le montant des cotisations.</EmptyState>
+        <EmptyState>Aucun type de membre. Ajoutez-en un pour fixer le montant des cotisations.</EmptyState>
       ) : null}
 
       {editing === 'new' ? (
@@ -225,7 +225,7 @@ export function CategoriesPanel() {
                   </span>
                   {category.is_calculable ? null : (
                     <span className="small font-semibold text-due">
-                      Montant non calculable : aucune cotisation ne peut s’ouvrir sur cette catégorie.
+                      Montant non calculable : aucune cotisation ne peut s’ouvrir sur ce type de membre.
                     </span>
                   )}
                 </div>
@@ -262,8 +262,8 @@ export function CategoriesPanel() {
 
       {deleting ? (
         <ConfirmDialog
-          title="Supprimer cette catégorie ?"
-          confirmLabel="Supprimer la catégorie"
+          title="Supprimer ce type de membre ?"
+          confirmLabel="Supprimer ce type de membre"
           confirmTone="danger"
           busy={busy}
           error={error}
@@ -275,13 +275,13 @@ export function CategoriesPanel() {
         >
           <Recap
             rows={[
-              { label: 'Catégorie', value: deleting.label },
+              { label: 'Type de membre', value: deleting.label },
               { label: 'Montant', value: deleting.amount_formatted ?? '—' },
             ]}
           />
           <p className="m-0">
-            Une catégorie utilisée par des membres ne peut pas être supprimée :
-            elle pourra être désactivée à la place.
+            Un type de membre porté par des membres ne peut pas être supprimé :
+            il pourra être désactivé à la place.
           </p>
         </ConfirmDialog>
       ) : null}
@@ -322,7 +322,7 @@ function CategoryForm({
     setFormError(null);
 
     const next: Record<string, string> = {};
-    if (label.trim() === '') next.label = 'Indiquez le nom de la catégorie.';
+    if (label.trim() === '') next.label = 'Indiquez le nom du type de membre.';
     const value = needsAmount ? parseAmount(amount) : null;
     if (needsAmount && (value === null || value < 1)) {
       next.amount = 'Indiquez le montant de la cotisation, en chiffres.';
@@ -350,7 +350,7 @@ function CategoryForm({
       const mapped: Record<string, string> = {};
       for (const field of CATEGORY_FIELDS) if (messages[field]) mapped[field] = messages[field];
       if (Object.keys(mapped).length > 0) setErrors(mapped);
-      else setFormError(errorMessage(cause, 'La catégorie n’a pas pu être enregistrée.'));
+      else setFormError(errorMessage(cause, 'Le type de membre n’a pas pu être enregistré.'));
     } finally {
       setBusy(false);
     }
@@ -410,7 +410,7 @@ function CategoryForm({
           Annuler
         </Button>
         <Button tone="primary" type="submit" disabled={busy}>
-          {busy ? 'Enregistrement…' : initial ? 'Enregistrer la catégorie' : 'Ajouter la catégorie'}
+          {busy ? 'Enregistrement…' : initial ? 'Enregistrer ce type de membre' : 'Ajouter ce type de membre'}
         </Button>
       </div>
     </form>

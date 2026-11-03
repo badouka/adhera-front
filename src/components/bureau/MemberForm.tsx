@@ -133,7 +133,7 @@ export function MemberForm({
     }
     const chosen = categories?.find((c) => String(c.id) === categoryId);
     if (chosen && !chosen.is_calculable && String(initial?.category_id) !== categoryId) {
-      next.category_id = 'Le montant de cette catégorie ne peut pas être calculé.';
+      next.category_id = 'Le montant de ce type de membre ne peut pas être calculé.';
     }
     return next;
   }
@@ -266,14 +266,14 @@ export function MemberForm({
       </div>
 
       <Field
-        label="Catégorie"
+        label="Type de membre"
         optional
         error={errors.category_id}
-        hint={categories === null ? 'Chargement des catégories…' : undefined}
+        hint={categories === null ? 'Chargement des types de membres…' : undefined}
       >
         {(props) => (
           <select {...props} name="category_id" value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={inputClass(!!errors.category_id)}>
-            <option value="">Aucune catégorie</option>
+            <option value="">Aucun type de membre</option>
             {options.map((c) => (
               <option
                 key={c.id}
