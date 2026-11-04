@@ -43,7 +43,7 @@ const RELOAD_CODES: Record<string, string> = {
     'Le montant dépasse ce qui reste à payer. Votre page vient d’être actualisée.',
   nothing_due: 'Aucune cotisation n’est réclamée pour le moment.',
   amount_due_unknown:
-    'Le montant de votre cotisation n’est pas encore fixé. Contactez le bureau de votre association.',
+    'Le montant de votre cotisation n’est pas encore fixé. Contactez votre association.',
 };
 
 /**
@@ -167,12 +167,12 @@ export function PaymentSheet({
     }
 
     if (error.status === 409 && error.code === 'declaration_pending') {
-      onNeedsReload('Un paiement est déjà en attente de confirmation par le bureau.');
+      onNeedsReload('Un paiement attend déjà d’être vérifié par l’association.');
       return;
     }
 
     if (error.status === 409 && error.code === 'duplicate_payment') {
-      onNeedsReload('Votre paiement vient d’être signalé. Le bureau va le confirmer.');
+      onNeedsReload('Votre paiement vient d’être signalé. L’association va le vérifier.');
       return;
     }
 
@@ -466,8 +466,8 @@ export function PaymentSheet({
           <div className="flex flex-col gap-2">
             {methodLabel && shownAmount ? (
               <p className="small m-0 text-center text-ink-muted">
-                <span className="money">{shownAmount}</span> par {methodLabel}. Le
-                bureau confirmera votre paiement.
+                <span className="money">{shownAmount}</span> par {methodLabel}.
+                L’association vérifiera votre paiement.
               </p>
             ) : null}
             <button

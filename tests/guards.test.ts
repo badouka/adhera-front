@@ -409,7 +409,7 @@ describe('vocabulaire — l’écran du membre', () => {
     const texts = MEMBER_FILES.flatMap((f) => visibleStrings(stripComments(readFileSync(f, 'utf8'))));
     expect(texts.some((t) => t.includes('J’ai payé'))).toBe(true);
     expect(texts.some((t) => t.includes('Ajouter une capture d’écran (facultatif)'))).toBe(true);
-    expect(texts.some((t) => t.includes('Le bureau confirmera votre paiement'))).toBe(true);
+    expect(texts.some((t) => t.includes('L’association vérifiera votre paiement'))).toBe(true);
   });
 
   it('contre-épreuve : le scan voit une chaîne et un texte JSX fautifs', () => {
@@ -763,19 +763,37 @@ describe('libellés par code — un code nouveau affiche le message de l’API',
  * affichés (`'validated'`, `category_id`), et ne sont pas vus.
  */
 export const LEXIQUE_BANNIS: ReadonlyArray<{ mot: string; pattern: RegExp }> = [
+  // L'argent — « paiement ».
   { mot: 'versement', pattern: /(?<!\p{L})versements?(?!\p{L})/iu },
   { mot: 'règlement', pattern: /(?<!\p{L})r[èe]glements?(?!\p{L})/iu },
   { mot: 'encaissement', pattern: /(?<!\p{L})encaissements?(?!\p{L})/iu },
-  { mot: 'encaisser', pattern: /(?<!\p{L})encaiss(?:er|é|ée|és|ées|e|es|ent|ons|ez)(?!\p{L})/iu },
+  // « enregistrer un paiement » : le verbe…
+  { mot: 'encaisser', pattern: /(?<!\p{L})encaiss(?:er|e|es|ent|ons|ez|ait|aient|era|erai|erez|ant)(?!\p{L})/iu },
+  // … et « reçu » · « payé » : le participe, nommé à part (F5-bis R3).
+  { mot: 'encaissé', pattern: /(?<!\p{L})encaissé(?:e|s|es)?(?!\p{L})/iu },
+  // « moyen de paiement ».
+  { mot: 'mode de paiement', pattern: /(?<!\p{L})modes?\s+de\s+paiement/iu },
+  { mot: 'mode de règlement', pattern: /(?<!\p{L})modes?\s+de\s+r[èe]glement/iu },
+  // « Mode » ou « Moyen » SEULS, en libellé de colonne ou de champ : la phrase
+  // entière est le mot (« mode de cotisation » reste un autre sujet).
+  { mot: 'Mode · Moyen (seuls)', pattern: /^(?:mode|moyen)\s*:?$/iu },
+  // « reçu » n'est jamais un verbe sur un bouton (défaut P3).
+  { mot: 'Reçu ✓', pattern: /(?<!\p{L})reçu\s*✓/iu },
+  // La décision : « vérifier », « accepté », « refusé ».
   { mot: 'valider', pattern: /(?<!\p{L})valid(?:er|ez|ons|ent)(?!\p{L})/iu },
   { mot: 'validé', pattern: /(?<!\p{L})validé(?:e|s|es)?(?!\p{L})/iu },
   { mot: 'rejeté', pattern: /(?<!\p{L})rejeté(?:e|s|es)?(?!\p{L})/iu },
+  // Ce qui est dû : « reste à payer » (le membre), « reste à recevoir » (l'association).
   { mot: 'reste dû', pattern: /(?<!\p{L})restes?\s+d[ûu](?!\p{L})/iu },
   { mot: 'reste à encaisser', pattern: /(?<!\p{L})reste\s+à\s+encaisser/iu },
+  { mot: 'Reste (seul)', pattern: /^restes?\s*:?$/iu },
+  // L'état d'un membre : « à jour », « en retard », « type de membre ».
   { mot: 'couvert', pattern: /(?<!\p{L})couverte?s?(?!\p{L})/iu },
+  { mot: 'en règle', pattern: /(?<!\p{L})en\s+règle(?!\p{L})/iu },
   { mot: 'pas à jour', pattern: /(?<!\p{L})pas\s+à\s+jour(?!\p{L})/iu },
+  { mot: 'impayé', pattern: /(?<!\p{L})impayé(?:e|s|es)?(?!\p{L})/iu },
   { mot: 'catégorie', pattern: /(?<!\p{L})catégories?(?!\p{L})/iu },
-  { mot: 'mode de règlement', pattern: /(?<!\p{L})modes?\s+de\s+r[èe]glement/iu },
+  // Maquette du trésorier (P3) : le bouton dit ce que l'on a reçu, pas « m'a payé ».
   { mot: 'm’a payé', pattern: /(?<!\p{L})m[’']a\s+payé/iu },
 ];
 
@@ -848,11 +866,165 @@ describe('lexique — un mot par chose, dans tout texte affiché (A11)', () => {
     expect(lexiqueOffenders('<span>Pas à jour</span>')).toEqual(['pas à jour → Pas à jour']);
   });
 
+  it('contre-épreuve F5-bis : les mots ajoutés d’après adhera-lexique.md sont nommés', () => {
+    expect(lexiqueOffenders('<p>Montant encaissé</p>')).toEqual(['encaissé → Montant encaissé']);
+    expect(lexiqueOffenders("t('Deux paiements encaissés')")).toEqual([
+      'encaissé → Deux paiements encaissés',
+    ]);
+    expect(lexiqueOffenders('<p>La somme encaissée</p>')).toEqual(['encaissé → La somme encaissée']);
+    expect(lexiqueOffenders('<Pill>En règle</Pill>')).toEqual(['en règle → En règle']);
+    expect(lexiqueOffenders('<td>Impayé</td>')).toEqual(['impayé → Impayé']);
+    expect(lexiqueOffenders("label: 'Cotisations impayées'")).toEqual([
+      'impayé → Cotisations impayées',
+    ]);
+    expect(lexiqueOffenders('<Label>Mode de paiement</Label>')).toEqual([
+      'mode de paiement → Mode de paiement',
+    ]);
+    expect(lexiqueOffenders('<th>Mode</th><th>Reste</th>')).toEqual([
+      'Mode · Moyen (seuls) → Mode',
+      'Reste (seul) → Reste',
+    ]);
+    expect(lexiqueOffenders('<button>Reçu ✓</button>')).toEqual(['Reçu ✓ → Reçu ✓']);
+  });
+
+  it('contre-épreuve F5-bis : les mots voisins ne sont pas pris', () => {
+    expect(lexiqueOffenders('<p>Le mode de cotisation de votre association</p>')).toEqual([]);
+    expect(lexiqueOffenders('<Label>Moyen de paiement</Label>')).toEqual([]);
+    expect(lexiqueOffenders('<p>Reste à payer</p><p>Reste à recevoir</p>')).toEqual([]);
+    expect(lexiqueOffenders('<p>Une règle du bureau. Votre reçu est prêt.</p>')).toEqual([]);
+  });
+
   it('contre-épreuve : une clé, un code ou un commentaire ne sont pas des mots affichés', () => {
     expect(lexiqueOffenders("if (p.status === 'validated') setCategory(category_id);")).toEqual([]);
     expect(lexiqueOffenders('// Encaisser : ancien nom du geste')).toEqual([]);
     expect(lexiqueOffenders('<Pastille>Valide</Pastille>')).toEqual([]);
     expect(lexiqueOffenders('<p>Une couverture, une découverte</p>')).toEqual([]);
+  });
+});
+
+/**
+ * F5-bis R3 — sur la page du membre et sur la vérification, c'est
+ * L'ASSOCIATION qui agit (« L'association vérifiera votre paiement »), jamais
+ * « le trésorier », ni un autre rôle du bureau (v3.8.5, D2). Les écrans du
+ * bureau, eux, peuvent nommer des rôles : la liste ne vaut QUE pour les fichiers
+ * que chargent `/m/[jeton]` et `/v/[code]`, suivis import par import depuis leur
+ * page — un composant ajouté demain y entre sans qu'on l'écrive ici.
+ */
+export const ROLES_BANNIS_MEMBRE: ReadonlyArray<{ mot: string; pattern: RegExp }> = [
+  { mot: 'trésorier', pattern: /(?<!\p{L})trésori(?:er|ère)s?(?!\p{L})/iu },
+  { mot: 'président', pattern: /(?<!\p{L})président(?:e)?s?(?!\p{L})/iu },
+  { mot: 'secrétaire', pattern: /(?<!\p{L})secrétaires?(?!\p{L})/iu },
+  { mot: 'le bureau', pattern: /(?<!\p{L})bureau(?:x)?(?!\p{L})/iu },
+  // Le membre lit ce qu'IL doit : « reste à payer » (adhera-lexique.md).
+  { mot: 'reste à recevoir', pattern: /(?<!\p{L})reste\s+à\s+recevoir/iu },
+];
+
+export function memberRoleOffenders(code: string, fileName?: string): string[] {
+  const out: string[] = [];
+  for (const text of displayedTexts(code, fileName)) {
+    for (const { mot, pattern } of ROLES_BANNIS_MEMBRE) {
+      if (pattern.test(text)) out.push(`${mot} → ${text}`);
+    }
+  }
+  return out;
+}
+
+/** Les fichiers de `src/` qu'une page charge, de proche en proche (`@/…` et `./…`). */
+function importClosure(entries: string[]): string[] {
+  const seen = new Set<string>();
+  const resolve = (from: string, spec: string): string | null => {
+    let base: string;
+    if (spec.startsWith('@/')) base = join(SRC, spec.slice(2));
+    else if (spec.startsWith('.')) base = join(from, '..', spec);
+    else return null;
+    for (const candidate of [base, `${base}.ts`, `${base}.tsx`, join(base, 'index.ts'), join(base, 'index.tsx')]) {
+      try {
+        if (statSync(candidate).isFile()) return candidate;
+      } catch {
+        // essai suivant
+      }
+    }
+    return null;
+  };
+  const visit = (file: string) => {
+    if (seen.has(file)) return;
+    seen.add(file);
+    const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const specs: string[] = [];
+    const walkNode = (node: ts.Node) => {
+      if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+        // `import type` n'apporte aucun texte affiché.
+        if (!(ts.isImportDeclaration(node) && node.importClause?.isTypeOnly)) specs.push(node.moduleSpecifier.text);
+      } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+        const arg = node.arguments[0];
+        if (arg && ts.isStringLiteral(arg)) specs.push(arg.text);
+      }
+      ts.forEachChild(node, walkNode);
+    };
+    walkNode(source);
+    for (const spec of specs) {
+      const target = resolve(file, spec);
+      if (target) visit(target);
+    }
+  };
+  for (const entry of entries) visit(entry);
+  return [...seen].sort();
+}
+
+describe('page du membre — l’association agit, jamais un rôle (F5-bis R3)', () => {
+  const MEMBER_SURFACE = importClosure([
+    join(SRC, 'app', 'm', '[token]', 'page.tsx'),
+    join(SRC, 'app', 'v', '[code]', 'page.tsx'),
+  ]);
+  const rel = (f: string) => relative(SRC, f);
+
+  it('la surface suivie couvre bien la page, la feuille de paiement, la carte et la vérification — et rien du bureau', () => {
+    const files = MEMBER_SURFACE.map(rel);
+    for (const expected of [
+      'app/m/[token]/MemberPage.tsx',
+      'components/PaymentSheet.tsx',
+      'components/Fallbacks.tsx',
+      'components/card/SaveCard.tsx',
+      'components/card/cardImage.ts',
+      'app/v/[code]/VerifyPage.tsx',
+    ]) {
+      expect(files).toContain(expected);
+    }
+    expect(files.filter((f) => /(^|\/)bureau\//.test(f))).toEqual([]);
+  });
+
+  it('aucun texte affiché de /m/[jeton] ni de /v/[code] ne nomme un rôle', () => {
+    const offenders: string[] = [];
+    for (const file of MEMBER_SURFACE) {
+      for (const hit of memberRoleOffenders(readFileSync(file, 'utf8'), file)) {
+        offenders.push(`${rel(file)} : ${hit}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('contre-épreuve : « le trésorier » ou « le bureau » réinjectés côté membre sont nommés', () => {
+    expect(memberRoleOffenders('<p>Le trésorier vérifiera votre paiement.</p>')).toEqual([
+      'trésorier → Le trésorier vérifiera votre paiement.',
+    ]);
+    expect(memberRoleOffenders("onNeedsReload('La trésorière va le confirmer.')")).toEqual([
+      'trésorier → La trésorière va le confirmer.',
+    ]);
+    expect(memberRoleOffenders('<p>Contactez le bureau de votre association.</p>')).toEqual([
+      'le bureau → Contactez le bureau de votre association.',
+    ]);
+    expect(memberRoleOffenders('<p>Reste à recevoir</p>')).toEqual([
+      'reste à recevoir → Reste à recevoir',
+    ]);
+    // L'association, elle, agit ; un commentaire n'est pas lu.
+    expect(memberRoleOffenders('<p>L’association vérifiera votre paiement.</p>')).toEqual([]);
+    expect(memberRoleOffenders('// le trésorier vérifie ici')).toEqual([]);
+  });
+
+  it('contre-épreuve : la règle ne s’étend pas au bureau, qui peut nommer des rôles', () => {
+    const bureau = importClosure([join(SRC, 'app', 'bureau', 'profil', 'page.tsx')]);
+    expect(MEMBER_SURFACE).not.toContain(join(SRC, 'app', 'bureau', 'profil', 'page.tsx'));
+    expect(bureau.map(rel)).toContain('app/bureau/profil/page.tsx');
   });
 });
 

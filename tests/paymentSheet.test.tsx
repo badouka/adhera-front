@@ -132,7 +132,7 @@ describe('le chemin normal : deux touchers', () => {
     await user.click(confirmButton());
 
     const thanks = await screen.findByText(
-      'Merci. Le bureau confirmera votre paiement, et vous recevrez votre reçu ici.',
+      'Merci. L’association vérifiera votre paiement, et vous recevrez votre reçu ici.',
     );
     await waitFor(() => expect(document.activeElement).toBe(thanks));
     // Le message du serveur (« Déclaration… ») n'est jamais recopié.
@@ -373,7 +373,7 @@ describe('les réponses du serveur', () => {
       .mockResolvedValueOnce(fakeResponse(200, PENDING_PAYLOAD));
     await user.click(confirmButton());
 
-    await screen.findByText('Un paiement est déjà en attente de confirmation par le bureau.');
+    await screen.findByText('Un paiement attend déjà d’être vérifié par l’association.');
     await screen.findByText('En attente de confirmation');
     expect(screen.queryByRole('button', { name: 'J’ai payé : le signaler' })).not.toBeInTheDocument();
   });

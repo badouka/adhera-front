@@ -17,7 +17,7 @@ export function InvalidLink() {
       </span>
       <h1 className="title m-0">Ce lien n’est plus valide</h1>
       <p className="m-0 max-w-[300px]">
-        Demandez un nouveau lien au bureau de votre association.
+        Demandez un nouveau lien à votre association.
       </p>
       <p className="small m-0 max-w-[300px] text-ink-muted">
         Pour votre sécurité, chaque membre reçoit son propre lien. Ne le
@@ -36,8 +36,8 @@ export function Unavailable() {
       </span>
       <h1 className="title m-0">Service indisponible</h1>
       <p className="m-0 max-w-[320px]">
-        Ce service n’est pas disponible actuellement. Contactez le bureau de
-        votre association.
+        Ce service n’est pas disponible actuellement. Contactez votre
+        association.
       </p>
     </Centered>
   );

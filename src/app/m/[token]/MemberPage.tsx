@@ -485,8 +485,8 @@ function PendingBlock({
         role="status"
         className="m-0 rounded-[var(--radius-md)] bg-paid-soft p-4 font-semibold text-paid"
       >
-        Merci. Le bureau confirmera votre paiement, et vous recevrez votre reçu
-        ici.
+        Merci. L’association vérifiera votre paiement, et vous recevrez votre
+        reçu ici.
       </p>
     </>
   );
@@ -527,8 +527,8 @@ function AmountUnknown() {
   return (
     <Card>
       <p className="m-0">
-        Le montant de votre cotisation n’est pas encore fixé. Contactez le
-        bureau de votre association.
+        Le montant de votre cotisation n’est pas encore fixé. Contactez votre
+        association.
       </p>
     </Card>
   );

@@ -68,7 +68,7 @@ describe('E1 — lien invalide', () => {
 
     await screen.findByText('Ce lien n’est plus valide');
     expect(
-      screen.getByText(/Demandez un nouveau lien au bureau/),
+      screen.getByText(/Demandez un nouveau lien à votre association\./),
     ).toBeInTheDocument();
   });
 
@@ -369,13 +369,13 @@ describe('E4 — paiement signalé, en attente', () => {
     },
   });
 
-  it('remercie, et annonce la confirmation par le bureau', async () => {
+  it('remercie, et annonce que l’association vérifiera', async () => {
     renderWith(fakeResponse(200, pending));
 
     await screen.findByText('En attente de confirmation');
     expect(
       screen.getByText(
-        'Merci. Le bureau confirmera votre paiement, et vous recevrez votre reçu ici.',
+        'Merci. L’association vérifiera votre paiement, et vous recevrez votre reçu ici.',
       ),
     ).toBeInTheDocument();
     expect(screen.getByText('250 000 FCFA')).toBeInTheDocument();
@@ -617,7 +617,7 @@ describe('E8 — indisponible', () => {
     renderWith(fakeResponse(status, { code }));
 
     await screen.findByText(
-      /Ce service n’est pas disponible actuellement\. Contactez le bureau de votre association\./,
+      /Ce service n’est pas disponible actuellement\. Contactez votre association\./,
     );
   });
 });
