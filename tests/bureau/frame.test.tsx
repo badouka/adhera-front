@@ -58,7 +58,7 @@ describe('le cadre du bureau', () => {
     expect(screen.queryByText('contenu protégé')).not.toBeInTheDocument();
   });
 
-  it('en-tête : le nom de l’association, jamais coupé, et « Connecté·e : nom, rôle » lu par GET admin/me', async () => {
+  it('R1 — sans sigle servi : ligne 1 = le nom complet, jamais coupé ; ligne 2 = la personne seule', async () => {
     saveSession(SESSION);
     const fetchMock = fakeServer([
       { match: 'membership/settings', body: settings({ issuer_name: 'Association des techniciens supérieurs en anesthésie-réanimation du Sénégal' }) },
@@ -69,12 +69,16 @@ describe('le cadre du bureau', () => {
 
     await screen.findByText('contenu protégé');
     const header = container.querySelector('header') as HTMLElement;
-    await within(header).findByText('Connecté·e : Fatim Diarra, Trésorière');
+    const person = await within(header).findByText('Fatim Diarra');
+    expect(person.textContent).toBe('Fatim Diarra');
     const name = within(header).getByText(
       'Association des techniciens supérieurs en anesthésie-réanimation du Sénégal',
     );
     expect(name.className).toContain('break-words');
     expect(name.className).not.toContain('truncate');
+    // Ni « Connecté·e », ni rôle, nulle part dans le cadre.
+    expect(container.textContent).not.toMatch(/Connecté/);
+    expect(container.textContent).not.toMatch(/Trésori/);
     expect(calls(fetchMock).some((c) => c.url === 'https://api.eventflow.africa/api/v1/admin/me')).toBe(true);
     const logo = container.querySelector('aside img') as HTMLImageElement;
     expect(logo.src).toBe(
@@ -82,6 +86,61 @@ describe('le cadre du bureau', () => {
     );
     // Pas de bannière quand le mode est pris en charge.
     expect(screen.queryByText(/pas encore pris en charge/)).not.toBeInTheDocument();
+  });
+
+  it('R1 — avec `short_name` (§19) : le sigle en ligne 1 du téléphone, le nom complet dans la barre latérale', async () => {
+    saveSession(SESSION);
+    fakeServer([
+      { match: 'membership/settings', body: settings({ issuer_name: 'Association des techniciens supérieurs en anesthésie-réanimation du Sénégal', short_name: 'ATSARS' }) },
+      { match: /^me$/, body: ME },
+      { match: 'membership/payments', body: [] },
+    ]);
+    const { container } = render(<BureauFrame>contenu</BureauFrame>);
+    await screen.findByText('contenu');
+
+    const header = within(container.querySelector('header') as HTMLElement);
+    expect(header.getByText('ATSARS')).toBeInTheDocument();
+    expect(header.queryByText(/Association des techniciens/)).not.toBeInTheDocument();
+    await header.findByText('Fatim Diarra');
+
+    const sidebar = within(container.querySelector('aside') as HTMLElement);
+    expect(
+      sidebar.getByText('Association des techniciens supérieurs en anesthésie-réanimation du Sénégal'),
+    ).toBeInTheDocument();
+    expect(sidebar.queryByText('ATSARS')).not.toBeInTheDocument();
+    expect(sidebar.getByTestId('person-name').textContent).toBe('Fatim Diarra');
+  });
+
+  it('R1 — `short_name` vide ou blanc : repli sur le nom complet', async () => {
+    saveSession(SESSION);
+    fakeServer([
+      { match: 'membership/settings', body: settings({ issuer_name: 'Amicale des anciens', short_name: '  ' }) },
+      { match: /^me$/, body: ME },
+      { match: 'membership/payments', body: [] },
+    ]);
+    const { container } = render(<BureauFrame>contenu</BureauFrame>);
+    await screen.findByText('contenu');
+    const header = within(container.querySelector('header') as HTMLElement);
+    expect(header.getByText('Amicale des anciens')).toBeInTheDocument();
+  });
+
+  it('R1 — les réglages (et le sigle) sont lus une fois par session, pas à chaque écran', async () => {
+    saveSession(SESSION);
+    const fetchMock = fakeServer([
+      { match: 'membership/settings', body: settings({ short_name: 'ATSARS' }) },
+      { match: /^me$/, body: ME },
+      { match: 'membership/payments', body: [] },
+    ]);
+    const { rerender } = render(<BureauFrame>écran 1</BureauFrame>);
+    await screen.findByText('écran 1');
+    nav.pathname = '/bureau/membres';
+    rerender(<BureauFrame>écran 2</BureauFrame>);
+    await screen.findByText('écran 2');
+    nav.pathname = '/bureau/plus';
+    rerender(<BureauFrame>écran 3</BureauFrame>);
+    await screen.findByText('écran 3');
+    const reads = calls(fetchMock).filter((c) => c.url.endsWith('/admin/membership/settings'));
+    expect(reads).toHaveLength(1);
   });
 
   it('GET admin/me en échec : le nom de la connexion, sans rôle inventé', async () => {
@@ -94,7 +153,7 @@ describe('le cadre du bureau', () => {
     const { container } = render(<BureauFrame>contenu</BureauFrame>);
     await screen.findByText('contenu');
     const header = container.querySelector('header') as HTMLElement;
-    expect(within(header).getByText('Connecté·e : Trésorier Démo')).toBeInTheDocument();
+    expect(within(header).getByTestId('person-name').textContent).toBe('Trésorier Démo');
   });
 
   it('N1 — quatre entrées, pas une de plus, et le nombre à vérifier ; aucun « Encaisser »', async () => {

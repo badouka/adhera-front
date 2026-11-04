@@ -58,6 +58,11 @@ export type ModeCotisation = 'anniversaire' | 'exercice_civil';
 
 export type Settings = {
   issuer_name: string | null;
+  /**
+   * §19 (v3.8.5) — le sigle, pour la ligne 1 de l'en-tête du téléphone. Absent
+   * d'un serveur antérieur, ou `null` : l'en-tête montre alors le nom complet.
+   */
+  short_name?: string | null;
   /** Versionnée par son contenu : jamais en dur, jamais recomposée (§3). */
   logo_url: string | null;
   member_types: MemberTypes;

@@ -128,7 +128,7 @@ function GuardedFrame({
 
   const ready = state.kind === 'ready';
 
-  // « Connecté·e : nom, rôle » — lu par `GET admin/me` (§18.7). Sans réponse,
+  // Le nom de la personne — lu par `GET admin/me` (§18.7). Sans réponse,
   // l'en-tête garde le nom de la connexion : il ne bloque rien.
   useEffect(() => {
     if (!ready) return;
@@ -250,15 +250,25 @@ function ModeBanner() {
 }
 
 /** Le nom de l'association : jamais coupé (N1), il passe à la ligne. */
-function associationName(settings: Settings): string {
+export function associationName(settings: Settings): string {
   return settings.issuer_name?.trim() || 'Espace du bureau';
 }
 
-/** « Fatim Diarra, Trésorière » : le nom et le rôle, composés par le serveur. */
-export function whoLine(me: Me | null, session: BureauSession): string {
-  const name = me?.name?.trim() || session.admin.name;
-  const role = me?.role_label?.trim();
-  return role ? `${name}, ${role}` : name;
+/**
+ * F5-bis R1 — la ligne 1 du téléphone : le sigle servi (`short_name`, §19), sinon
+ * le nom complet (règle E1). Le sigle n'est jamais fabriqué ici.
+ */
+export function headerTitle(settings: Settings): string {
+  return settings.short_name?.trim() || associationName(settings);
+}
+
+/**
+ * F5-bis R1 — « Fatim Diarra » : le nom de la personne, SEUL. Ni « Connecté·e »,
+ * ni rôle : `role_label` est servi au masculin, et une trésorière lirait
+ * « Trésorier » en haut de chaque écran. Le rôle ne reste que dans « Mon profil ».
+ */
+export function personName(me: Me | null, session: BureauSession): string {
+  return me?.name?.trim() || session.admin.name;
 }
 
 function Logo({ settings, size }: { settings: Settings; size: number }) {
@@ -300,8 +310,8 @@ function Sidebar({ active }: { active: NavKey }) {
         <span className="text-[18px] leading-6 font-bold break-words text-on-indigo">
           {associationName(settings)}
         </span>
-        <span className="small break-words text-[var(--sidebar-text)]">
-          {whoLine(me, session)}
+        <span className="small break-words text-[var(--sidebar-text)]" data-testid="person-name">
+          {personName(me, session)}
         </span>
       </div>
 
@@ -330,16 +340,19 @@ function Sidebar({ active }: { active: NavKey }) {
   );
 }
 
-/** Téléphone : le sigle (ici le nom) et « Connecté·e : nom, rôle ». */
+/**
+ * Téléphone : le sigle (le nom complet s'il n'est pas servi), puis le nom de la
+ * personne. L'ordinateur, qui a la place, garde le nom complet (barre latérale).
+ */
 function TopBar() {
   const { settings, session, me } = useBureau();
   return (
     <header className="bg-ink px-4 pt-[14px] pb-3 lg:hidden print:hidden">
       <div className="text-[18px] leading-6 font-bold break-words text-on-indigo">
-        {associationName(settings)}
+        {headerTitle(settings)}
       </div>
-      <div className="small break-words text-[var(--sidebar-text)]">
-        Connecté·e : {whoLine(me, session)}
+      <div className="small break-words text-[var(--sidebar-text)]" data-testid="person-name">
+        {personName(me, session)}
       </div>
     </header>
   );
