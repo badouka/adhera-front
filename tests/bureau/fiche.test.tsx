@@ -269,6 +269,30 @@ describe('Écran 8 — la fiche', () => {
     expect(screen.queryByTestId('claimed-years')).not.toBeInTheDocument();
   });
 
+  it('R4 — les anciennes années s’ouvrent TOUJOURS repliées : « Voir », jamais « Masquer », au premier affichage', async () => {
+    server();
+    const user = userEvent.setup();
+    const first = renderInBureau(<FicheMembrePage />);
+    let old = await screen.findByTestId('unclaimed-years');
+    expect((old as HTMLDetailsElement).open).toBe(false);
+    const summary = old.querySelector('summary') as HTMLElement;
+    const tokens = (text: string) => within(summary).getByText(text).className.split(/\s+/);
+    expect(tokens('Voir')).not.toContain('hidden');
+    expect(tokens('Masquer')).toContain('hidden');
+    // Le reste à payer passe avant : il est écrit plus haut dans la page.
+    expect(
+      screen.getByTestId('due-box').compareDocumentPosition(old) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    // Ouvert à la main, puis la fiche rouverte : de nouveau replié.
+    await user.click(summary);
+    expect((old as HTMLDetailsElement).open).toBe(true);
+    first.unmount();
+    renderInBureau(<FicheMembrePage />);
+    old = await screen.findByTestId('unclaimed-years');
+    expect((old as HTMLDetailsElement).open).toBe(false);
+  });
+
   it('sous `all`, les années RÉCLAMÉES restent visibles : elles font le reste à payer', async () => {
     server({
       ...CHEIKH,
