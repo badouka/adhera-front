@@ -9,7 +9,8 @@ type Outcome = 'idle' | 'copied' | 'selected';
  * Copie un numéro marchand. `navigator.clipboard` manque sur les WebView
  * anciennes et sur tout contexte non sécurisé : on retombe alors sur
  * `execCommand`, puis, en dernier ressort, sur la sélection du texte affiché —
- * le membre n'a plus qu'à appuyer longuement.
+ * le membre n'a plus qu'à copier. Le message ne nomme aucun geste : la seule
+ * exception au « cliquez sur » est celle de SaveCard (tests/guards.test.ts).
  *
  * La confirmation est un TEXTE (« Copié »), pas seulement une icône, et reste
  * deux secondes.
@@ -115,7 +116,7 @@ export function CopyButton({
         {outcome === 'copied'
           ? `${label} : copié.`
           : outcome === 'selected'
-            ? `${label} : sélectionné, appuyez longuement pour le copier.`
+            ? `${label} : sélectionné, il reste à le copier.`
             : ''}
       </span>
     </>

@@ -795,6 +795,28 @@ export const LEXIQUE_BANNIS: ReadonlyArray<{ mot: string; pattern: RegExp }> = [
   { mot: 'catégorie', pattern: /(?<!\p{L})catégories?(?!\p{L})/iu },
   // Maquette du trésorier (P3) : le bouton dit ce que l'on a reçu, pas « m'a payé ».
   { mot: 'm’a payé', pattern: /(?<!\p{L})m[’']a\s+payé/iu },
+  // Le geste : « cliquez sur », sur téléphone comme sur ordinateur (F5, après
+  // le test d'Alioune). Un adverbe intercalé ne fait pas sortir de la règle :
+  // « appuyez bien sur » est encore « appuyez sur ».
+  { mot: 'touchez', pattern: /(?<!\p{L})touchez(?!\p{L})/iu },
+  { mot: 'tapez sur', pattern: /(?<!\p{L})tapez(?:\s+\p{L}+)?\s+sur(?!\p{L})/iu },
+  { mot: 'appuyez sur', pattern: /(?<!\p{L})appuyez(?:\s+\p{L}+)?\s+sur(?!\p{L})/iu },
+];
+
+/**
+ * Les exceptions au lexique, nommées une par une : le fichier, la phrase
+ * EXACTE, et la raison (adhera-lexique.md, « Le garde-fou » : jamais par
+ * motif). Une exception dont la phrase a disparu de son fichier fait échouer
+ * le test : elle ne reste pas en place comme un trou silencieux.
+ */
+export const LEXIQUE_EXCEPTIONS: ReadonlyArray<{ mot: string; file: string; text: string; raison: string }> = [
+  {
+    mot: 'appuyez sur',
+    file: 'src/components/card/SaveCard.tsx',
+    text: 'Appuyez longuement sur l’image, puis Enregistrer',
+    raison:
+      'Le geste d’enregistrement d’une image dans le navigateur de WhatsApp est un appui LONG : « cliquez » le ferait rater.',
+  },
 ];
 
 /** Les attributs JSX qui ne sont jamais lus : de la mise en forme, des adresses, des clés. */
@@ -832,9 +854,13 @@ export function displayedTexts(code: string, fileName = 'x.tsx'): string[] {
 /** Les mots bannis d'un fichier, nommés : « encaisser → Encaisser ». */
 export function lexiqueOffenders(code: string, fileName?: string): string[] {
   const out: string[] = [];
+  // Absolu (le balayage) ou relatif (les contre-épreuves) : toujours « src/… ».
+  const file = fileName ? relative(process.cwd(), fileName) : '';
   for (const text of displayedTexts(code, fileName)) {
     for (const { mot, pattern } of LEXIQUE_BANNIS) {
-      if (pattern.test(text)) out.push(`${mot} → ${text}`);
+      if (!pattern.test(text)) continue;
+      const excused = LEXIQUE_EXCEPTIONS.some((e) => e.mot === mot && e.file === file && e.text === text);
+      if (!excused) out.push(`${mot} → ${text}`);
     }
   }
   return out;
@@ -892,6 +918,45 @@ describe('lexique — un mot par chose, dans tout texte affiché (A11)', () => {
     expect(lexiqueOffenders('<Label>Moyen de paiement</Label>')).toEqual([]);
     expect(lexiqueOffenders('<p>Reste à payer</p><p>Reste à recevoir</p>')).toEqual([]);
     expect(lexiqueOffenders('<p>Une règle du bureau. Votre reçu est prêt.</p>')).toEqual([]);
+  });
+
+  it('contre-épreuve F5 : « touchez », « tapez sur » et « appuyez sur » sont nommés', () => {
+    expect(lexiqueOffenders('<p>Touchez Partager en bas de l’écran</p>')).toEqual([
+      'touchez → Touchez Partager en bas de l’écran',
+    ]);
+    expect(lexiqueOffenders("setHint('Tapez sur « Enregistrer ».')")).toEqual([
+      'tapez sur → Tapez sur « Enregistrer ».',
+    ]);
+    expect(lexiqueOffenders('<p>Appuyez sur le bouton vert</p>')).toEqual([
+      'appuyez sur → Appuyez sur le bouton vert',
+    ]);
+    expect(lexiqueOffenders('<p>Appuyez bien sur le bouton vert</p>')).toEqual([
+      'appuyez sur → Appuyez bien sur le bouton vert',
+    ]);
+    // Le mot voulu, et les mots voisins, passent.
+    expect(lexiqueOffenders('<p>Cliquez sur « Enregistrer ».</p>')).toEqual([]);
+    expect(lexiqueOffenders("t('Retapez le nouveau mot de passe à l’identique.')")).toEqual([]);
+    expect(lexiqueOffenders('<p>Ne retouchez pas le montant.</p>')).toEqual([]);
+  });
+
+  it('l’exception nommée : « Appuyez longuement sur l’image », dans SaveCard.tsx seulement', () => {
+    const exception = LEXIQUE_EXCEPTIONS[0]!;
+    expect(LEXIQUE_EXCEPTIONS).toHaveLength(1);
+    // La phrase est bien dans son fichier : l'exception n'excuse pas un absent.
+    expect(displayedTexts(readFileSync(exception.file, 'utf8'), exception.file)).toContain(exception.text);
+    expect(lexiqueOffenders(`<p>${exception.text}</p>`, exception.file)).toEqual([]);
+  });
+
+  it('contre-épreuve de l’exception : ailleurs, ou une autre phrase, elle ne vaut plus', () => {
+    const { text, file } = LEXIQUE_EXCEPTIONS[0]!;
+    // La même phrase dans un autre fichier.
+    expect(lexiqueOffenders(`<p>${text}</p>`, 'src/components/CopyButton.tsx')).toEqual([`appuyez sur → ${text}`]);
+    // Une autre phrase dans le même fichier.
+    expect(lexiqueOffenders('<p>Appuyez sur Enregistrer</p>', file)).toEqual([
+      'appuyez sur → Appuyez sur Enregistrer',
+    ]);
+    // L'exception ne couvre que « appuyez sur » : un autre mot banni dans la phrase reste nommé.
+    expect(lexiqueOffenders(`<p>${text} encaissée</p>`, file)).toEqual([`encaissé → ${text} encaissée`, `appuyez sur → ${text} encaissée`]);
   });
 
   it('contre-épreuve : une clé, un code ou un commentaire ne sont pas des mots affichés', () => {

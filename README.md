@@ -106,6 +106,19 @@ membre de la minute recevrait un 429 — pendant une campagne, c'est la panne.
   rapport de chaque sprint, page par page, avec les deux parts. Un code lourd et
   rare se charge au toucher, par `import()` (la carte en PNG, F5). L'ancien
   plafond (200 Ko en gzip) ne vaut plus.
+- **Le geste** (F5, après le test d'Alioune) — tout texte affiché dit
+  **« cliquez sur »**, sur téléphone comme sur ordinateur : jamais
+  « touchez », « tapez sur » ni « appuyez sur ». `LEXIQUE_BANNIS` les refuse.
+  **Une exception, et une seule** : « Appuyez longuement sur l'image, puis
+  Enregistrer » (`SaveCard.tsx`), parce que le geste qui enregistre la carte
+  dans le navigateur de WhatsApp est un appui long. Elle est nommée dans
+  `LEXIQUE_EXCEPTIONS` par son fichier et sa phrase exacte, jamais par motif.
+- **Les mots de passe** — **une session n'essaie jamais un mot de passe : elle
+  le demande à Alioune.** Ni par l'écran, ni par l'API, ni avec une valeur
+  relevée ailleurs « pour voir ». En recette F5-bis, cinq connexions refusées
+  (401) avant la bonne : c'est l'incident qui a fixé la règle. Le mot de
+  passe reçu ne vit que dans une variable d'environnement, le temps de la
+  commande : jamais dans un fichier, un commit ni un rapport.
 
 ## L'espace du bureau (`/bureau`, F2)
 
