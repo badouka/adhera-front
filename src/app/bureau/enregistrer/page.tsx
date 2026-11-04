@@ -77,6 +77,16 @@ type Picked =
  * et ce qui en suit. Le montant est la SAISIE, réaffichée par
  * `formatTypedAmount` (l'exception unique à R1) ; ce qui restera dû se dit
  * d'après le reste à payer servi, sans rien recalculer d'autre.
+ *
+ * F5-bis R2 (E4 accepté) — l'aperçu « devra encore » est une EXCEPTION DE
+ * SAISIE à « l'écran ne calcule pas d'argent » : l'écran 6 relit le vrai reste
+ * au serveur. Trois cas, et jamais une phrase fausse (ni montant négatif, ni
+ * « devra encore 0 FCFA ») :
+ *
+ * | saisie S face au reste servi R | phrase                       |
+ * | 0 < S < R                      | « Cheikh devra encore R − S. » |
+ * | S ≥ R, R > 0                   | « Cheikh sera à jour. »        |
+ * | R = 0 ou absent                | aucune                        |
  */
 export function recap({
   member,
@@ -95,10 +105,17 @@ export function recap({
   const when = date === today ? 'aujourd’hui' : formatDate(date) ? `le ${formatDate(date)}` : '';
   const balance = member.balance_due;
   let after = '';
-  if (amount !== null && amount > 0 && balance !== null && balance > 0) {
+  if (
+    amount !== null &&
+    Number.isFinite(amount) &&
+    amount > 0 &&
+    typeof balance === 'number' &&
+    Number.isFinite(balance) &&
+    balance > 0
+  ) {
     after =
       amount >= balance
-        ? `${who} sera à jour, et son reçu sera prêt.`
+        ? `${who} sera à jour.`
         : `${who} devra encore ${formatTypedAmount(balance - amount)}.`;
   }
   return {

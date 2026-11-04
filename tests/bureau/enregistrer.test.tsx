@@ -178,7 +178,7 @@ describe('Écran 4 — quatre questions numérotées', () => {
     renderInBureau(<EnregistrerPage />);
     const box = await screen.findByTestId('recap');
     expect(box).toHaveTextContent(
-      'Vous allez enregistrerCheikh Diouf a payé 25 000 FCFA en espèces aujourd’hui. Cheikh sera à jour, et son reçu sera prêt.',
+      'Vous allez enregistrerCheikh Diouf a payé 25 000 FCFA en espèces aujourd’hui. Cheikh sera à jour.',
     );
     await chooseOrangeMoney10000(user);
     expect(box).toHaveTextContent(
@@ -193,10 +193,36 @@ describe('Écran 4 — quatre questions numérotées', () => {
       amount: '30 000 FCFA',
       how: 'par virement',
       when: 'le 2 janvier 2026',
-      after: 'Cheikh sera à jour, et son reçu sera prêt.',
+      after: 'Cheikh sera à jour.',
     });
-    // Un reste à payer INCONNU (null) : aucune promesse.
-    expect(recap({ member: { ...CHEIKH, balance_due: null }, amount: 1000, method: 'cheque', date: 'x', today: 'y' }).after).toBe('');
+  });
+
+  describe('R2 — l’aperçu du reste : trois cas, et pas un', () => {
+    const base = { method: 'om' as const, date: '2026-11-03', today: '2026-11-03' };
+    const after = (balance: number | null | undefined, amount: number | null) =>
+      recap({ ...base, member: { ...CHEIKH, balance_due: balance as number | null }, amount }).after;
+
+    it('0 < S < R : « Cheikh devra encore R − S. »', () => {
+      expect(after(25000, 10000)).toBe('Cheikh devra encore 15 000 FCFA.');
+      expect(after(25000, 24999)).toBe('Cheikh devra encore 1 FCFA.');
+    });
+
+    it('S ≥ R, R > 0 : « Cheikh sera à jour. » — jamais « devra encore 0 FCFA », jamais négatif', () => {
+      expect(after(25000, 25000)).toBe('Cheikh sera à jour.');
+      expect(after(25000, 30000)).toBe('Cheikh sera à jour.');
+      for (const s of [25000, 30000, 1_000_000]) {
+        expect(after(25000, s)).not.toMatch(/devra encore|-|−/);
+      }
+    });
+
+    it('R = 0 ou absent : aucune phrase sur le reste', () => {
+      expect(after(0, 10000)).toBe('');
+      expect(after(null, 10000)).toBe('');
+      expect(after(undefined, 10000)).toBe('');
+      // Sans saisie non plus, rien n'est promis.
+      expect(after(25000, null)).toBe('');
+      expect(after(25000, 0)).toBe('');
+    });
   });
 
   it('un montant au-delà du reste à payer est arrêté avant l’envoi', async () => {
