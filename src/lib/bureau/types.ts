@@ -59,8 +59,10 @@ export type ModeCotisation = 'anniversaire' | 'exercice_civil';
 export type Settings = {
   issuer_name: string | null;
   /**
-   * §19 (v3.8.5) — le sigle, pour la ligne 1 de l'en-tête du téléphone. Absent
-   * d'un serveur antérieur, ou `null` : l'en-tête montre alors le nom complet.
+   * §19 (v3.8.5) — le sigle, pour la ligne 1 de l'en-tête du téléphone, et rien
+   * d'autre (carte, reçu, attestation et WhatsApp gardent le nom complet).
+   * `null` : pas de sigle, l'en-tête montre le nom complet. Toujours servi depuis
+   * v3.8.5 ; absent d'un serveur antérieur, lu comme `null`.
    */
   short_name?: string | null;
   /** Versionnée par son contenu : jamais en dur, jamais recomposée (§3). */
@@ -99,9 +101,11 @@ export function hasMembershipCard(settings: Settings): boolean {
   return settings.features?.membership_card === true;
 }
 
-/** Les seuls champs que `PUT settings` laisse modifier depuis F2. */
+/** Les champs que l'écran Paramètres envoie (F2 ; `short_name` depuis F5-bis, §19). */
 export type SettingsInput = {
   issuer_name: string;
+  /** §19 — toujours envoyé par l'écran Paramètres ; `null` retire le sigle. */
+  short_name: string | null;
   om_merchant_number: string | null;
   wave_merchant_number: string | null;
   payment_instructions: string | null;

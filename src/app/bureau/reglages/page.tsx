@@ -129,6 +129,7 @@ function EmailsPanel() {
 /** Les champs du formulaire : un `422` s'y range, avec le message de l'API tel quel. */
 const SETTINGS_FIELDS = [
   'issuer_name',
+  'short_name',
   'om_merchant_number',
   'wave_merchant_number',
   'payment_instructions',
@@ -137,6 +138,7 @@ const SETTINGS_FIELDS = [
 function AssociationPanel() {
   const { settings, setSettings } = useBureau();
   const [name, setName] = useState(settings.issuer_name ?? '');
+  const [shortName, setShortName] = useState(settings.short_name ?? '');
   const [om, setOm] = useState(settings.om_merchant_number ?? '');
   const [wave, setWave] = useState(settings.wave_merchant_number ?? '');
   const [instructions, setInstructions] = useState(settings.payment_instructions ?? '');
@@ -162,6 +164,9 @@ function AssociationPanel() {
     try {
       const updated = await updateSettings({
         issuer_name: name.trim(),
+        // §19 — TOUJOURS envoyé : vide, il devient `null` (pas de sigle). Les
+        // bornes (2 à 16) sont celles du serveur, et son message s'affiche.
+        short_name: shortName.trim() === '' ? null : shortName.trim(),
         om_merchant_number: om.trim() || null,
         wave_merchant_number: wave.trim() || null,
         // Texte libre : envoyé tel quel, retours à la ligne compris.
@@ -184,11 +189,19 @@ function AssociationPanel() {
   return (
     <Panel title="Association">
       <form className="m-0 flex flex-col gap-4" onSubmit={submit} noValidate>
-        <Field label="Nom de l’association" required error={errors.issuer_name} hint="Il figure sur les reçus et sur la page de chaque membre.">
-          {(props) => (
-            <input {...props} maxLength={255} value={name} onChange={(e) => setName(e.target.value)} className={inputClass(!!errors.issuer_name)} />
-          )}
-        </Field>
+        {/* §19 — le sigle À CÔTÉ du nom, avec sa raison. Jamais fabriqué depuis le nom. */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_200px]">
+          <Field label="Nom de l’association" required error={errors.issuer_name} hint="Il figure sur les reçus et sur la page de chaque membre.">
+            {(props) => (
+              <input {...props} maxLength={255} value={name} onChange={(e) => setName(e.target.value)} className={inputClass(!!errors.issuer_name)} />
+            )}
+          </Field>
+          <Field label="Sigle" optional error={errors.short_name} hint="S’affiche en haut de chaque écran du bureau.">
+            {(props) => (
+              <input {...props} autoComplete="off" value={shortName} onChange={(e) => setShortName(e.target.value)} className={inputClass(!!errors.short_name)} />
+            )}
+          </Field>
+        </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Numéro marchand Orange Money" optional error={errors.om_merchant_number}>
             {(props) => (

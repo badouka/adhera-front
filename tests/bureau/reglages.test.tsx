@@ -118,10 +118,77 @@ describe('B11 — l’association', () => {
     await screen.findByText('Réglages enregistrés.');
     const body = JSON.parse(calls(fetchMock, 'PUT')[0]?.init.body as string);
     expect(Object.keys(body).sort()).toEqual(
-      ['issuer_name', 'om_merchant_number', 'payment_instructions', 'wave_merchant_number'],
+      ['issuer_name', 'om_merchant_number', 'payment_instructions', 'short_name', 'wave_merchant_number'],
     );
     expect(body.payment_instructions).toBe('Nouveau texte');
+    // Le sigle part TOUJOURS, même quand on ne l'a pas touché (ici : aucun).
+    expect(body.short_name).toBeNull();
     expect(value.setSettings).toHaveBeenCalled();
+  });
+
+  describe('§19 — le sigle, à côté du nom de l’association', () => {
+    it('est posé à côté du nom, avec sa raison, et prérempli de ce que sert le serveur', () => {
+      fakeServer([{ match: 'membership/categories', body: [] }]);
+      renderInBureau(<ReglagesPage />, { settings: settings({ short_name: 'ATSARS' }) });
+      const field = screen.getByLabelText(/^Sigle/);
+      expect(field).toHaveValue('ATSARS');
+      expect(field).toHaveAccessibleDescription('S’affiche en haut de chaque écran du bureau.');
+      const name = screen.getByLabelText(/Nom de l’association/);
+      // Même rangée : le nom et le sigle partagent la même grille.
+      expect(name.closest('.grid')).toBe(field.closest('.grid'));
+    });
+
+    it('sans sigle servi : le champ est vide, jamais rempli d’initiales fabriquées', () => {
+      fakeServer([{ match: 'membership/categories', body: [] }]);
+      renderInBureau(<ReglagesPage />, {
+        settings: settings({ issuer_name: 'Association des techniciens supérieurs en anesthésie-réanimation du Sénégal', short_name: null }),
+      });
+      expect(screen.getByLabelText(/^Sigle/)).toHaveValue('');
+    });
+
+    it('envoie le sigle saisi (rogné), puis rend les réglages au cadre pour l’en-tête', async () => {
+      const fetchMock = fakeServer([
+        { method: 'PUT', match: 'membership/settings', body: settings({ short_name: 'ATSARS' }) },
+        { match: 'membership/categories', body: [] },
+      ]);
+      const user = userEvent.setup();
+      const { value } = renderInBureau(<ReglagesPage />);
+      await user.type(screen.getByLabelText(/^Sigle/), '  ATSARS  ');
+      await user.click(screen.getByRole('button', { name: 'Enregistrer les réglages' }));
+      await screen.findByText('Réglages enregistrés.');
+      const body = JSON.parse(calls(fetchMock, 'PUT')[0]?.init.body as string);
+      expect(body.short_name).toBe('ATSARS');
+      expect(value.setSettings).toHaveBeenCalledWith(expect.objectContaining({ short_name: 'ATSARS' }));
+    });
+
+    it('vidé : envoie `null` pour retirer le sigle', async () => {
+      const fetchMock = fakeServer([
+        { method: 'PUT', match: 'membership/settings', body: settings({ short_name: null }) },
+        { match: 'membership/categories', body: [] },
+      ]);
+      const user = userEvent.setup();
+      renderInBureau(<ReglagesPage />, { settings: settings({ short_name: 'ATSARS' }) });
+      await user.clear(screen.getByLabelText(/^Sigle/));
+      await user.click(screen.getByRole('button', { name: 'Enregistrer les réglages' }));
+      await screen.findByText('Réglages enregistrés.');
+      expect(JSON.parse(calls(fetchMock, 'PUT')[0]?.init.body as string).short_name).toBeNull();
+    });
+
+    it('un 422 sur le sigle s’affiche sous le champ, avec le message du serveur tel quel', async () => {
+      const message = 'Le sigle doit faire au moins 2 caractères : une seule lettre n’abrège rien.';
+      fakeServer([
+        { method: 'PUT', match: 'membership/settings', status: 422, body: { message, errors: { short_name: [message] } } },
+        { match: 'membership/categories', body: [] },
+      ]);
+      const user = userEvent.setup();
+      renderInBureau(<ReglagesPage />);
+      const field = screen.getByLabelText(/^Sigle/);
+      await user.type(field, 'A');
+      await user.click(screen.getByRole('button', { name: 'Enregistrer les réglages' }));
+      await screen.findByText(message);
+      expect(field).toHaveAttribute('aria-invalid', 'true');
+      expect(screen.queryByText('Réglages enregistrés.')).not.toBeInTheDocument();
+    });
   });
 
   it('refuse un logo GIF avant tout envoi', async () => {
