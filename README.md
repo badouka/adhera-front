@@ -96,6 +96,16 @@ membre de la minute recevrait un 429 — pendant une campagne, c'est la panne.
 - **Prénom et nom** — deux champs distincts, en saisie comme en affichage
   (une organisation : « Raison sociale »). On affiche `name`, que le serveur
   dérive. Le registre arrive trié par nom de famille : jamais retrié ici.
+- **Poids** (F5-bis) — **180 Ko au plus par page, mesurés en Brotli**
+  (qualité 11), ce que nginx envoie réellement au téléphone : la somme des
+  scripts que le HTML de la page référence. `node scripts/poids.mjs <origine>
+  [hôte]` mesure chaque page, sort en erreur au-delà du plafond, et sépare le
+  **socle** (React et Next, commun à toutes les pages, aucun fichier de `src/`)
+  de la part de l'**application** au-dessus. Le chiffre se mesure sur un build
+  hors production (worktree, `next start` sur un autre port) et figure dans le
+  rapport de chaque sprint, page par page, avec les deux parts. Un code lourd et
+  rare se charge au toucher, par `import()` (la carte en PNG, F5). L'ancien
+  plafond (200 Ko en gzip) ne vaut plus.
 
 ## L'espace du bureau (`/bureau`, F2)
 
@@ -198,7 +208,8 @@ et la page du membre reste celle de F1.
   le porteur, tel quel), les attestations de la fiche (si
   `features.membership_card === true`), et les « Années sans période
   enregistrée » (`missing_periods`). Ces deux blocs sont chargés à la demande :
-  la fiche est au plafond de 200 Ko.
+  la fiche était au plafond de l'époque (200 Ko gzip ; voir « Poids » plus haut
+  pour la règle actuelle).
 
 
 ## F5 — le bureau simplifié, d'après la maquette validée
@@ -257,3 +268,29 @@ retirée : ce qui sert rarement est rangé dans « Plus ».
   (versement, encaisser, valider, rejeté, reste dû, couvert, pas à jour,
   catégorie…), lus par l'analyseur de TypeScript. La liste vit là, une seule
   fois.
+
+## F5-bis — les retouches avant la fusion (contrat `v3.8.5`, §19)
+
+- **L'en-tête** : sur téléphone, ligne 1 = `short_name` (le sigle) s'il est
+  servi, sinon `issuer_name`, jamais coupé et jamais fabriqué depuis le nom ;
+  ligne 2 = le nom de la personne, **seul** (ni « Connecté·e », ni rôle). Sur
+  ordinateur, la barre latérale garde le nom complet. Les réglages sont lus
+  une fois par session, au montage du cadre. `role_label` ne reste que dans
+  « Mon profil ».
+- **Le sigle** se saisit dans « Paramètres de l'association », à côté du nom
+  (« S'affiche en haut de chaque écran du bureau »). L'écran l'envoie
+  TOUJOURS dans son `PUT settings` (vide → `null`) ; les bornes (2 à 16) et
+  leurs messages sont ceux du serveur. Carte, reçu, attestation et WhatsApp
+  gardent le nom complet.
+- **« Vous allez enregistrer »** : « {prénom} devra encore {R − S} » si
+  0 < S < R, « {prénom} sera à jour. » si S ≥ R > 0, rien si R = 0 ou absent
+  (exception de saisie à R1 : l'écran suivant relit le vrai reste au serveur).
+- **Le lexique** : `adhera-lexique.md` fait foi ; `LEXIQUE_BANNIS` le suit
+  (encaissé, en règle, impayé, mode de paiement, « Mode », « Moyen » et
+  « Reste » seuls, « Reçu ✓ »).
+- **Côté membre, c'est l'association qui agit** : « L'association vérifiera
+  votre paiement ». `ROLES_BANNIS_MEMBRE` refuse trésorier, président,
+  secrétaire, bureau et « reste à recevoir » dans les fichiers que chargent
+  `/m/[jeton]` et `/v/[code]` (suivis import par import) ; le bureau, lui,
+  nomme des rôles.
+- **Poids** : voir la règle plus haut (180 Ko en Brotli, `scripts/poids.mjs`).
