@@ -23,6 +23,7 @@ function ChevronLeft() {
 import { Pastille } from '@/components/Pastille';
 import { PaymentHowTo } from '@/components/PaymentHowTo';
 import { PaymentSheet } from '@/components/PaymentSheet';
+import { PhotoUpload } from '@/components/PhotoUpload';
 import { ReceiptList } from '@/components/ReceiptList';
 import { Card, Shell } from '@/components/Shell';
 import { API_BASE, fetchMember } from '@/lib/api';
@@ -229,6 +230,7 @@ export function MemberPage({ token }: { token: string }) {
           application={application}
           name={payload.member.first_name?.trim() || payload.member.name}
           payload={payload}
+          photo={{ token, tenant, onChanged: reload }}
         />
       </Shell>
     );
@@ -289,6 +291,7 @@ export function MemberPage({ token }: { token: string }) {
           available={payload.attestation_available === true}
           upToDate={card.is_up_to_date}
         />
+        <PhotoUpload token={token} tenant={tenant} hasPhoto={!!card.photo_url} onChanged={reload} />
         {referral ? <ReferralBlock referral={referral} /> : null}
       </Shell>
     );
@@ -354,7 +357,13 @@ export function MemberPage({ token }: { token: string }) {
       <ReceiptList receipts={payload.receipts} token={token} tenant={tenant} />
 
       {/* Sans carte (candidat, ou carte éteinte), la photo se voit ici. */}
-      <SentToAssociation payload={payload} withPhoto={!card} />
+      <SentToAssociation
+        payload={payload}
+        withPhoto={!card}
+        // La photo sert la carte : proposée au candidat qui va payer (sa carte
+        // viendra), pas au membre dont l'association n'a pas de carte.
+        photo={firstPayment ? { token, tenant, onChanged: reload } : null}
+      />
 
       {referral ? <ReferralBlock referral={referral} /> : null}
 
@@ -652,14 +661,19 @@ function DueBlock({
  * l'examen (rien à payer, aucun bouton de paiement), ou elle a été refusée.
  * Le motif est celui que l'association a écrit POUR elle : tel quel, en texte.
  */
+type PhotoTarget = { token: string; tenant: string; onChanged: () => void };
+
 function ApplicationPage({
   application,
   name,
   payload,
+  photo,
 }: {
   application: Application;
   name: string;
   payload: MemberPayload;
+  /** §21.2 — un refusé ne change pas sa photo (`409 application_rejected`). */
+  photo: PhotoTarget;
 }) {
   const greeting = name.trim() ? `Bonjour ${name.trim()}` : 'Bonjour';
 
@@ -693,7 +707,7 @@ function ApplicationPage({
           Vous n’avez rien à payer pour l’instant : l’association vous répondra sur WhatsApp.
         </p>
       </section>
-      <SentToAssociation payload={payload} withPhoto />
+      <SentToAssociation payload={payload} withPhoto photo={photo} />
       <p className="small m-0 text-center text-ink-muted">
         Gardez le message qui contient ce lien : c’est votre accès personnel.
       </p>
@@ -750,10 +764,19 @@ function ReferralBlock({ referral }: { referral: Referral }) {
  * cadrage avant que le bureau n'imprime) et ses réponses. Une pièce s'y lit
  * « Document envoyé » : AUCUN lien n'existe pour le membre, donc aucun bouton.
  */
-function SentToAssociation({ payload, withPhoto }: { payload: MemberPayload; withPhoto: boolean }) {
+function SentToAssociation({
+  payload,
+  withPhoto,
+  photo: target = null,
+}: {
+  payload: MemberPayload;
+  withPhoto: boolean;
+  /** Proposer « Ajouter / Changer ma photo » ici (sans carte à l'écran). */
+  photo?: PhotoTarget | null;
+}) {
   const photo = withPhoto ? (payload.photo_url ?? null) : null;
   const answers = (payload.answers ?? []).filter((a) => a.label?.trim());
-  if (!photo && answers.length === 0) return null;
+  if (!photo && answers.length === 0 && !target) return null;
   return (
     <section className="flex flex-col gap-3 rounded-[var(--radius-md)] border border-line bg-surface-raised p-4" data-testid="sent">
       <h2 className="heading m-0">Ce que vous avez envoyé à l’association</h2>
@@ -771,6 +794,7 @@ function SentToAssociation({ payload, withPhoto }: { payload: MemberPayload; wit
           <p className="small m-0 text-ink-muted">Votre photo, telle qu’elle figurera sur votre carte de membre.</p>
         </div>
       ) : null}
+      {target ? <PhotoUpload {...target} hasPhoto={!!photo} /> : null}
       {answers.length > 0 ? (
         <dl className="m-0 flex flex-col gap-2">
           {answers.map((answer) => (

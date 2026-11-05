@@ -100,3 +100,19 @@ export function rejectApplication(id: string, reason: string) {
 export function getFileLink(uuid: string) {
   return request<FileLink>(`membership/files/${seg(uuid)}/url`);
 }
+
+/**
+ * §21.2 — la photo d'un membre déposée par le bureau (quelqu'un sans
+ * téléphone). La charge de réponse n'est pas décrite par le contrat : l'écran
+ * relit la fiche après coup.
+ */
+export function uploadPhoto(id: string, file: File) {
+  const form = new FormData();
+  form.set('photo', file);
+  return request<unknown>(`membership/members/${seg(id)}/photo`, { method: 'POST', form });
+}
+
+/** §21.2 — retire la photo, ET son fichier : une photo n'est la trace d'aucune décision. */
+export function deletePhoto(id: string) {
+  return request<unknown>(`membership/members/${seg(id)}/photo`, { method: 'DELETE' });
+}

@@ -573,3 +573,26 @@ describe('§21.5 — une pièce justificative, côté bureau', () => {
     expect(changedAnswers([piece], { '8': 'un-autre-uuid' }, { '8': '4b74-uuid' }, false)).toEqual({});
   });
 });
+
+describe('§21.2 — la photo déposée ou retirée par le bureau', () => {
+  it('POST members/{id}/photo en multipart ; DELETE après une confirmation qui dit que le fichier disparaît', async () => {
+    const user = userEvent.setup();
+    const { PhotoPanel } = await import('@/components/bureau/PhotoPanel');
+    const onChanged = vi.fn();
+    const fetchMock = fakeServer([
+      { method: 'POST', match: 'membership/members/m-1/photo', body: {} },
+      { method: 'DELETE', match: 'membership/members/m-1/photo', body: {} },
+    ]);
+    const { container } = renderInBureau(
+      <PhotoPanel memberId="m-1" memberName="Mariama Cisse" photoUrl="https://api.eventflow.africa/api/v1/membership/files/p?expires=1&signature=s" onChanged={onChanged} onClose={vi.fn()} />,
+    );
+    await user.upload(container.querySelector('input[type="file"]') as HTMLInputElement, new File(['x'], 'mariama.jpg', { type: 'image/jpeg' }));
+    await user.click(screen.getByRole('button', { name: 'Enregistrer cette photo' }));
+    await waitFor(() => expect(onChanged).toHaveBeenCalledWith('Photo enregistrée. Elle figure sur sa carte de membre.'));
+    expect((calls(fetchMock, 'POST')[0]?.init.body as FormData).get('photo')).toBeInstanceOf(File);
+    await user.click(screen.getByRole('button', { name: 'Retirer la photo' }));
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Le fichier est supprimé pour de bon');
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Retirer la photo' }));
+    await waitFor(() => expect(calls(fetchMock, 'DELETE')).toHaveLength(1));
+  });
+});

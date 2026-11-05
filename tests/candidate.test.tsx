@@ -239,7 +239,71 @@ describe('§21 — la photo et « Document envoyé », côté membre', () => {
     expect(within(sent).getByTestId('my-photo')).toHaveAttribute('src', PHOTO);
     expect(sent).toHaveTextContent('Carte professionnelleDocument envoyé');
     expect(sent).toHaveTextContent('SpécialitéImagerie médicale');
-    expect(within(sent).queryByRole('button')).not.toBeInTheDocument();
+    // La pièce n'a ni lien ni bouton ; le seul bouton est celui de la photo.
+    expect(within(sent).getAllByRole('button').map((b) => b.textContent)).toEqual(['Changer ma photo']);
     expect(within(sent).queryByRole('link')).not.toBeInTheDocument();
+  });
+});
+
+describe('§21.2 — « Ajouter / Changer ma photo », côté membre', () => {
+  const PHOTO = 'https://api.eventflow.africa/api/v1/membership/files/4b74?expires=1&signature=s';
+  const UNDER_REVIEW = payload({
+    member: CANDIDATE,
+    standing: { is_up_to_date: false, covered_until: null },
+    application: { status: 'under_review', submitted_at: '2026-11-04T09:12:33+00:00', rejection_reason: null },
+    photo_url: null,
+  });
+
+  it('le candidat ajoute sa photo : multipart sur m/{jeton}/photo, le message de l’API, puis la page relue', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    fetchMock
+      .mockResolvedValueOnce(fakeResponse(200, UNDER_REVIEW))
+      .mockResolvedValueOnce(fakeResponse(200, { message: 'Votre photo a bien été enregistrée.', photo_url: PHOTO }))
+      .mockResolvedValueOnce(fakeResponse(200, { ...UNDER_REVIEW, photo_url: PHOTO }));
+    render(<MemberPage token={TOKEN} />);
+    expect(await screen.findByRole('button', { name: 'Ajouter ma photo' })).toBeInTheDocument();
+    await user.upload(screen.getByTestId('photo-input'), new File(['x'], 'moi.jpg', { type: 'image/jpeg' }));
+    expect(await screen.findByText('Votre photo a bien été enregistrée.')).toBeInTheDocument();
+    const [url, init] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(url).toBe(`https://api.eventflow.africa/api/v1/m/${TOKEN}/photo`);
+    expect(init.method).toBe('POST');
+    expect((init.body as FormData).get('photo')).toBeInstanceOf(File);
+    expect((init.headers as Record<string, string>)['Content-Type']).toBeUndefined();
+    expect(await screen.findByTestId('my-photo')).toHaveAttribute('src', PHOTO);
+    expect(screen.getByRole('button', { name: 'Changer ma photo' })).toBeInTheDocument();
+  });
+
+  it('un refus de l’API s’affiche tel quel ; un fichier de plus de 5 Mo ne part pas', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    // Le filtre du sélecteur laisserait passer ce qu'un téléphone renomme : on le contourne.
+    const user = userEvent.setup({ applyAccept: false });
+    fetchMock
+      .mockResolvedValueOnce(fakeResponse(200, UNDER_REVIEW))
+      .mockResolvedValueOnce(fakeResponse(422, { message: 'x', errors: { photo: ['Envoyez une photo JPEG ou PNG.'] } }));
+    render(<MemberPage token={TOKEN} />);
+    await screen.findByRole('button', { name: 'Ajouter ma photo' });
+    await user.upload(screen.getByTestId('photo-input'), new File(['x'], 'moi.heic', { type: 'image/heic' }));
+    expect(await screen.findByText('Envoyez une photo JPEG ou PNG.')).toBeInTheDocument();
+    await user.upload(screen.getByTestId('photo-input'), new File([new Uint8Array(5 * 1024 * 1024 + 1)], 'gros.jpg', { type: 'image/jpeg' }));
+    expect(await screen.findByText('Le fichier dépasse la taille maximale de 5 MB.')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('un refusé ne se voit pas proposer de photo', async () => {
+    renderWith(
+      payload({
+        member: CANDIDATE,
+        application: { status: 'rejected', submitted_at: null, rejection_reason: 'Réservé aux techniciens.' },
+      }),
+    );
+    await screen.findByTestId('application-rejected');
+    expect(screen.queryByRole('button', { name: /ma photo/ })).not.toBeInTheDocument();
+  });
+
+  it('un membre à jour la change depuis sa carte', async () => {
+    renderWith(payload({ card: memberCard({ photo_url: PHOTO }) }));
+    await screen.findByTestId('member-card');
+    expect(screen.getByRole('button', { name: 'Changer ma photo' })).toBeInTheDocument();
   });
 });

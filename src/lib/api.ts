@@ -287,3 +287,35 @@ export async function fetchVerification(
 
   return (await response.json()) as Verification;
 }
+
+export type PhotoResult = { message: string; photo_url: string | null };
+
+/**
+ * `POST /m/{token}/photo` (§21.2) — le membre remplace sa photo. Le serveur
+ * écrit la nouvelle AVANT de retirer l'ancienne, la ré-encode (carrée, 600 px,
+ * sans métadonnées) et rend son lien signé. `409 application_rejected` pour un
+ * refusé ; limiteur dédié, 10 par heure et par lien.
+ */
+export async function uploadMemberPhoto(
+  token: string,
+  tenant: string,
+  file: File,
+): Promise<PhotoResult> {
+  const form = new FormData();
+  form.set('photo', file);
+  let response: Response;
+  try {
+    // Pas de Content-Type manuel : le navigateur pose la frontière du multipart.
+    response = await fetch(`${API_BASE}/m/${encodeURIComponent(token)}/photo`, {
+      method: 'POST',
+      headers: headers(tenant),
+      body: form,
+      cache: 'no-store',
+      referrerPolicy: 'no-referrer',
+    });
+  } catch {
+    throw new ApiError(0, null, 'Réseau indisponible');
+  }
+  if (!response.ok) throw await toApiError(response);
+  return (await response.json()) as PhotoResult;
+}

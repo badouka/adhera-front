@@ -71,6 +71,10 @@ const ContactsPanel = dynamic(
   () => import('@/components/bureau/ContactsPanel').then((m) => m.ContactsPanel),
   { loading: panelLoading },
 );
+const PhotoPanel = dynamic(
+  () => import('@/components/bureau/PhotoPanel').then((m) => m.PhotoPanel),
+  { loading: panelLoading },
+);
 const AttestationsPanel = dynamic(() => import('@/components/bureau/AttestationsPanel'), {
   loading: () => <p className="small m-0 text-ink-muted">Chargement des attestations…</p>,
 });
@@ -81,7 +85,7 @@ type Load<T> =
   | { kind: 'error'; message: string }
   | { kind: 'ready'; value: T };
 
-type Action = 'edit' | 'attest' | 'link' | 'leave' | 'cancel';
+type Action = 'edit' | 'photo' | 'attest' | 'link' | 'leave' | 'cancel';
 
 /** Une année que la fiche montre : une période en base, ou une année manquante. */
 type Year = { key: string; label: string; amount: string | null };
@@ -432,6 +436,11 @@ export default function FicheMembrePage() {
             <MoreRow on={action === 'edit'} onClick={() => openAction('edit')}>
               Modifier ses informations (dont le numéro de membre)
             </MoreRow>
+            {m.status === 'rejected' ? null : (
+              <MoreRow on={action === 'photo'} onClick={() => openAction('photo')}>
+                Sa photo : l’ajouter, la changer ou la retirer
+              </MoreRow>
+            )}
             {cardEnabled ? (
               <MoreRow on={action === 'attest'} onClick={() => openAction('attest')}>
                 Ses attestations d’adhésion
@@ -466,6 +475,20 @@ export default function FicheMembrePage() {
                 setAction(null);
                 setMember({ kind: 'ready', value: { ...m, ...updated } });
                 setNotice('Fiche mise à jour.');
+                reload();
+              }}
+            />
+          ) : null}
+
+          {action === 'photo' ? (
+            <PhotoPanel
+              memberId={m.id}
+              memberName={m.name}
+              photoUrl={m.photo_url ?? null}
+              onClose={() => setAction(null)}
+              onChanged={(message) => {
+                setAction(null);
+                setNotice(message);
                 reload();
               }}
             />

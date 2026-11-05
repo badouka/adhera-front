@@ -6,6 +6,7 @@ import { BrokenLinkIcon, CheckIcon } from '@/components/Icons';
 import { Shell } from '@/components/Shell';
 import { ApiError, fieldMessages } from '@/lib/api';
 import { formatDate } from '@/lib/dates';
+import { MAX_FILE_BYTES, PHOTO_ACCEPT, TOO_LARGE } from '@/lib/files';
 import { useIdempotencyKey } from '@/lib/idempotency';
 import {
   fetchJoinForm,
@@ -86,7 +87,7 @@ export function validateJoin(
   if (photoMode(form) === 'required' && !photo) {
     errors.photo = 'Envoyez une photo : elle figurera sur votre carte de membre.';
   } else if (photo && photo.size > MAX_FILE_BYTES) {
-    errors.photo = 'Le fichier dépasse la taille maximale de 5 MB.';
+    errors.photo = TOO_LARGE;
   }
   for (const question of form.questions ?? []) {
     const key = `answers.${question.id}`;
@@ -109,12 +110,7 @@ export function validateJoin(
   return errors;
 }
 
-/**
- * §21.1 — 5 Mo par fichier. La borne n'est pas servie ; on la vérifie AVANT
- * l'envoi parce qu'un fichier trop lourd coûte plusieurs mégaoctets de 3G pour
- * un refus certain. Le serveur reste l'autorité (types, contenu).
- */
-export const MAX_FILE_BYTES = 5 * 1024 * 1024;
+export { MAX_FILE_BYTES } from '@/lib/files';
 
 /** §21.2 — absent d'un serveur antérieur à S7 : pas de champ photo. */
 export function photoMode(form: JoinForm): string {
@@ -544,7 +540,7 @@ function JoinFormView({
             id="photo"
             label={`${next()}. Votre photo`}
             optional={photoMode(form) !== 'required'}
-            accept="image/jpeg,image/png,image/webp"
+            accept={PHOTO_ACCEPT}
             hint="Elle figurera sur votre carte de membre : votre visage, de face, bien éclairé."
             file={photo}
             preview

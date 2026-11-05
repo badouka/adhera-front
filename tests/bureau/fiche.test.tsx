@@ -368,6 +368,7 @@ describe('« Autres actions »', () => {
     const more = within(screen.getByRole('region', { name: 'Autres actions' }));
     expect(more.getAllByRole('button').map((b) => b.textContent?.replace('›', '').trim())).toEqual([
       'Modifier ses informations (dont le numéro de membre)',
+      'Sa photo : l’ajouter, la changer ou la retirer',
       'Ses attestations d’adhésion',
       'Son lien personnel : l’envoyer ou le changer',
       'Enregistrer son départ',
