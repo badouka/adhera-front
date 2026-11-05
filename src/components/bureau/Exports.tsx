@@ -2,13 +2,8 @@
 
 import { useState } from 'react';
 import { DownloadIcon } from '@/components/Icons';
-import {
-  downloadMembersExport,
-  downloadPaymentsExport,
-  isSessionError,
-  type DownloadedFile,
-  type PeriodQuery,
-} from '@/lib/bureau/api';
+import { isSessionError, type DownloadedFile } from '@/lib/bureau/api/core';
+import { downloadMembersExport, downloadPaymentsExport, type PeriodQuery } from '@/lib/bureau/api/dashboard';
 import { errorMessage } from '@/lib/bureau/messages';
 import { todayInDakar } from '@/lib/dates';
 import { saveBlob } from './Documents';

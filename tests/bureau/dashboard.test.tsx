@@ -338,7 +338,7 @@ describe('Tableau de bord — les exports', () => {
   });
 
   it('le nom du fichier : celui du serveur s’il est lisible', async () => {
-    const { request } = await import('@/lib/bureau/api');
+    const { request } = await import('@/lib/bureau/api/core');
     vi.stubGlobal('fetch', vi.fn(async () =>
       fakeResponse(200, null, { 'Content-Disposition': 'attachment; filename="registre-2026-11-01.xlsx"' }),
     ));

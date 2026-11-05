@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useBackBar, useBureau } from '@/components/bureau/BureauContext';
 import { MemberForm } from '@/components/bureau/MemberForm';
 import { PageTitle, Panel } from '@/components/bureau/ui';
-import { createMember } from '@/lib/bureau/api';
+import { createMember } from '@/lib/bureau/api/members';
 
 /** B6 — un nouveau membre. Il arrive sur sa fiche, d'où partira son lien. */
 export default function NouveauMembrePage() {

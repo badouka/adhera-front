@@ -6,7 +6,6 @@ import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { RECORD_PATH, VERIFY_PATH } from '@/components/bureau/BureauFrame';
 import { useBackBar, useBureau } from '@/components/bureau/BureauContext';
-import { ContactsPanel } from '@/components/bureau/ContactsPanel';
 import { ReceiptButton } from '@/components/bureau/Documents';
 import { decisionLabel, isModeUnsupported, periodLabel } from '@/components/bureau/format';
 import { ChatIcon } from '@/components/bureau/Icons';
@@ -23,13 +22,9 @@ import {
 } from '@/components/bureau/ui';
 import { Pastille } from '@/components/Pastille';
 import { ApiError } from '@/lib/api';
-import {
-  getMember,
-  getMemberLink,
-  isSessionError,
-  listPayments,
-  updateMember,
-} from '@/lib/bureau/api';
+import { isSessionError } from '@/lib/bureau/api/core';
+import { getMember, getMemberLink, updateMember } from '@/lib/bureau/api/members';
+import { listPayments } from '@/lib/bureau/api/payments';
 import { takeFlash } from '@/lib/bureau/flash';
 import { errorMessage } from '@/lib/bureau/messages';
 import { openPendingTab } from '@/lib/bureau/pendingTab';
@@ -63,6 +58,15 @@ const LeavePanel = dynamic(
 );
 const CancelPaymentPanel = dynamic(
   () => import('@/components/bureau/CancelPaymentPanel').then((m) => m.CancelPaymentPanel),
+  { loading: panelLoading },
+);
+/**
+ * F6 § 7 — les contacts d'une organisation, eux aussi à la demande : ils ne
+ * servent qu'à une fiche sur dix, et tiraient `ConfirmDialog` dans le premier
+ * chargement de toutes.
+ */
+const ContactsPanel = dynamic(
+  () => import('@/components/bureau/ContactsPanel').then((m) => m.ContactsPanel),
   { loading: panelLoading },
 );
 const AttestationsPanel = dynamic(() => import('@/components/bureau/AttestationsPanel'), {

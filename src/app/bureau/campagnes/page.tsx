@@ -17,12 +17,8 @@ import {
 } from '@/components/bureau/ui';
 import { Pastille } from '@/components/Pastille';
 import { ApiError, fieldMessages } from '@/lib/api';
-import {
-  cancelCampaign,
-  createCampaign,
-  isSessionError,
-  listCampaigns,
-} from '@/lib/bureau/api';
+import { isSessionError } from '@/lib/bureau/api/core';
+import { cancelCampaign, createCampaign, listCampaigns } from '@/lib/bureau/api/outreach';
 import { errorMessage } from '@/lib/bureau/messages';
 import type {
   Campaign,

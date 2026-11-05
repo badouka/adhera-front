@@ -4,7 +4,10 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AlertIcon } from '@/components/Icons';
-import { getMe, getSettings, isSessionError, listPayments, logout } from '@/lib/bureau/api';
+import { getMe, logout } from '@/lib/bureau/api/auth';
+import { isSessionError } from '@/lib/bureau/api/core';
+import { listPayments } from '@/lib/bureau/api/payments';
+import { getSettings } from '@/lib/bureau/api/settings';
 import { errorMessage } from '@/lib/bureau/messages';
 import {
   currentTenant,

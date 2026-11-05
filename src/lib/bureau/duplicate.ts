@@ -1,5 +1,5 @@
 import { ApiError } from '../api';
-import { BureauApiError } from './api';
+import { BureauApiError } from './api/core';
 import type { ExistingPayment } from './types';
 
 /**

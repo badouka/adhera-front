@@ -4,7 +4,8 @@ import { useEffect, useId, useState } from 'react';
 import { useBackBar, useBureau } from '@/components/bureau/BureauContext';
 import { Button, inputClass, Notice, PageTitle, Panel, Row, Skeleton } from '@/components/bureau/ui';
 import { fieldMessages } from '@/lib/api';
-import { getMe, isSessionError, updateMe } from '@/lib/bureau/api';
+import { getMe, updateMe } from '@/lib/bureau/api/auth';
+import { isSessionError } from '@/lib/bureau/api/core';
 import { errorMessage } from '@/lib/bureau/messages';
 import type { Me } from '@/lib/bureau/types';
 

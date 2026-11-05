@@ -19,12 +19,9 @@ import {
   Skeleton,
 } from '@/components/bureau/ui';
 import { ApiError, fieldMessages } from '@/lib/api';
-import {
-  createDirectPayment,
-  getMember,
-  isSessionError,
-  listMembers,
-} from '@/lib/bureau/api';
+import { isSessionError } from '@/lib/bureau/api/core';
+import { getMember, listMembers } from '@/lib/bureau/api/members';
+import { createDirectPayment } from '@/lib/bureau/api/payments';
 import { openDue } from '@/lib/bureau/dues';
 import { possibleDuplicate } from '@/lib/bureau/duplicate';
 import { setFlash } from '@/lib/bureau/flash';

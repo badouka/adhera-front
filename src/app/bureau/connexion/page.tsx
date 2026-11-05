@@ -6,7 +6,8 @@ import { Shell } from '@/components/Shell';
 import { NO_AUTOCORRECT, PasswordField } from '@/components/bureau/PasswordField';
 import { Field, inputClass, Notice } from '@/components/bureau/ui';
 import { ApiError } from '@/lib/api';
-import { INVALID_CREDENTIALS, login } from '@/lib/bureau/api';
+import { login } from '@/lib/bureau/api/auth';
+import { INVALID_CREDENTIALS } from '@/lib/bureau/api/core';
 import { errorMessage } from '@/lib/bureau/messages';
 import { currentTenant, getSession, saveSession } from '@/lib/bureau/session';
 

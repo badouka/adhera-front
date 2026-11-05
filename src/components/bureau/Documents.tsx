@@ -2,7 +2,9 @@
 
 import { useState } from 'react';
 import { DownloadIcon } from '@/components/Icons';
-import { fetchDocument, getProofUrl, isSessionError } from '@/lib/bureau/api';
+import { isSessionError } from '@/lib/bureau/api/core';
+import { fetchDocument } from '@/lib/bureau/api/documents';
+import { getProofUrl } from '@/lib/bureau/api/payments';
 import { errorMessage } from '@/lib/bureau/messages';
 import { EyeIcon } from './Icons';
 import { buttonClass } from './ui';

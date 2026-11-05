@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { createContact, deleteContact, isSessionError } from '@/lib/bureau/api';
+import { isSessionError } from '@/lib/bureau/api/core';
+import { createContact, deleteContact } from '@/lib/bureau/api/members';
 import { fieldMessages } from '@/lib/api';
 import { errorMessage } from '@/lib/bureau/messages';
 import { CONTACT_ROLES, type Contact, type ContactRole } from '@/lib/bureau/types';

@@ -16,13 +16,8 @@ import {
 } from '@/components/bureau/ui';
 import { Pastille } from '@/components/Pastille';
 import { ApiError } from '@/lib/api';
-import {
-  isSessionError,
-  listCampaigns,
-  listOutreach,
-  markOutreachSent,
-  skipOutreach,
-} from '@/lib/bureau/api';
+import { isSessionError } from '@/lib/bureau/api/core';
+import { listCampaigns, listOutreach, markOutreachSent, skipOutreach } from '@/lib/bureau/api/outreach';
 import { errorMessage } from '@/lib/bureau/messages';
 import type { Campaign, OutreachItem } from '@/lib/bureau/types';
 import { daysBetween, formatDayMonth, safeTimeZone, todayInDakar, zonedParts } from '@/lib/dates';

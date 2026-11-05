@@ -2,7 +2,8 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { ApiError } from '@/lib/api';
-import { cancelPayment, isSessionError } from '@/lib/bureau/api';
+import { isSessionError } from '@/lib/bureau/api/core';
+import { cancelPayment } from '@/lib/bureau/api/payments';
 import { errorMessage } from '@/lib/bureau/messages';
 import type { Payment } from '@/lib/bureau/types';
 import { formatShortDate } from '@/lib/dates';

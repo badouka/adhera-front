@@ -14,7 +14,9 @@ import {
   PageTitle,
   Skeleton,
 } from '@/components/bureau/ui';
-import { isSessionError, listCategories, listMembers } from '@/lib/bureau/api';
+import { listCategories } from '@/lib/bureau/api/categories';
+import { isSessionError } from '@/lib/bureau/api/core';
+import { listMembers } from '@/lib/bureau/api/members';
 import { errorMessage } from '@/lib/bureau/messages';
 import type {
   Category,

@@ -5,7 +5,8 @@ import { useBackBar } from '@/components/bureau/BureauContext';
 import { PasswordField } from '@/components/bureau/PasswordField';
 import { buttonClass, Notice, PageTitle, Panel } from '@/components/bureau/ui';
 import { ApiError } from '@/lib/api';
-import { changePassword, isSessionError, type PasswordChange } from '@/lib/bureau/api';
+import { changePassword, type PasswordChange } from '@/lib/bureau/api/auth';
+import { isSessionError } from '@/lib/bureau/api/core';
 import { errorMessage } from '@/lib/bureau/messages';
 
 type FieldName = keyof PasswordChange;

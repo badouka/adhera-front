@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { Pastille } from '@/components/Pastille';
 import { ApiError } from '@/lib/api';
-import { fetchDocument, isSessionError, issueAttestation } from '@/lib/bureau/api';
+import { isSessionError } from '@/lib/bureau/api/core';
+import { fetchDocument, issueAttestation } from '@/lib/bureau/api/documents';
 import { errorMessage } from '@/lib/bureau/messages';
 import type { IssuedAttestation, MemberAttestation } from '@/lib/bureau/types';
 import { formatDate, formatDateTime } from '@/lib/dates';

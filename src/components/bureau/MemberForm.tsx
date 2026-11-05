@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { fieldMessages } from '@/lib/api';
-import { isSessionError, listCategories } from '@/lib/bureau/api';
+import { listCategories } from '@/lib/bureau/api/categories';
+import { isSessionError } from '@/lib/bureau/api/core';
 import { errorMessage } from '@/lib/bureau/messages';
 import type {
   Category,

@@ -1,14 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { BureauApiError } from '@/lib/bureau/api';
-import {
-  createCategory,
-  deleteCategory,
-  isSessionError,
-  listCategories,
-  updateCategory,
-} from '@/lib/bureau/api';
+import { BureauApiError } from '@/lib/bureau/api/core';
+import { createCategory, deleteCategory, listCategories, updateCategory } from '@/lib/bureau/api/categories';
+import { isSessionError } from '@/lib/bureau/api/core';
 import { fieldMessages } from '@/lib/api';
 import { errorMessage } from '@/lib/bureau/messages';
 import {

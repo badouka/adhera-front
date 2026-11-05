@@ -15,15 +15,8 @@ import {
   Panel,
   Row,
 } from '@/components/bureau/ui';
-import {
-  deleteLogo,
-  isSessionError,
-  setArrearsPolicy,
-  setVerificationDigest,
-  setWeeklyReport,
-  updateSettings,
-  uploadLogo,
-} from '@/lib/bureau/api';
+import { isSessionError } from '@/lib/bureau/api/core';
+import { deleteLogo, setArrearsPolicy, setVerificationDigest, setWeeklyReport, updateSettings, uploadLogo } from '@/lib/bureau/api/settings';
 import { errorMessage } from '@/lib/bureau/messages';
 import {
   MEMBER_TYPES_LABELS,

@@ -1,4 +1,5 @@
-import { getWhatsapp, isSessionError } from './api';
+import { isSessionError } from './api/core';
+import { getWhatsapp } from './api/members';
 import { errorMessage } from './messages';
 import { openPendingTab } from './pendingTab';
 

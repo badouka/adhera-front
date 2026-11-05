@@ -19,13 +19,9 @@ import {
 } from '@/components/bureau/ui';
 import { CheckIcon } from '@/components/Icons';
 import { ApiError, fieldMessages } from '@/lib/api';
-import {
-  getMember,
-  isSessionError,
-  listPayments,
-  rejectPayment,
-  validatePayment,
-} from '@/lib/bureau/api';
+import { isSessionError } from '@/lib/bureau/api/core';
+import { getMember } from '@/lib/bureau/api/members';
+import { listPayments, rejectPayment, validatePayment } from '@/lib/bureau/api/payments';
 import { possibleDuplicate } from '@/lib/bureau/duplicate';
 import { errorMessage } from '@/lib/bureau/messages';
 import { openPendingTab } from '@/lib/bureau/pendingTab';

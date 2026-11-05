@@ -14,7 +14,8 @@ import {
   Panel,
   Skeleton,
 } from '@/components/bureau/ui';
-import { getDashboard, isSessionError, type PeriodQuery } from '@/lib/bureau/api';
+import { isSessionError } from '@/lib/bureau/api/core';
+import { getDashboard, type PeriodQuery } from '@/lib/bureau/api/dashboard';
 import { errorMessage } from '@/lib/bureau/messages';
 import type { Dashboard } from '@/lib/bureau/types';
 import { firstOfMonthBefore, todayInDakar } from '@/lib/dates';

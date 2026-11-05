@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { isSessionError, leaveMember } from '@/lib/bureau/api';
+import { isSessionError } from '@/lib/bureau/api/core';
+import { leaveMember } from '@/lib/bureau/api/members';
 import { errorMessage } from '@/lib/bureau/messages';
 import { LEFT_REASONS, type LeftReason, type MemberDetail } from '@/lib/bureau/types';
 import { formatDate, todayInDakar } from '@/lib/dates';

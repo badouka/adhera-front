@@ -4,21 +4,12 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  BureauApiError,
-  buildQuery,
-  deleteCategory,
-  fetchDocument,
-  getProofUrl,
-  INVALID_CREDENTIALS,
-  isSessionError,
-  listMembers,
-  listPayments,
-  login,
-  logout,
-  createMember,
-  readRetryAfter,
-} from '@/lib/bureau/api';
+import { login, logout } from '@/lib/bureau/api/auth';
+import { deleteCategory } from '@/lib/bureau/api/categories';
+import { BureauApiError, buildQuery, INVALID_CREDENTIALS, isSessionError, readRetryAfter } from '@/lib/bureau/api/core';
+import { fetchDocument } from '@/lib/bureau/api/documents';
+import { listMembers, createMember } from '@/lib/bureau/api/members';
+import { getProofUrl, listPayments } from '@/lib/bureau/api/payments';
 import { getSession, navigation, resetSessionCache, saveSession } from '@/lib/bureau/session';
 import { fakeResponse, memberItem, SESSION, TOKEN } from './fixtures';
 
