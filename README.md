@@ -307,3 +307,42 @@ retirée : ce qui sert rarement est rangé dans « Plus ».
   `/m/[jeton]` et `/v/[code]` (suivis import par import) ; le bureau, lui,
   nomme des rôles.
 - **Poids** : voir la règle plus haut (180 Ko en Brotli, `scripts/poids.mjs`).
+
+## F6 — l'adhésion en ligne, les questions de l'association, l'invitation (contrat `v3.10-adhera-S6`, §17 et §20)
+
+- **`/adherer`** (`src/app/adherer/`) : la porte d'entrée publique. Une page,
+  trois blocs (« Vous », « Vos réponses à l'association », « Pour finir »),
+  pas d'étapes. Les questions selon leur sorte (cases jusqu'à 5 réponses
+  possibles, liste déroulante au-delà, Oui / Non, date relue en lettres),
+  l'e-mail selon `email_mode`, `consent_text` tel que servi, le pot de miel
+  `website` caché, une `Idempotency-Key` par ouverture du formulaire. Les 422
+  s'affichent sous le bon champ (`answers.{id}` sous sa question) et la page
+  défile jusqu'au premier.
+  - ⚠️ **Fermée (`membership_join` éteinte) ou slug inconnu : la même page**,
+    à l'octet. **Aucun oracle d'appartenance** : la confirmation ne dépend que
+    de ce que le visiteur a tapé.
+  - Le bouton principal de la confirmation est « M'envoyer ce lien sur
+    WhatsApp » : le serveur ne renvoie jamais `member_url` une seconde fois.
+- **La page du candidat** (`/m/{jeton}`) : `application.status` décide, jamais
+  `due === null` — `under_review` (rien à payer, aucun bouton),
+  `awaiting_first_payment` (« Votre première cotisation »), `rejected` (le
+  motif, tel quel).
+- **« Faites venir quelqu'un »** : `referral.share_text` tel que servi, un
+  compteur de personnes, jamais de montant. **`card.lines`** sur la carte et
+  dans l'image PNG ; ⚠️ **la vérification `/v/` n'affiche aucune réponse**
+  (garde-fou à l'appui).
+- **Le bureau** : `/bureau/demandes` examine une demande à la fois
+  (admettre puis la bienvenue par WhatsApp, refuser avec un texte libre et
+  deux boutons) ; `/bureau/adhesion-en-ligne` (le lien, « Qui devient
+  membre ? », le formulaire) ; `/bureau/questions` (bornes **servies** par
+  `limits`, jamais recopiées ; une question répondue se retire, elle ne se
+  supprime pas). Les réponses se saisissent dans la fiche ; le `PUT` remplace
+  par question.
+- **`src/lib/whatsapp.ts`** est le seul fichier qui compose une adresse
+  `wa.me` (exception nommée à R3) : le lien que le visiteur s'envoie,
+  l'invitation d'un membre, le lien du bureau. Partout ailleurs, le lien est
+  servi par l'API.
+- **Les téléphones** s'affichent espacés (`src/lib/phone.ts`) ; « Copier »
+  copie les chiffres seuls. **« payer », jamais « régler »**.
+- **`src/lib/bureau/api/`** : un fichier par domaine, sans index — un écran
+  importe le domaine qu'il appelle.
