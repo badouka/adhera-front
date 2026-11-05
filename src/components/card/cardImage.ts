@@ -93,9 +93,28 @@ export function cardFileName(card: MemberCard): string {
   return `carte-${name || 'membre'}.png`;
 }
 
+/**
+ * §21.3 — la photo, tirée en blob depuis l'API (CORS ouvert, `connect-src`
+ * l'autorise) : une image tirée par `<img>` d'un autre domaine salirait le
+ * canevas. Un lien périmé ou une panne : la carte se dessine sans photo.
+ */
+async function loadPhoto(url: string | null | undefined): Promise<ImageBitmap | null> {
+  if (!url || typeof createImageBitmap !== 'function') return null;
+  try {
+    const response = await fetch(url, { cache: 'no-store', referrerPolicy: 'no-referrer' });
+    if (!response.ok) return null;
+    return await createImageBitmap(await response.blob());
+  } catch {
+    return null;
+  }
+}
+
+const PHOTO = 320;
+
 /** Dessine la carte et rend le PNG, et son adresse `data:` pour l'afficher. */
 export async function drawCard(card: MemberCard): Promise<{ blob: Blob; dataUrl: string }> {
   const colors = palette();
+  const photo = await loadPhoto(card.photo_url);
   const family = fontFamily();
   const verifyUrl = card.verify_url?.trim() ?? '';
   const matrix = verifyUrl ? await makeQrMatrix(verifyUrl) : null;
@@ -122,6 +141,7 @@ export async function drawCard(card: MemberCard): Promise<{ blob: Blob; dataUrl:
 
   let height = PAD;
   height += orgLines.length * 58 + (orgLines.length ? 40 : 0);
+  height += photo ? PHOTO + 32 : 0;
   height += nameLines.length * 84 + 16;
   height += subline ? 56 : 0;
   height += answerLines.length ? answerLines.length * 50 + 8 : 0;
@@ -160,6 +180,17 @@ export async function drawCard(card: MemberCard): Promise<{ blob: Blob; dataUrl:
     ctx.fillStyle = colors.line;
     ctx.fillRect(PAD, y, inner, 3);
     y += 24;
+  }
+
+  if (photo) {
+    // Le serveur la rend carrée ; on la dessine telle quelle, sans recadrer.
+    const x = cx - PHOTO / 2;
+    ctx.save();
+    roundRect(ctx, x, y, PHOTO, PHOTO, 24);
+    ctx.clip();
+    ctx.drawImage(photo, x, y, PHOTO, PHOTO);
+    ctx.restore();
+    y += PHOTO + 32;
   }
 
   ctx.fillStyle = colors.ink;

@@ -8,7 +8,7 @@ import { RECORD_PATH, VERIFY_PATH } from '@/components/bureau/BureauFrame';
 import { useBackBar, useBureau } from '@/components/bureau/BureauContext';
 import { ReceiptButton } from '@/components/bureau/Documents';
 import { decisionLabel, isModeUnsupported, periodLabel } from '@/components/bureau/format';
-import { AnswersList } from '@/components/bureau/Answers';
+import { AnswersList, MemberPhoto } from '@/components/bureau/Answers';
 import { ChatIcon } from '@/components/bureau/Icons';
 import {
   bigButtonClass,
@@ -244,7 +244,10 @@ export default function FicheMembrePage() {
     <div className="mx-auto flex w-full max-w-[600px] flex-col gap-4">
       <div>
         <div className="flex items-center justify-between gap-3">
-          <h1 className="title m-0 min-w-0 break-words">{m.name}</h1>
+          <span className="flex min-w-0 items-center gap-3">
+            <MemberPhoto url={m.photo_url} name={m.name} size={64} />
+            <h1 className="title m-0 min-w-0 break-words">{m.name}</h1>
+          </span>
           <MemberPastille member={m} late={late} />
         </div>
         <p className="m-0 text-ink-muted">
@@ -550,10 +553,10 @@ export function joinLines(member: MemberDetail): string[] {
   const when = formatDateTime(decision?.at ?? null);
   const by = decision?.by_name?.trim();
   if (decision?.decision === 'admitted' && when) {
-    lines.push(by ? `Admis le ${when} par ${by}` : `Admis le ${when}`);
+    lines.push(by ? `Admission le ${when} par ${by}` : `Admission le ${when}`);
   }
   if (decision?.decision === 'refused' && when) {
-    lines.push(by ? `Demande refusée le ${when} par ${by}` : `Demande refusée le ${when}`);
+    lines.push(by ? `Refus le ${when} par ${by}` : `Refus le ${when}`);
   }
   const parts: string[] = [];
   if (member.referred_by?.display_name) parts.push(`Invitation de ${member.referred_by.display_name}`);

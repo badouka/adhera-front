@@ -70,6 +70,7 @@ export function updateJoinForm(input: {
   join_intro?: string | null;
   join_ask_region?: boolean;
   join_email_mode?: EmailMode;
+  join_photo_mode?: EmailMode;
 }) {
   return request<Settings>('membership/settings', { method: 'PUT', json: input });
 }

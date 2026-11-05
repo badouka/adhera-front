@@ -181,7 +181,7 @@ describe('Écran 8 — la fiche', () => {
     server();
     const { value } = renderInBureau(<FicheMembrePage />);
     const title = await screen.findByRole('heading', { name: 'Cheikh Diouf' });
-    expect(title.parentElement).toHaveTextContent('En retard');
+    expect(title.closest('div')).toHaveTextContent('En retard');
     expect(screen.getByText('Membre actif · n° 0007 · 77 000 00 07')).toBeInTheDocument();
     expect(value.setBack).toHaveBeenCalledWith(expect.objectContaining({ href: '/bureau/membres', label: 'Les membres' }));
   });

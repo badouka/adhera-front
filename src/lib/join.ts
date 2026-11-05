@@ -20,7 +20,7 @@ export type JoinCategory = {
   mode: string;
 };
 
-export type QuestionType = 'text' | 'choice' | 'yes_no' | 'date';
+export type QuestionType = 'text' | 'choice' | 'yes_no' | 'date' | 'file';
 
 /** §20.4 — une question ACTIVE, sans réglage du bureau (`on_card`…). */
 export type JoinQuestion = {
@@ -33,6 +33,8 @@ export type JoinQuestion = {
 };
 
 export type EmailMode = 'hidden' | 'optional' | 'required';
+/** §21.2 — la photo à l'adhésion. `hidden` : le champ disparaît (une photo postée serait ignorée). */
+export type PhotoMode = 'hidden' | 'optional' | 'required';
 export type AdmissionMode = 'bureau' | 'premier_paiement';
 
 export type JoinForm = {
@@ -47,6 +49,8 @@ export type JoinForm = {
   intro?: string | null;
   ask_region?: boolean;
   email_mode?: EmailMode | string;
+  /** §21.2 — absent d'un serveur antérieur à S7 : lu comme `hidden`. */
+  photo_mode?: PhotoMode | string;
   questions?: JoinQuestion[];
 };
 
@@ -62,6 +66,9 @@ export type JoinInput = {
   category_id: number;
   referral_code: string | null;
   answers: Record<string, AnswerValue>;
+  /** §21.1 — les pièces, par identifiant de question `file`. */
+  files: Record<string, File>;
+  photo: File | null;
   /** Le pot de miel : vide pour un humain, toujours envoyé tel quel. */
   website: string;
 };
@@ -121,15 +128,36 @@ export async function submitJoin(
   if (input.referral_code) body.referral_code = input.referral_code;
   if (Object.keys(input.answers).length > 0) body.answers = input.answers;
 
+  const withFiles = input.photo !== null || Object.keys(input.files).length > 0;
   const response = await send(`${API_BASE}/membership/join`, {
     method: 'POST',
-    headers: {
-      ...headers(tenant),
-      'Content-Type': 'application/json',
-      'Idempotency-Key': idempotencyKey,
-    },
-    body: JSON.stringify(body),
+    // §21.1 — UNE requête, avec tout : du multipart dès qu'il y a un fichier,
+    // du JSON sinon. Pas de Content-Type manuel en multipart : le navigateur
+    // pose la frontière.
+    headers: withFiles
+      ? { ...headers(tenant), 'Idempotency-Key': idempotencyKey }
+      : { ...headers(tenant), 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
+    body: withFiles ? joinFormData(body, input) : JSON.stringify(body),
   });
   if (!response.ok) throw await toApiError(response);
   return (await response.json()) as JoinResult;
+}
+
+/**
+ * La demande en `multipart/form-data` (§21.1) : les champs, `answers[{id}]`
+ * pour chaque réponse (texte ou pièce), `photo`. Un oui/non part en `1` / `0`,
+ * le consentement en `1` — deux formes que l'API accepte (§20.4).
+ */
+export function joinFormData(body: Record<string, unknown>, input: JoinInput): FormData {
+  const form = new FormData();
+  for (const [key, value] of Object.entries(body)) {
+    if (key === 'answers' || value === null || value === undefined) continue;
+    form.set(key, value === true ? '1' : String(value));
+  }
+  for (const [id, value] of Object.entries(input.answers)) {
+    form.set(`answers[${id}]`, typeof value === 'boolean' ? (value ? '1' : '0') : value);
+  }
+  for (const [id, file] of Object.entries(input.files)) form.set(`answers[${id}]`, file);
+  if (input.photo) form.set('photo', input.photo);
+  return form;
 }

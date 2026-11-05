@@ -3,7 +3,7 @@
  */
 
 import { request } from './core';
-import type { Contact, ContactInput, DecidedMember, LeftReason, MemberDetail, MemberFilters, MemberInput, MemberLink, MemberListItem, WhatsappMessage } from '../types';
+import type { Contact, ContactInput, DecidedMember, FileLink, LeftReason, MemberDetail, MemberFilters, MemberInput, MemberLink, MemberListItem, WhatsappMessage } from '../types';
 
 /* ────────────────────────────── Membres ───────────────────────────── */
 
@@ -91,4 +91,12 @@ export function rejectApplication(id: string, reason: string) {
     method: 'POST',
     json: { reason },
   });
+}
+
+/**
+ * §21.5 — le lien d'une pièce justificative, à demander AU CLIC : il vit
+ * 5 minutes, et n'est jamais servi dans une liste.
+ */
+export function getFileLink(uuid: string) {
+  return request<FileLink>(`membership/files/${seg(uuid)}/url`);
 }

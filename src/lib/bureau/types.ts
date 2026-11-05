@@ -102,6 +102,8 @@ export type Settings = {
   join_intro?: string | null;
   join_ask_region?: boolean;
   join_email_mode?: EmailMode;
+  /** §21.2 — la photo sur le formulaire d'adhésion. Absent avant S7. */
+  join_photo_mode?: EmailMode;
 };
 
 export type AdmissionMode = 'bureau' | 'premier_paiement';
@@ -163,7 +165,7 @@ export type MemberType = 'personne' | 'organisation';
 export type MemberStatus = 'active' | 'former' | 'pending' | 'rejected';
 export type JoinSource = 'import' | 'bureau' | 'lien_public' | 'parrainage';
 
-export type QuestionType = 'text' | 'choice' | 'yes_no' | 'date';
+export type QuestionType = 'text' | 'choice' | 'yes_no' | 'date' | 'file';
 
 /**
  * §20.6 — une réponse sur la fiche (et sur les lignes `?status=pending` ou
@@ -174,7 +176,9 @@ export type MemberAnswer = {
   question_id: number;
   label: string;
   type: QuestionType | string;
+  /** Pour une pièce (`file`), l'UUID à passer à `files/{uuid}/url` (§21.5). */
   value: string | boolean | null;
+  /** Pour une pièce, le NOM D'ORIGINE du fichier : c'est lui que le bureau reconnaît. */
   value_label: string | null;
   /** Une question retirée : affichée en lecture seule. */
   archived: boolean;
@@ -238,6 +242,8 @@ export type MemberListItem = {
    * ABSENTE de toute autre liste.
    */
   answers?: MemberAnswer[];
+  /** §21.3 — lien signé de 60 minutes ; sur la fiche et sur chaque ligne de la file. */
+  photo_url?: string | null;
 };
 
 export type DueStatus = 'due' | 'partielle' | 'reglee' | 'exoneree';
@@ -769,4 +775,13 @@ export type QuestionInput = {
   options?: string[];
   required: boolean;
   on_card: boolean;
+};
+
+/** §21.5 — le lien d'une pièce, demandé AU CLIC, valable 5 minutes. */
+export type FileLink = {
+  url: string;
+  original_name: string;
+  mime_type: string;
+  size: number;
+  expires_in: number;
 };

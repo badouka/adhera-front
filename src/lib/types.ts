@@ -128,6 +128,12 @@ export type MemberCard = {
    * serveur antérieur, lue comme `[]`. ⚠️ Jamais sur la vérification `/v/`.
    */
   lines?: CardLine[];
+  /**
+   * §21.3 (v3.11-S7) — la photo, ré-encodée par le serveur (carrée, 600 × 600,
+   * JPEG, sans métadonnées). Lien signé de 60 minutes : jamais gardé au-delà.
+   * `null` : pas de photo.
+   */
+  photo_url?: string | null;
 };
 
 export type CardLine = { label: string; value: string };
@@ -178,6 +184,23 @@ export type MemberPayload = {
   application?: Application | null;
   /** §17.8 — `null` si `membership_join` est éteinte, ou pour un non-actif. */
   referral?: Referral | null;
+  /**
+   * §21.3 — la photo, servie AUSSI hors de `card` : un candidat doit voir la
+   * sienne avant que le bureau n'imprime.
+   */
+  photo_url?: string | null;
+  /**
+   * §21.5 — ses réponses, RÉDUITES : ni `value`, ni lien. Une pièce s'y lit
+   * « Document envoyé », jamais son nom de fichier.
+   */
+  answers?: MemberPageAnswer[];
+};
+
+export type MemberPageAnswer = {
+  question_id: number;
+  label: string;
+  type: string;
+  value_label: string | null;
 };
 
 /* ───────────────── Vérification publique (§16.5) ───────────────── */
@@ -202,6 +225,11 @@ export type Verification = {
     category_label: string | null;
     member_number: string | null;
     member_since: string | null;
+    /**
+     * §21 — la SEULE déclaration du membre servie à un tiers : elle prouve que
+     * celui qui présente la carte est celui qu'elle désigne. Aucune réponse.
+     */
+    photo_url?: string | null;
   };
   standing: VerificationStanding;
   /** Toujours `null` pour un ancien membre. */

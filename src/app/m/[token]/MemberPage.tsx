@@ -228,6 +228,7 @@ export function MemberPage({ token }: { token: string }) {
         <ApplicationPage
           application={application}
           name={payload.member.first_name?.trim() || payload.member.name}
+          payload={payload}
         />
       </Shell>
     );
@@ -351,6 +352,9 @@ export function MemberPage({ token }: { token: string }) {
       ) : null}
 
       <ReceiptList receipts={payload.receipts} token={token} tenant={tenant} />
+
+      {/* Sans carte (candidat, ou carte éteinte), la photo se voit ici. */}
+      <SentToAssociation payload={payload} withPhoto={!card} />
 
       {referral ? <ReferralBlock referral={referral} /> : null}
 
@@ -651,9 +655,11 @@ function DueBlock({
 function ApplicationPage({
   application,
   name,
+  payload,
 }: {
   application: Application;
   name: string;
+  payload: MemberPayload;
 }) {
   const greeting = name.trim() ? `Bonjour ${name.trim()}` : 'Bonjour';
 
@@ -687,6 +693,7 @@ function ApplicationPage({
           Vous n’avez rien à payer pour l’instant : l’association vous répondra sur WhatsApp.
         </p>
       </section>
+      <SentToAssociation payload={payload} withPhoto />
       <p className="small m-0 text-center text-ink-muted">
         Gardez le message qui contient ce lien : c’est votre accès personnel.
       </p>
@@ -734,6 +741,48 @@ function ReferralBlock({ referral }: { referral: Referral }) {
       >
         Inviter par WhatsApp
       </a>
+    </section>
+  );
+}
+
+/**
+ * §21.3 et §21.5 — ce que la personne a envoyé : sa photo (pour vérifier le
+ * cadrage avant que le bureau n'imprime) et ses réponses. Une pièce s'y lit
+ * « Document envoyé » : AUCUN lien n'existe pour le membre, donc aucun bouton.
+ */
+function SentToAssociation({ payload, withPhoto }: { payload: MemberPayload; withPhoto: boolean }) {
+  const photo = withPhoto ? (payload.photo_url ?? null) : null;
+  const answers = (payload.answers ?? []).filter((a) => a.label?.trim());
+  if (!photo && answers.length === 0) return null;
+  return (
+    <section className="flex flex-col gap-3 rounded-[var(--radius-md)] border border-line bg-surface-raised p-4" data-testid="sent">
+      <h2 className="heading m-0">Ce que vous avez envoyé à l’association</h2>
+      {photo ? (
+        <div className="flex items-center gap-3">
+          <img
+            src={photo}
+            alt="Votre photo"
+            width={96}
+            height={96}
+            referrerPolicy="no-referrer"
+            className="size-24 shrink-0 rounded-[var(--radius-sm)] border border-line object-cover"
+            data-testid="my-photo"
+          />
+          <p className="small m-0 text-ink-muted">Votre photo, telle qu’elle figurera sur votre carte de membre.</p>
+        </div>
+      ) : null}
+      {answers.length > 0 ? (
+        <dl className="m-0 flex flex-col gap-2">
+          {answers.map((answer) => (
+            <div key={answer.question_id} className="flex flex-col">
+              <dt className="small text-ink-muted">{answer.label}</dt>
+              <dd className={`m-0 break-words ${answer.value_label ? '' : 'text-ink-muted'}`}>
+                {answer.value_label?.trim() || 'Pas de réponse'}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
     </section>
   );
 }

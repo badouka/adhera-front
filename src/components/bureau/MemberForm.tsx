@@ -49,6 +49,8 @@ export function changedAnswers(
 ): Record<string, string | boolean> {
   const out: Record<string, string | boolean> = {};
   for (const question of questions) {
+    // §21.4 — une pièce ne s'écrit JAMAIS par une chaîne : seul un dépôt de fichier.
+    if (question.type === 'file') continue;
     const key = String(question.id);
     const value = draft[key] ?? '';
     const before = initial[key] ?? '';
@@ -368,7 +370,7 @@ export function MemberForm({
         <fieldset className="m-0 flex flex-col gap-4 border-0 border-t border-line p-0 pt-4" data-testid="member-answers">
           <legend className="float-left mb-1 w-full p-0 font-semibold">Ses réponses aux questions de l’association</legend>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {questions.map((question) => (
+            {questions.filter((question) => question.type !== 'file').map((question) => (
               <AnswerInput
                 key={question.id}
                 question={question}

@@ -346,3 +346,18 @@ retirée : ce qui sert rarement est rangé dans « Plus ».
   copie les chiffres seuls. **« payer », jamais « régler »**.
 - **`src/lib/bureau/api/`** : un fichier par domaine, sans index — un écran
   importe le domaine qu'il appelle.
+- **§21 (`v3.11-adhera-S7`) — la photo et la pièce justificative.**
+  - La demande part en **une seule requête** : `multipart/form-data` dès qu'un
+    fichier est joint (`photo`, `answers[{id}]`), JSON sinon. Après un `422`,
+    **les fichiers sont à re-choisir** : le serveur n'a rien gardé, l'écran le dit.
+  - La photo suit `photo_mode` (`hidden` · `optional` · `required`). Elle n'est
+    **jamais recadrée ici** : le serveur rend un carré de 600 px, sans
+    métadonnées. Elle figure sur la carte (et l'image PNG), sur la fiche, dans
+    la file d'examen et sur la **vérification publique** — la seule déclaration
+    du membre qu'un tiers voie (exception nommée au garde-fou de `/v/`).
+  - Une pièce (`file`) : côté membre, « Document envoyé », **sans aucun lien
+    ni bouton** ; côté bureau, son nom d'origine et « Ouvrir le document », dont
+    le lien (5 minutes) est demandé **au clic**. La saisie du bureau n'écrit
+    jamais une pièce par une chaîne.
+  - `email_mode = hidden` ignore désormais un e-mail posté au lieu de le
+    refuser ; l'écran n'en envoyait déjà aucun.

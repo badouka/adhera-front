@@ -1257,7 +1257,8 @@ describe('les écrans des questions — question, sorte, réponses possibles (F6
 /**
  * §20.7 — la vérification `/v/{code}` ne montre AUCUNE réponse : un tiers y
  * apprend l'appartenance, jamais les déclarations. Ni `lines`, ni `answers`
- * dans les fichiers qu'elle charge.
+ * dans les fichiers qu'elle charge. §21 — UNE exception, nommée : la photo
+ * (`member.photo_url`), qui prouve que le porteur est celui que la carte désigne.
  */
 describe('vérification publique — aucune réponse (F6, §20.7)', () => {
   const VERIFY = importClosure([join(SRC, 'app', 'v', '[code]', 'page.tsx')]);
@@ -1268,6 +1269,12 @@ describe('vérification publique — aucune réponse (F6, §20.7)', () => {
       .map((file) => relative(SRC, file));
     expect(readers).toEqual([]);
     expect(VERIFY.map((f) => relative(SRC, f))).not.toContain('components/card/MemberCardView.tsx');
+  });
+
+  it('§21 — l’exception nommée : la vérification lit member.photo_url, et seulement cette déclaration', () => {
+    const verify = stripComments(readFileSync(join(SRC, 'app', 'v', '[code]', 'VerifyPage.tsx'), 'utf8'));
+    expect(/member\.photo_url/.test(verify)).toBe(true);
+    expect(/\.(lines|answers|value_label)\b/.test(verify)).toBe(false);
   });
 
   it('contre-épreuve : la carte du membre, elle, lit card.lines', () => {

@@ -68,6 +68,8 @@ export function validateJoin(
     email: string;
     consent: boolean;
     answers: Record<string, AnswerValue>;
+    files?: Record<string, File>;
+    photo?: File | null;
   },
 ): Errors {
   const errors: Errors = {};
@@ -80,9 +82,24 @@ export function validateJoin(
   } else if (digits.length < 9) {
     errors.phone = 'Ce numéro est trop court : écrivez-le en entier, par exemple 77 123 45 67.';
   }
+  const photo = values.photo ?? null;
+  if (photoMode(form) === 'required' && !photo) {
+    errors.photo = 'Envoyez une photo : elle figurera sur votre carte de membre.';
+  } else if (photo && photo.size > MAX_FILE_BYTES) {
+    errors.photo = 'Le fichier dépasse la taille maximale de 5 MB.';
+  }
   for (const question of form.questions ?? []) {
+    const key = `answers.${question.id}`;
+    if (question.type === 'file') {
+      const file = values.files?.[String(question.id)];
+      if (question.required && !file) errors[key] = `Envoyez un document pour « ${question.label} ».`;
+      else if (file && file.size > MAX_FILE_BYTES) {
+        errors[key] = `« ${question.label} » : le fichier dépasse la taille maximale de 5 MB.`;
+      }
+      continue;
+    }
     if (question.required && !isAnswered(values.answers[String(question.id)])) {
-      errors[`answers.${question.id}`] = `Répondez à la question « ${question.label} ».`;
+      errors[key] = `Répondez à la question « ${question.label} ».`;
     }
   }
   if (form.email_mode === 'required' && !values.email.trim()) {
@@ -90,6 +107,18 @@ export function validateJoin(
   }
   if (!values.consent) errors.consent = 'Cochez la case de consentement pour envoyer votre demande.';
   return errors;
+}
+
+/**
+ * §21.1 — 5 Mo par fichier. La borne n'est pas servie ; on la vérifie AVANT
+ * l'envoi parce qu'un fichier trop lourd coûte plusieurs mégaoctets de 3G pour
+ * un refus certain. Le serveur reste l'autorité (types, contenu).
+ */
+export const MAX_FILE_BYTES = 5 * 1024 * 1024;
+
+/** §21.2 — absent d'un serveur antérieur à S7 : pas de champ photo. */
+export function photoMode(form: JoinForm): string {
+  return form.photo_mode ?? 'hidden';
 }
 
 /** L'ordre des champs à l'écran : la page défile jusqu'au PREMIER en erreur. */
@@ -100,6 +129,7 @@ export function fieldOrder(form: JoinForm): string[] {
     'last_name',
     'phone',
     ...(form.ask_region ? ['region'] : []),
+    ...(photoMode(form) === 'hidden' ? [] : ['photo']),
     ...(form.questions ?? []).map((q) => `answers.${q.id}`),
     ...(form.email_mode === 'hidden' ? [] : ['email']),
     'consent',
@@ -260,6 +290,11 @@ function JoinFormView({
   const [consent, setConsent] = useState(false);
   const [answers, setAnswers] = useState<Record<string, AnswerValue>>({});
   const [website, setWebsite] = useState('');
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [files, setFiles] = useState<Record<string, File>>({});
+  // §21.1 — après un refus, RIEN n'a été gardé : les fichiers sont à re-choisir.
+  const [reselect, setReselect] = useState(false);
+  const [filesKey, setFilesKey] = useState(0);
   const [errors, setErrors] = useState<Errors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -300,7 +335,7 @@ function JoinFormView({
     event.preventDefault();
     if (busy) return;
     setFormError(null);
-    const local = validateJoin(form, { categoryId, firstName, lastName, phone, email, consent, answers });
+    const local = validateJoin(form, { categoryId, firstName, lastName, phone, email, consent, answers, files, photo });
     if (Object.keys(local).length > 0) {
       setErrors(local);
       setFocusTick((n) => n + 1);
@@ -309,6 +344,7 @@ function JoinFormView({
     setBusy(true);
     const sentAnswers: Record<string, AnswerValue> = {};
     for (const question of questions) {
+      if (question.type === 'file') continue;
       const value = answers[String(question.id)];
       if (isAnswered(value)) sentAnswers[String(question.id)] = typeof value === 'string' ? value.trim() : value;
     }
@@ -324,6 +360,8 @@ function JoinFormView({
           category_id: categoryId as number,
           referral_code: parrain,
           answers: sentAnswers,
+          files,
+          photo: photoMode(form) === 'hidden' ? null : photo,
           website,
         },
         idempotencyKey,
@@ -344,6 +382,12 @@ function JoinFormView({
       if (error instanceof ApiError && error.status === 422) {
         // Rien n'a été créé : la saisie corrigée est une NOUVELLE tentative.
         renewKey();
+        if (photo || Object.keys(files).length > 0) {
+          setPhoto(null);
+          setFiles({});
+          setFilesKey((n) => n + 1);
+          setReselect(true);
+        }
         const fields = fieldMessages(error);
         const known = fieldOrder(form);
         const placed: Errors = {};
@@ -494,11 +538,49 @@ function JoinFormView({
             <ErrorText id={fieldId('region')} message={errors.region} />
           </div>
         ) : null}
+        {photoMode(form) !== 'hidden' ? (
+          <FileInput
+            key={`photo-${filesKey}`}
+            id="photo"
+            label={`${next()}. Votre photo`}
+            optional={photoMode(form) !== 'required'}
+            accept="image/jpeg,image/png,image/webp"
+            hint="Elle figurera sur votre carte de membre : votre visage, de face, bien éclairé."
+            file={photo}
+            preview
+            reselect={reselect}
+            error={errors.photo}
+            onChange={(file) => {
+              setPhoto(file);
+              clear('photo');
+            }}
+          />
+        ) : null}
       </Block>
 
       {questions.length > 0 ? (
         <Block title="Vos réponses à l’association">
-          {questions.map((question) => (
+          {questions.map((question) =>
+            question.type === 'file' ? (
+              <FileInput
+                key={`${question.id}-${filesKey}`}
+                id={`answers.${question.id}`}
+                label={`${next()}. ${question.label}`}
+                optional={!question.required}
+                accept="application/pdf,image/jpeg,image/png"
+                hint="Un PDF, ou une photo du document (JPEG ou PNG), 5 Mo au plus."
+                file={files[String(question.id)] ?? null}
+                reselect={reselect}
+                error={errors[`answers.${question.id}`]}
+                onChange={(file) => {
+                  setFiles((prev) => {
+                    const { [String(question.id)]: _old, ...rest } = prev;
+                    return file ? { ...rest, [String(question.id)]: file } : rest;
+                  });
+                  clear(`answers.${question.id}`);
+                }}
+              />
+            ) : (
             <QuestionField
               key={question.id}
               number={next()}
@@ -507,7 +589,8 @@ function JoinFormView({
               error={errors[`answers.${question.id}`]}
               onChange={(value) => setAnswer(question.id, value)}
             />
-          ))}
+            ),
+          )}
         </Block>
       ) : null}
 
@@ -660,6 +743,86 @@ function TextField({
       {hint ? (
         <span id={`${domId}-aide`} className="small text-ink-muted">
           {hint}
+        </span>
+      ) : null}
+      <ErrorText id={domId} message={error} />
+    </div>
+  );
+}
+
+/**
+ * Un fichier à joindre (§21.1) : la photo, ou une pièce justificative. Rien
+ * n'est recadré ni converti ici — le serveur rend une photo carrée de 600 px ;
+ * l'aperçu montre le même cadrage, centré. Après un refus, le fichier est à
+ * choisir à nouveau : le serveur n'a rien gardé.
+ */
+function FileInput({
+  id,
+  label,
+  optional,
+  accept,
+  hint,
+  file,
+  preview = false,
+  reselect,
+  error,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  optional: boolean;
+  accept: string;
+  hint: string;
+  file: File | null;
+  preview?: boolean;
+  reselect: boolean;
+  error: string | undefined;
+  onChange: (file: File | null) => void;
+}) {
+  const domId = fieldId(id);
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!preview || !file || !file.type.startsWith('image/')) {
+      setDataUrl(null);
+      return;
+    }
+    // Une adresse `data:` : la politique de la page n'autorise pas `blob:`.
+    const reader = new FileReader();
+    reader.onload = () => setDataUrl(typeof reader.result === 'string' ? reader.result : null);
+    reader.readAsDataURL(file);
+    return () => reader.abort();
+  }, [file, preview]);
+
+  return (
+    <div className="flex flex-col gap-[6px]">
+      <label htmlFor={domId} className="font-semibold">
+        {label}
+        {optional ? <span className="font-normal text-ink-muted"> (facultatif)</span> : null}
+      </label>
+      <span id={`${domId}-aide`} className="small text-ink-muted">
+        {hint}
+      </span>
+      {dataUrl ? (
+        <img
+          src={dataUrl}
+          alt="Votre photo, telle qu’elle sera recadrée sur la carte"
+          className="size-28 rounded-[var(--radius-sm)] border border-line object-cover"
+          data-testid="photo-apercu"
+        />
+      ) : null}
+      <input
+        id={domId}
+        type="file"
+        accept={accept}
+        onChange={(e) => onChange(e.target.files?.[0] ?? null)}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={described(domId, error, true)}
+        className={`${inputClass(!!error)} py-2`}
+      />
+      {file ? <span className="small break-words text-ink-muted">{file.name}</span> : null}
+      {reselect && !file && !error ? (
+        <span className="small font-semibold text-due" data-testid="a-rechoisir">
+          À choisir à nouveau : après un refus, aucun fichier n’est gardé.
         </span>
       ) : null}
       <ErrorText id={domId} message={error} />

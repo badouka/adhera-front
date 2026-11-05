@@ -213,3 +213,33 @@ describe('F6 § 6 — un téléphone se lit espacé, se copie en chiffres', () =
     await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith('761234567'));
   });
 });
+
+describe('§21 — la photo et « Document envoyé », côté membre', () => {
+  const PHOTO = 'https://api.eventflow.africa/api/v1/membership/files/4b74?expires=1&signature=s';
+
+  it('la carte porte la photo servie, sans recadrage', () => {
+    render(<MemberCardView card={memberCard({ photo_url: PHOTO })} />);
+    expect(screen.getByTestId('card-photo')).toHaveAttribute('src', PHOTO);
+  });
+
+  it('un candidat voit sa photo et ses réponses ; une pièce dit « Document envoyé », sans aucun bouton', async () => {
+    renderWith(
+      payload({
+        member: CANDIDATE,
+        standing: { is_up_to_date: false, covered_until: null },
+        application: { status: 'under_review', submitted_at: '2026-11-04T09:12:33+00:00', rejection_reason: null },
+        photo_url: PHOTO,
+        answers: [
+          { question_id: 3, label: 'Carte professionnelle', type: 'file', value_label: 'Document envoyé' },
+          { question_id: 1, label: 'Spécialité', type: 'choice', value_label: 'Imagerie médicale' },
+        ],
+      }),
+    );
+    const sent = await screen.findByTestId('sent');
+    expect(within(sent).getByTestId('my-photo')).toHaveAttribute('src', PHOTO);
+    expect(sent).toHaveTextContent('Carte professionnelleDocument envoyé');
+    expect(sent).toHaveTextContent('SpécialitéImagerie médicale');
+    expect(within(sent).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(sent).queryByRole('link')).not.toBeInTheDocument();
+  });
+});

@@ -159,6 +159,18 @@ function MemberLines({ member }: { member: Verification['member'] }) {
   const category = member.category_label?.trim();
   return (
     <section className="flex flex-col gap-1">
+      {/* §21 — la photo, et elle seule : elle dit que le porteur est bien celui que la carte désigne. */}
+      {member.photo_url ? (
+        <img
+          src={member.photo_url}
+          alt={`Photo de ${member.display_name}`}
+          width={120}
+          height={120}
+          referrerPolicy="no-referrer"
+          className="mb-2 size-[120px] rounded-[var(--radius-md)] border border-line object-cover"
+          data-testid="verify-photo"
+        />
+      ) : null}
       <p className="m-0 text-[24px] leading-8 font-bold break-words">{member.display_name}</p>
       {category ? <p className="m-0 text-ink-muted">{category}</p> : null}
       {number ? <p className="m-0 tnum">N° {number}</p> : null}

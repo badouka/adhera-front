@@ -14,6 +14,7 @@ export const SORT_LABELS: Record<QuestionType, string> = {
   choice: 'Liste de choix',
   yes_no: 'Oui / Non',
   date: 'Date',
+  file: 'Pièce justificative',
 };
 
 /** Ce que la sorte demande au membre, sous chaque grand choix. */
@@ -22,6 +23,7 @@ export const SORT_HINTS: Record<QuestionType, string> = {
   choice: 'Le membre choisit une réponse dans votre liste.',
   yes_no: 'Le membre répond oui ou non.',
   date: 'Le membre choisit une date.',
+  file: 'Le membre joint un document (PDF ou photo, 5 Mo au plus). Seul le bureau peut l’ouvrir.',
 };
 
 export function sortLabel(type: string): string {

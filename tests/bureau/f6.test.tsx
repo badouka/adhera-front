@@ -275,13 +275,13 @@ describe('F6 § 4 — « Demandes d’adhésion », une à la fois', () => {
 /* ───────────────────────────── La fiche (§20.8) ───────────────────────────── */
 
 describe('F6 § 4 — la fiche : qui a décidé, l’invitation', () => {
-  it('« Admis le … par … », la date seule sans auteur, jamais « inconnu »', () => {
+  it('« Admission le … par … », la date seule sans auteur, jamais « inconnu »', () => {
     const at = '2026-11-04T09:12:33+00:00';
     expect(joinLines(memberDetail({ application_decision: { decision: 'admitted', by_name: 'Aïssatou Ndiaye', at } }))).toEqual([
-      'Admis le 4 novembre 2026 par Aïssatou Ndiaye',
+      'Admission le 4 novembre 2026 par Aïssatou Ndiaye',
     ]);
     expect(joinLines(memberDetail({ application_decision: { decision: 'admitted', by_name: null, at } }))).toEqual([
-      'Admis le 4 novembre 2026',
+      'Admission le 4 novembre 2026',
     ]);
     // `decision: null` : la trace reste, l'étiquette ne prétend rien.
     expect(joinLines(memberDetail({ application_decision: { decision: null, by_name: 'X', at } }))).toEqual([]);
@@ -349,14 +349,16 @@ describe('F6 § 5 — « L’adhésion en ligne »', () => {
     const user = userEvent.setup();
     const fetchMock = fakeServer([{ method: 'PUT', match: 'membership/settings', body: OPEN }]);
     renderInBureau(<AdhesionEnLignePage />, { settings: { ...OPEN, join_intro: 'Bienvenue.' } });
-    await user.click(screen.getByRole('radio', { name: 'Obligatoire' }));
+    await user.click(within(screen.getByRole('group', { name: 'L’adresse e-mail' })).getByRole('radio', { name: 'Obligatoire' }));
     await waitFor(() => expect(body(fetchMock, 'PUT', 0)).toEqual({ join_email_mode: 'required' }));
+    await user.click(within(screen.getByRole('group', { name: 'La photo' })).getByRole('radio', { name: 'Obligatoire' }));
+    await waitFor(() => expect(body(fetchMock, 'PUT', 1)).toEqual({ join_photo_mode: 'required' }));
     await user.click(screen.getByRole('checkbox', { name: 'Demander la région' }));
-    await waitFor(() => expect(body(fetchMock, 'PUT', 1)).toEqual({ join_ask_region: false }));
+    await waitFor(() => expect(body(fetchMock, 'PUT', 2)).toEqual({ join_ask_region: false }));
     expect(screen.getByText(/10 \/ 300/)).toBeInTheDocument();
     await user.clear(screen.getByLabelText(/Le mot d’accueil/));
     await user.click(screen.getByRole('button', { name: 'Enregistrer le mot d’accueil' }));
-    await waitFor(() => expect(body(fetchMock, 'PUT', 2)).toEqual({ join_intro: null }));
+    await waitFor(() => expect(body(fetchMock, 'PUT', 3)).toEqual({ join_intro: null }));
   });
 
   it('le message du bureau : le sigle et le nom, puis le lien', () => {
@@ -531,5 +533,43 @@ describe('F6 § 5 — les réponses dans « Modifier ses informations » (§20.6
   it('à la création : seulement les réponses données, aucune obligatoire', () => {
     expect(changedAnswers(questions, { '1': 'Laboratoire', '2': '  ' }, {}, true)).toEqual({ '1': 'Laboratoire' });
     expect(changedAnswers(questions, {}, {}, true)).toEqual({});
+  });
+});
+
+/* ─────────────────────────── §21 — la pièce, au clic ─────────────────────────── */
+
+describe('§21.5 — une pièce justificative, côté bureau', () => {
+  it('son NOM, et le lien demandé AU CLIC seulement (5 minutes), dans l’onglet ouvert au clic', async () => {
+    const user = userEvent.setup();
+    const tab = { closed: false, opener: {}, location: { replace: vi.fn() }, close: vi.fn() };
+    vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window);
+    const withPiece = {
+      ...BABACAR,
+      photo_url: 'https://api.eventflow.africa/api/v1/membership/files/p1?expires=1&signature=s',
+      answers: [
+        { question_id: 8, label: 'Arrêté de nomination', type: 'file', value: '4b74-uuid', value_label: 'arrete-2019.pdf', archived: false },
+      ],
+    };
+    const fetchMock = demandes(
+      [{ match: 'membership/files/4b74-uuid/url', body: { url: 'https://api.eventflow.africa/api/v1/membership/files/4b74-uuid?expires=1&tenant=demo-asso&signature=s', original_name: 'arrete-2019.pdf', mime_type: 'application/pdf', size: 184320, expires_in: 300 } }],
+      [withPiece],
+    );
+    renderInBureau(<DemandesPage />);
+    const card = await screen.findByTestId('application');
+    expect(within(card).getByTestId('member-photo')).toHaveAttribute('src', withPiece.photo_url);
+    expect(card).toHaveTextContent('arrete-2019.pdf');
+    // Rien n'est demandé tant qu'on n'a pas cliqué.
+    expect(calls(fetchMock).some((c) => c.url.includes('/files/'))).toBe(false);
+    await user.click(within(card).getByRole('button', { name: 'Ouvrir le document' }));
+    await waitFor(() =>
+      expect(tab.location.replace).toHaveBeenCalledWith(
+        'https://api.eventflow.africa/api/v1/membership/files/4b74-uuid?expires=1&tenant=demo-asso&signature=s',
+      ),
+    );
+  });
+
+  it('la saisie du bureau n’écrit jamais une pièce par une chaîne', () => {
+    const piece = question({ id: 8, label: 'Arrêté', type: 'file' });
+    expect(changedAnswers([piece], { '8': 'un-autre-uuid' }, { '8': '4b74-uuid' }, false)).toEqual({});
   });
 });

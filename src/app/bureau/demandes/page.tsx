@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { AnswersList } from '@/components/bureau/Answers';
+import { AnswersList, MemberPhoto } from '@/components/bureau/Answers';
 import { useBackBar, useBureau } from '@/components/bureau/BureauContext';
 import { headerTitle, personName } from '@/components/bureau/BureauFrame';
 import { ChatIcon } from '@/components/bureau/Icons';
@@ -306,11 +306,14 @@ function ApplicationCard({
   return (
     <>
       <section className="flex flex-col gap-4 rounded-[var(--radius-md)] border border-line bg-surface-raised p-4" data-testid="application">
-        <div>
-          <h2 className="title m-0 break-words">{member.name}</h2>
-          <p className="m-0">
-            demande à adhérer comme <b>{categoryLine(member, categories) || 'membre'}</b>
-          </p>
+        <div className="flex items-start gap-3">
+          <MemberPhoto url={member.photo_url} name={member.name} size={80} />
+          <div className="min-w-0">
+            <h2 className="title m-0 break-words">{member.name}</h2>
+            <p className="m-0">
+              demande à adhérer comme <b>{categoryLine(member, categories) || 'membre'}</b>
+            </p>
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Fact label="Téléphone">

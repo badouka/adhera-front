@@ -69,6 +69,7 @@ export default function AdhesionEnLignePage() {
   const [shown, setShown] = useState<{
     mode?: AdmissionMode;
     email?: EmailMode;
+    photo?: EmailMode;
     region?: boolean;
   }>({});
 
@@ -78,6 +79,7 @@ export default function AdhesionEnLignePage() {
   const mode = shown.mode ?? settings.admission_mode ?? 'bureau';
   const emailMode = shown.email ?? settings.join_email_mode ?? 'optional';
   const askRegion = shown.region ?? settings.join_ask_region ?? true;
+  const photoMode = shown.photo ?? settings.join_photo_mode ?? 'optional';
   const savedIntro = settings.join_intro ?? '';
   const joinUrl = origin ? `${origin}/adherer` : '';
 
@@ -220,6 +222,25 @@ export default function AdhesionEnLignePage() {
           />
           <span>Demander la région</span>
         </label>
+
+        <fieldset className="m-0 flex flex-col gap-2 border-0 p-0" disabled={busy}>
+          <legend className="mb-1 p-0 font-semibold">La photo</legend>
+          <span className="small mb-1 text-ink-muted">
+            Elle figure sur la carte de membre, et sur la vérification de la carte.
+          </span>
+          {EMAIL_CHOICES.map((choice) => (
+            <label key={choice.value} className="flex min-h-11 cursor-pointer items-center gap-3">
+              <input
+                type="radio"
+                name="photo-mode"
+                checked={photoMode === choice.value}
+                onChange={() => void save(() => updateJoinForm({ join_photo_mode: choice.value }), { photo: choice.value })}
+                className="size-5 shrink-0 accent-indigo"
+              />
+              <span>{choice.label}</span>
+            </label>
+          ))}
+        </fieldset>
 
         <fieldset className="m-0 flex flex-col gap-2 border-0 p-0" disabled={busy}>
           <legend className="mb-2 p-0 font-semibold">L’adresse e-mail</legend>

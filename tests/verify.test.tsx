@@ -22,6 +22,8 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  // Un test espionne `resolveTenant` : l'espion ne doit pas survivre au suivant.
+  vi.restoreAllMocks();
 });
 
 function verification(overrides: Partial<Verification> = {}): Verification {
@@ -238,5 +240,19 @@ describe('F4 § 2 — un seul cas d’erreur', () => {
 describe('F4 § 2 — noindex, aucune mesure d’audience', () => {
   it('la page porte noindex', () => {
     expect(metadata.robots).toMatchObject({ index: false, follow: false });
+  });
+});
+
+describe('§21 — la vérification montre la photo, et rien d’autre que le membre ait déclaré', () => {
+  it('la photo servie (member.photo_url), et aucune réponse même si la charge en portait', async () => {
+    const photo = 'https://api.eventflow.africa/api/v1/membership/files/4b74?expires=1&signature=s';
+    const body = verification({ member: { ...verification().member, photo_url: photo } }) as Verification & Record<string, unknown>;
+    // Une charge qui porterait par erreur des réponses : l'écran ne les lit pas.
+    (body.member as Record<string, unknown>).lines = [{ label: 'Spécialité', value: 'Imagerie médicale' }];
+    body.answers = [{ label: 'Spécialité', value_label: 'Imagerie médicale' }];
+    await show(body);
+    await screen.findByText('Aminata Diop');
+    expect(screen.getByTestId('verify-photo')).toHaveAttribute('src', photo);
+    expect(document.body.textContent).not.toMatch(/Spécialité|Imagerie médicale/);
   });
 });

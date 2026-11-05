@@ -80,7 +80,7 @@ function posts() {
 }
 
 async function fillIdentity(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole('radio', { name: /Membre actif/ }));
+  await user.click(await screen.findByRole('radio', { name: /Membre actif/ }));
   await user.type(screen.getByLabelText('2. Votre prénom'), 'Babacar');
   await user.type(screen.getByLabelText('3. Votre nom'), 'Kane');
   await user.type(screen.getByLabelText('4. Votre numéro WhatsApp'), '77 000 00 22');
@@ -394,5 +394,109 @@ describe('/adherer — l’envoi, et « Votre demande est envoyée »', () => {
     await user.click(screen.getByRole('button', { name: 'Envoyer ma demande' }));
     await screen.findByRole('heading', { name: 'Votre demande est envoyée' });
     expect(screen.queryByRole('link', { name: /WhatsApp/ })).not.toBeInTheDocument();
+  });
+});
+
+describe('/adherer — la photo et la pièce justificative (§21)', () => {
+  const PIECE = { id: 8, label: 'Arrêté de nomination', type: 'file', options: [], required: true };
+  const MEMBER_URL = `https://demo-asso.adhera.africa/m/${'Y'.repeat(64)}`;
+  const jpeg = () => new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0])], 'moi.jpg', { type: 'image/jpeg' });
+  const pdf = () => new File(['%PDF-1.4'], 'arrete-2019.pdf', { type: 'application/pdf' });
+
+  it('photo_mode : hidden sans champ, optional facultatif, required numéroté et exigé', async () => {
+    serve(fakeResponse(200, form({ photo_mode: 'hidden' })));
+    render(<JoinPage parrain={null} />);
+    await screen.findByText('1. Vous adhérez comme');
+    expect(screen.queryByLabelText(/Votre photo/)).not.toBeInTheDocument();
+    cleanup();
+    serve(fakeResponse(200, form({ photo_mode: 'optional' })));
+    render(<JoinPage parrain={null} />);
+    expect(await screen.findByLabelText(/^6\. Votre photo/)).toHaveAttribute('accept', 'image/jpeg,image/png,image/webp');
+    expect(screen.getByText('(facultatif)', { selector: 'label[for="adherer-photo"] span' })).toBeInTheDocument();
+    cleanup();
+    const user = userEvent.setup();
+    serve(fakeResponse(200, form({ photo_mode: 'required' })));
+    render(<JoinPage parrain={null} />);
+    await fillIdentity(user);
+    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('button', { name: 'Envoyer ma demande' }));
+    expect(screen.getByText('Envoyez une photo : elle figurera sur votre carte de membre.')).toBeInTheDocument();
+    expect(posts()).toHaveLength(0);
+  });
+
+  it('UNE requête multipart : les champs, answers[{id}] (texte et pièce), photo — et la même clé', async () => {
+    const user = userEvent.setup();
+    serve(
+      fakeResponse(200, form({ photo_mode: 'optional', questions: [SPECIALITE, RETRAITE, PIECE] })),
+      fakeResponse(201, { message: 'ok', member_url: MEMBER_URL }),
+    );
+    render(<JoinPage parrain={null} />);
+    await fillIdentity(user);
+    await user.upload(screen.getByLabelText(/^6\. Votre photo/), jpeg());
+    await user.click(screen.getByRole('radio', { name: 'Laboratoire' }));
+    await user.click(screen.getByRole('radio', { name: 'Oui' }));
+    await user.upload(screen.getByLabelText(/^9\. Arrêté de nomination/), pdf());
+    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('button', { name: 'Envoyer ma demande' }));
+    await screen.findByRole('heading', { name: 'Votre demande est envoyée' });
+
+    const call = fetchMock.mock.calls.find((c) => (c[1] as RequestInit).method === 'POST') as [string, RequestInit];
+    const body = call[1].body as FormData;
+    expect(body).toBeInstanceOf(FormData);
+    const headers = call[1].headers as Record<string, string>;
+    expect(headers['Content-Type']).toBeUndefined();
+    expect(headers['Idempotency-Key']).toMatch(/^[0-9a-f-]{36}$/);
+    expect(body.get('type')).toBe('personne');
+    expect(body.get('consent')).toBe('1');
+    expect(body.get('category_id')).toBe('25');
+    expect(body.get('answers[1]')).toBe('Laboratoire');
+    expect(body.get('answers[4]')).toBe('1');
+    expect((body.get('answers[8]') as File).name).toBe('arrete-2019.pdf');
+    expect((body.get('photo') as File).name).toBe('moi.jpg');
+  });
+
+  it('sans fichier, la demande reste en JSON', async () => {
+    const user = userEvent.setup();
+    serve(fakeResponse(200, form({ photo_mode: 'optional' })), fakeResponse(201, { message: 'ok', member_url: MEMBER_URL }));
+    render(<JoinPage parrain={null} />);
+    await fillIdentity(user);
+    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('button', { name: 'Envoyer ma demande' }));
+    await screen.findByRole('heading', { name: 'Votre demande est envoyée' });
+    expect(posts()[0]?.headers['Content-Type']).toBe('application/json');
+  });
+
+  it('après un 422, les fichiers sont à re-choisir (le serveur n’a rien gardé), l’erreur d’une pièce sous la pièce', async () => {
+    const user = userEvent.setup();
+    serve(
+      fakeResponse(200, form({ photo_mode: 'optional', questions: [PIECE] })),
+      fakeResponse(422, {
+        message: 'Votre demande d’adhésion est incomplète.',
+        errors: { 'answers.8': ['« Arrêté de nomination » : Type de fichier non autorisé : image/gif.'] },
+      }),
+    );
+    render(<JoinPage parrain={null} />);
+    await fillIdentity(user);
+    await user.upload(screen.getByLabelText(/^6\. Votre photo/), jpeg());
+    await user.upload(screen.getByLabelText(/^7\. Arrêté de nomination/), pdf());
+    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('button', { name: 'Envoyer ma demande' }));
+
+    const piece = screen.getByLabelText(/^7\. Arrêté de nomination/);
+    await waitFor(() => expect(piece).toHaveFocus());
+    expect(screen.getByText('« Arrêté de nomination » : Type de fichier non autorisé : image/gif.')).toBeInTheDocument();
+    // La photo, elle, n'a pas d'erreur : elle est signalée « à choisir à nouveau ».
+    expect(screen.getByTestId('a-rechoisir')).toHaveTextContent('aucun fichier n’est gardé');
+    expect(screen.queryByText('moi.jpg')).not.toBeInTheDocument();
+  });
+
+  it('un fichier de plus de 5 Mo ne part pas', () => {
+    const big = new File([new Uint8Array(5 * 1024 * 1024 + 1)], 'gros.pdf', { type: 'application/pdf' });
+    const errors = validateJoin(form({ photo_mode: 'optional', questions: [PIECE] }), {
+      categoryId: 25, firstName: 'A', lastName: 'B', phone: '770000022', email: '', consent: true,
+      answers: {}, files: { '8': big }, photo: big,
+    });
+    expect(errors.photo).toBe('Le fichier dépasse la taille maximale de 5 MB.');
+    expect(errors['answers.8']).toContain('taille maximale');
   });
 });
