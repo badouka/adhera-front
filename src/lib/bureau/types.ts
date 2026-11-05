@@ -639,9 +639,9 @@ export const MODE_COTISATION_LABELS: Record<ModeCotisation, string> = {
 };
 
 export const DUE_STATUS_LABELS: Record<DueStatus, string> = {
-  due: 'À régler',
+  due: 'À payer',
   partielle: 'Partielle',
-  reglee: 'Réglée',
+  reglee: 'Payée',
   exoneree: 'Exonérée',
 };
 

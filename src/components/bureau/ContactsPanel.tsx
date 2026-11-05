@@ -9,6 +9,7 @@ import { CONTACT_ROLES, type Contact, type ContactRole } from '@/lib/bureau/type
 import { ConfirmDialog, Recap } from './ConfirmDialog';
 import { PlusIcon } from './Icons';
 import { Button, EmptyState, Field, inputClass, Panel } from './ui';
+import { spacedPhone } from '@/lib/phone';
 
 const ROLE_LABEL = Object.fromEntries(CONTACT_ROLES.map((r) => [r.value, r.label])) as Record<
   ContactRole,
@@ -83,7 +84,7 @@ export function ContactsPanel({
                     .filter(Boolean)
                     .join(' · ')}
                 </span>
-                {contact.phone ? <span className="small tnum">{contact.phone}</span> : null}
+                {contact.phone ? <span className="small tnum">{spacedPhone(contact.phone)}</span> : null}
                 {contact.email ? <span className="small break-all">{contact.email}</span> : null}
               </div>
               <Button tone="ghost" className="min-h-10 px-2" onClick={() => setRemoving(contact)}>

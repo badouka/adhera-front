@@ -1,5 +1,5 @@
 import { formatDate } from '@/lib/dates';
-import type { MemberCard } from '@/lib/types';
+import type { CardLine, MemberCard } from '@/lib/types';
 import { QrCode } from './QrCode';
 
 /**
@@ -22,6 +22,7 @@ export function MemberCardView({ card }: { card: MemberCard }) {
   // est `is_up_to_date`, et la date ne s'ajoute que si elle existe (§16.2).
   const until = card.is_up_to_date ? formatDate(card.valid_until) : '';
   const verifyUrl = card.verify_url?.trim() ?? '';
+  const lines = cardLines(card);
 
   return (
     <section
@@ -54,6 +55,16 @@ export function MemberCardView({ card }: { card: MemberCard }) {
       <div className="flex flex-col items-center gap-1">
         <p className="m-0 text-[28px] leading-[34px] font-bold break-words">{card.display_name}</p>
         {category ? <p className="m-0 text-[18px] text-ink-muted">{category}</p> : null}
+        {lines.length > 0 ? (
+          <dl className="m-0 mt-1 flex flex-col items-center gap-1" data-testid="card-lines">
+            {lines.map((line) => (
+              <div key={line.label} className="flex flex-col items-center">
+                <dt className="small text-ink-muted">{line.label}</dt>
+                <dd className="m-0 text-[17px] font-semibold break-words">{line.value}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
       </div>
 
       {number || since ? (
@@ -99,4 +110,15 @@ export function MemberCardView({ card }: { card: MemberCard }) {
       ) : null}
     </section>
   );
+}
+
+/**
+ * §20.7 — les lignes de la carte, sous le type de membre : deux au plus, et
+ * seulement celles qui portent une réponse. Le serveur les borne déjà ; l'écran
+ * ne montre jamais une ligne vide (« Spécialité : » sans valeur).
+ */
+export function cardLines(card: MemberCard): CardLine[] {
+  return (card.lines ?? [])
+    .filter((line) => line.label?.trim() && line.value?.trim())
+    .slice(0, 2);
 }

@@ -122,6 +122,41 @@ export type MemberCard = {
   standing_label: string;
   /** L'adresse que le QR encode : on ne la recompose jamais. */
   verify_url: string;
+  /**
+   * §20.7 (v3.10-S6) — deux lignes au plus, sous le type de membre : les
+   * questions cochées « sur la carte » ET répondues. `[]` : rien. Absente d'un
+   * serveur antérieur, lue comme `[]`. ⚠️ Jamais sur la vérification `/v/`.
+   */
+  lines?: CardLine[];
+};
+
+export type CardLine = { label: string; value: string };
+
+/**
+ * §17.5 — l'état d'une demande d'adhésion. C'est CETTE clé qui dit quelle page
+ * afficher, jamais `due === null` (vrai aussi pour un exonéré, piège 1).
+ */
+export type ApplicationStatus = 'under_review' | 'awaiting_first_payment' | 'rejected';
+
+export type Application = {
+  status: ApplicationStatus | string;
+  /** ISO 8601 */
+  submitted_at: string | null;
+  /** Écrit par l'association POUR le candidat : affiché tel quel, en texte. */
+  rejection_reason: string | null;
+};
+
+/**
+ * §17.8 — le lien d'invitation d'un membre actif. ⚠️ AUCUN montant : avec un
+ * seul filleul, une somme dirait ce qu'il a payé.
+ */
+export type Referral = {
+  /** Ne jamais le recomposer : le code n'est servi nulle part ailleurs. */
+  invite_url: string;
+  /** Tutoyé, à la première personne : à passer TEL QUEL au partage. */
+  share_text: string;
+  joined_count: number;
+  pending_count: number;
 };
 
 export type MemberPayload = {
@@ -139,6 +174,10 @@ export type MemberPayload = {
   card?: MemberCard | null;
   /** Gouverne SEUL le bouton d'attestation. Absent = `false`. */
   attestation_available?: boolean;
+  /** §17.5 — `null` pour un membre actif ; absente d'un serveur antérieur à S5. */
+  application?: Application | null;
+  /** §17.8 — `null` si `membership_join` est éteinte, ou pour un non-actif. */
+  referral?: Referral | null;
 };
 
 /* ───────────────── Vérification publique (§16.5) ───────────────── */

@@ -14,6 +14,7 @@
 
 import { formatDate } from '@/lib/dates';
 import type { MemberCard } from '@/lib/types';
+import { cardLines } from './MemberCardView';
 import { makeQrMatrix } from './QrCode';
 
 const WIDTH = 1080;
@@ -114,12 +115,16 @@ export async function drawCard(card: MemberCard): Promise<{ blob: Blob; dataUrl:
     .filter(Boolean)
     .join(' · ');
   const standing = standingText(card);
+  // §20.7 — les mêmes lignes que la carte à l'écran : « Spécialité : … ».
+  probe.font = `600 38px ${family}`;
+  const answerLines = cardLines(card).flatMap((line) => wrap(probe, `${line.label} : ${line.value}`, inner));
   const qrSize = 520;
 
   let height = PAD;
   height += orgLines.length * 58 + (orgLines.length ? 40 : 0);
   height += nameLines.length * 84 + 16;
   height += subline ? 56 : 0;
+  height += answerLines.length ? answerLines.length * 50 + 8 : 0;
   height += 24 + 76 + (standing.until ? 56 : 0);
   height += matrix ? 40 + qrSize + 24 + 50 : 0;
   height += PAD;
@@ -170,6 +175,16 @@ export async function drawCard(card: MemberCard): Promise<{ blob: Blob; dataUrl:
     ctx.font = `400 40px ${family}`;
     ctx.fillText(subline, cx, y);
     y += 56;
+  }
+
+  if (answerLines.length) {
+    ctx.fillStyle = colors.ink;
+    ctx.font = `600 38px ${family}`;
+    for (const line of answerLines) {
+      ctx.fillText(line, cx, y, inner);
+      y += 50;
+    }
+    y += 8;
   }
 
   y += 24;

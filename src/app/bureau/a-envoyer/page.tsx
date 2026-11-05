@@ -21,6 +21,7 @@ import { listCampaigns, listOutreach, markOutreachSent, skipOutreach } from '@/l
 import { errorMessage } from '@/lib/bureau/messages';
 import type { Campaign, OutreachItem } from '@/lib/bureau/types';
 import { daysBetween, formatDayMonth, safeTimeZone, todayInDakar, zonedParts } from '@/lib/dates';
+import { spacedPhone } from '@/lib/phone';
 
 /** Les motifs d'un toucher ; « Autre » demande un mot. */
 export const SKIP_REASONS = ['Pas de WhatsApp', 'Numéro incorrect'] as const;
@@ -254,7 +255,7 @@ function OutreachCard({
         <h2 id={`carte-${item.id}`} className="title m-0 break-words">
           {item.member.name}
         </h2>
-        <span className="tnum text-ink-muted">{item.member.phone ?? 'Pas de téléphone'}</span>
+        <span className="tnum text-ink-muted">{item.member.phone ? spacedPhone(item.member.phone) : 'Pas de téléphone'}</span>
         <span>
           <Pastille tone={item.step === 'j+1' ? 'late' : item.step === null ? 'info' : 'due'}>
             {reason}

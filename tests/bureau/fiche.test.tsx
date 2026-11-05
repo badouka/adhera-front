@@ -544,7 +544,7 @@ describe('§11 — annuler un paiement, sans rien perdre (« Autres actions »)'
     await openMore(user, /Annuler un paiement/);
     await user.click(screen.getByRole('button', { name: 'Annuler ce paiement' }));
     await panelReady();
-    expect(screen.getByTestId('cancel-recap').textContent).toContain('Sa cotisation redeviendra à régler');
+    expect(screen.getByTestId('cancel-recap').textContent).toContain('Sa cotisation redeviendra à payer');
     const reason = screen.getByLabelText(/Motif de l’annulation/);
     await user.type(reason, '   court  ');
     await user.click(screen.getByRole('button', { name: 'Oui, annuler ce paiement' }));

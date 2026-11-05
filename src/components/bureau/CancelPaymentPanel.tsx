@@ -86,7 +86,7 @@ export function CancelPaymentPanel({
     >
       <p id={`${ids}-recap`} className="m-0 font-semibold break-words" data-testid="cancel-recap">
         Annuler <span className="money">{payment.amount_formatted}</span>
-        {details ? ` (${details})` : ''} de {memberName} ? Sa cotisation redeviendra à régler
+        {details ? ` (${details})` : ''} de {memberName} ? Sa cotisation redeviendra à payer
         {payment.receipt ? ` et le reçu ${payment.receipt.reference} sera marqué annulé` : ''}.
         Rien n’est supprimé.
       </p>

@@ -25,6 +25,7 @@ import type {
   MemberStatus,
   MemberType,
 } from '@/lib/bureau/types';
+import { spacedPhone } from '@/lib/phone';
 
 /** L'API n'a pas de pagination (piège 2) : on pagine ici. */
 const PAGE_SIZE = 50;
@@ -315,7 +316,7 @@ function MemberTable({ members }: { members: MemberListItem[] }) {
                 <StandingPastille member={member} />
               </td>
               <td className="tnum px-4 py-3">{standingDetail(member)}</td>
-              <td className="tnum px-4 py-3">{member.phone ?? '—'}</td>
+              <td className="tnum px-4 py-3">{member.phone ? spacedPhone(member.phone) : '—'}</td>
             </tr>
           ))}
         </tbody>

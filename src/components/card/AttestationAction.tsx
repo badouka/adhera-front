@@ -6,7 +6,7 @@ import { ApiError, attestationUrl, checkAttestation } from '@/lib/api';
 import { browser } from '@/lib/navigate';
 
 export const ATTESTATION_WAIT =
-  'Votre attestation sera disponible dès que votre cotisation sera réglée.';
+  'Votre attestation sera disponible dès que votre cotisation sera payée.';
 
 /**
  * Un refus d'attestation. Le serveur rédige ses messages POUR LE MEMBRE

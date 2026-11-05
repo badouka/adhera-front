@@ -184,6 +184,14 @@ describe('R2 — aucun fetch en SSR', () => {
   });
 });
 
+/**
+ * F6 — l'exception UNIQUE à R3 : trois messages WhatsApp n'ont pas d'adresse
+ * servie par l'API (le lien personnel que le visiteur s'envoie, l'invitation
+ * d'un membre, le lien pour adhérer que le bureau partage). Ils sont composés
+ * dans un seul fichier, qui n'écrit qu'une adresse.
+ */
+const WHATSAPP_EXCEPTION = { file: 'src/lib/whatsapp.ts', url: 'https://wa.me/' };
+
 /** R3 — le jeton ne fuit pas : aucun tiers, aucun lien sortant sans noreferrer. */
 describe('R3 — aucun tiers dans le code livré', () => {
   it('ne contacte aucun hôte autre que l’API d’EventFlow', () => {
@@ -193,13 +201,24 @@ describe('R3 — aucun tiers dans le code livré', () => {
     for (const file of walk(SRC, ['.ts', '.tsx', '.css'])) {
       const code = stripComments(readFileSync(file, 'utf8'));
       for (const url of code.match(/https?:\/\/[^\s'"`)]+/g) ?? []) {
-        if (!allowed.test(url)) {
-          offenders.push(`${relative(process.cwd(), file)} → ${url}`);
-        }
+        if (allowed.test(url)) continue;
+        if (relative(process.cwd(), file) === WHATSAPP_EXCEPTION.file && url === WHATSAPP_EXCEPTION.url) continue;
+        offenders.push(`${relative(process.cwd(), file)} → ${url}`);
       }
     }
 
     expect(offenders).toEqual([]);
+  });
+
+  it('F6 — l’exception nommée : wa.me, composé dans src/lib/whatsapp.ts et nulle part ailleurs', () => {
+    const code = stripComments(readFileSync(WHATSAPP_EXCEPTION.file, 'utf8'));
+    expect(code.match(/https?:\/\/[^\s'"`)]+/g)).toEqual([WHATSAPP_EXCEPTION.url]);
+    // Contre-épreuve : aucun autre fichier n'écrit wa.me, même sans « https ».
+    const elsewhere = walk(SRC, ['.ts', '.tsx'])
+      .filter((file) => relative(process.cwd(), file) !== WHATSAPP_EXCEPTION.file)
+      .filter((file) => /wa\.me\//.test(stripComments(readFileSync(file, 'utf8'))))
+      .map((file) => relative(process.cwd(), file));
+    expect(elsewhere).toEqual([]);
   });
 
   it('tout lien vers l’API porte rel="noreferrer"', () => {
@@ -801,6 +820,20 @@ export const LEXIQUE_BANNIS: ReadonlyArray<{ mot: string; pattern: RegExp }> = [
   { mot: 'touchez', pattern: /(?<!\p{L})touchez(?!\p{L})/iu },
   { mot: 'tapez sur', pattern: /(?<!\p{L})tapez(?:\s+\p{L}+)?\s+sur(?!\p{L})/iu },
   { mot: 'appuyez sur', pattern: /(?<!\p{L})appuyez(?:\s+\p{L}+)?\s+sur(?!\p{L})/iu },
+  // F6 § 6 — « payer », jamais « régler » ni ses formes (« Réglez sur le… »).
+  // « règle » (la norme) et « réglage » (les Paramètres) sont d'autres mots.
+  {
+    mot: 'régler',
+    pattern: /(?<!\p{L})r[ée]gl(?:er|ez|é|ée|és|ées|ons|ent|ait|aient|era|erez|ant)(?!\p{L})/iu,
+  },
+  // L'adhésion en ligne (lexique, S5) : « demande d'adhésion », « admettre »,
+  // « lien d'invitation », « personnes que vous avez fait venir ».
+  { mot: 'candidature', pattern: /(?<!\p{L})candidatures?(?!\p{L})/iu },
+  { mot: 'inscription', pattern: /(?<!\p{L})inscriptions?(?!\p{L})/iu },
+  { mot: 'filleul', pattern: /(?<!\p{L})filleule?s?(?!\p{L})/iu },
+  { mot: 'en attente de validation', pattern: /(?<!\p{L})en\s+attente\s+de\s+validation/iu },
+  { mot: 'lien de parrainage', pattern: /(?<!\p{L})liens?\s+de\s+parrainage/iu },
+  { mot: 'code promo', pattern: /(?<!\p{L})codes?\s+promo/iu },
 ];
 
 /**

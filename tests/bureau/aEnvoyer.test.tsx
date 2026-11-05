@@ -83,7 +83,7 @@ describe('« À envoyer » — la file WhatsApp, un membre à la fois', () => {
     server([[A, B, C]]);
     renderInBureau(<AEnvoyerPage />);
     expect(await screen.findByRole('heading', { name: 'Aminata Diop' })).toBeInTheDocument();
-    expect(screen.getByText('771234567')).toBeInTheDocument();
+    expect(screen.getByText('77 123 45 67')).toBeInTheDocument();
     expect(screen.getByText('En retard depuis le 2 octobre')).toBeInTheDocument();
     // Le texte exact, espaces insécables comprises : jamais recomposé.
     expect(screen.getByTestId('message').textContent).toBe(A.message);

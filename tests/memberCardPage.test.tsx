@@ -112,17 +112,17 @@ describe('F4 § 1.1 — deux vues', () => {
 
     await user.click(screen.getByRole('button', { name: 'Ma carte de membre' }));
     expect(screen.getByTestId('member-card')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Régler ma cotisation' }));
+    await user.click(screen.getByRole('button', { name: 'Payer ma cotisation' }));
     expect(await screen.findByText('250 000 FCFA')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Ma carte de membre' }));
     await user.click(screen.getByRole('button', { name: 'Ma cotisation' }));
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('« Régler ma cotisation » n’existe que pour un membre pas à jour', async () => {
+  it('« Payer ma cotisation » n’existe que pour un membre pas à jour', async () => {
     serve(UP_TO_DATE);
     await screen.findByTestId('member-card');
-    expect(screen.queryByRole('button', { name: 'Régler ma cotisation' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Payer ma cotisation' })).not.toBeInTheDocument();
   });
 });
 
@@ -143,7 +143,7 @@ describe('F4 § 1.3 — l’attestation', () => {
     await screen.findByTestId('member-card');
     expect(screen.queryByRole('link', { name: /attestation/ })).not.toBeInTheDocument();
     expect(
-      screen.getByText('Votre attestation sera disponible dès que votre cotisation sera réglée.'),
+      screen.getByText('Votre attestation sera disponible dès que votre cotisation sera payée.'),
     ).toBeInTheDocument();
   });
 

@@ -88,7 +88,7 @@ describe('E2 — à jour', () => {
 
     await screen.findByText('À jour');
     expect(
-      screen.getByText('Votre cotisation est réglée jusqu’au 13 mars 2027.'),
+      screen.getByText('Votre cotisation est payée jusqu’au 13 mars 2027.'),
     ).toBeInTheDocument();
   });
 
@@ -591,7 +591,7 @@ describe('E5 — montant inconnu', () => {
 });
 
 describe('E6 — ni dû ni à jour', () => {
-  it('annonce qu’il n’y a rien à régler', async () => {
+  it('annonce qu’il n’y a rien à payer', async () => {
     renderWith(
       fakeResponse(
         200,

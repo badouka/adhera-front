@@ -80,7 +80,7 @@ function readFieldErrors(raw: unknown): FieldErrors {
   return out;
 }
 
-async function toApiError(response: Response): Promise<ApiError> {
+export async function toApiError(response: Response): Promise<ApiError> {
   let body: ErrorBody = {};
   try {
     const raw: unknown = await response.json();
@@ -98,7 +98,7 @@ async function toApiError(response: Response): Promise<ApiError> {
   );
 }
 
-function headers(tenant: string): HeadersInit {
+export function headers(tenant: string): HeadersInit {
   return { Accept: 'application/json', 'X-Tenant-Slug': tenant };
 }
 

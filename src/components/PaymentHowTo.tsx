@@ -3,6 +3,7 @@
 import { useRef } from 'react';
 import type { Organisation } from '@/lib/types';
 import { CopyButton } from './CopyButton';
+import { phoneDigits, spacedPhone } from '@/lib/phone';
 
 function MerchantLine({ channel, value }: { channel: string; value: string }) {
   const numberRef = useRef<HTMLSpanElement>(null);
@@ -12,10 +13,10 @@ function MerchantLine({ channel, value }: { channel: string; value: string }) {
       <span className="flex min-w-0 flex-col">
         <span className="small text-ink-muted">{channel}</span>
         <span ref={numberRef} className="tnum text-[18px] leading-6 font-bold break-words">
-          {value}
+          {spacedPhone(value)}
         </span>
       </span>
-      <CopyButton value={value} label={`Copier le numéro ${channel}`} selectRef={numberRef} />
+      <CopyButton value={phoneDigits(value)} label={`Copier le numéro ${channel}`} selectRef={numberRef} />
     </li>
   );
 }

@@ -25,7 +25,7 @@ export function upToDateWithArrears(member: MemberListItem): boolean {
 export function StandingPastille({ member }: { member: MemberListItem }) {
   if (member.status === 'pending') return <Pastille tone="info">Demande d’adhésion</Pastille>;
   if (member.status === 'former') return <Pastille tone="due">Ancien membre</Pastille>;
-  if (upToDateWithArrears(member)) return <Pastille tone="due">Arriérés à régler</Pastille>;
+  if (upToDateWithArrears(member)) return <Pastille tone="due">Arriérés à payer</Pastille>;
   if (member.is_up_to_date) {
     return (
       <Pastille tone="paid" icon={<CheckIcon />}>

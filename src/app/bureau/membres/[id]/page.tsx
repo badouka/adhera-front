@@ -38,6 +38,7 @@ import {
 } from '@/lib/bureau/types';
 import { firstName } from '@/lib/bureau/words';
 import { formatDate, formatDateTime } from '@/lib/dates';
+import { spacedPhone } from '@/lib/phone';
 
 /**
  * Chargés à la demande (F4 § 4) : les panneaux d'« Autres actions » ne
@@ -249,7 +250,7 @@ export default function FicheMembrePage() {
           {[
             m.category_label,
             m.member_number ? `n° ${m.member_number}` : null,
-            m.phone ?? 'pas de téléphone',
+            m.phone ? spacedPhone(m.phone) : 'pas de téléphone',
           ]
             .filter(Boolean)
             .join(' · ')}

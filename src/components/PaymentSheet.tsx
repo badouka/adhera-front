@@ -176,6 +176,17 @@ export function PaymentSheet({
       return;
     }
 
+    // §17.5 — le mode d'admission a basculé sur « le bureau examine » pendant
+    // que la feuille était ouverte, ou la demande a été refusée : la page se
+    // relit, avec le message de l'API tel quel (aucun libellé local ajouté).
+    if (
+      error.status === 409 &&
+      (error.code === 'application_under_review' || error.code === 'application_rejected')
+    ) {
+      onNeedsReload(apiMessage(error) ?? GENERIC);
+      return;
+    }
+
     if (error.status === 422 && error.code === 'idempotency_key_reused') {
       renewKey();
       setFormError('Le formulaire a changé : vérifiez puis confirmez à nouveau.');

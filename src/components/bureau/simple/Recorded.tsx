@@ -10,6 +10,7 @@ import type { MemberDetail, PaymentWithShare } from '@/lib/bureau/types';
 import { formatDate } from '@/lib/dates';
 import { firstName, methodPhrase } from '@/lib/bureau/words';
 import { bigButtonClass } from '../ui';
+import { spacedPhone } from '@/lib/phone';
 
 /**
  * « À jour jusqu'au 2 septembre 2027 », ou « Reste à payer : 15 000 FCFA » —
@@ -94,7 +95,7 @@ export function Recorded({
             <ChatIcon size={22} />
             Envoyer le reçu par WhatsApp
           </a>
-          <span className="small -mt-2 text-center text-ink-muted">À : {share.phone}</span>
+          <span className="small -mt-2 text-center text-ink-muted">À : {spacedPhone(share.phone)}</span>
         </>
       ) : (
         <p className="m-0 font-semibold" data-testid="no-phone">

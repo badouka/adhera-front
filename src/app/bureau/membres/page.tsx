@@ -14,6 +14,7 @@ import { remindByWhatsapp } from '@/lib/bureau/remind';
 import type { MemberListItem } from '@/lib/bureau/types';
 import { firstName } from '@/lib/bureau/words';
 import { formatDate, todayInDakar } from '@/lib/dates';
+import { spacedPhone } from '@/lib/phone';
 
 /** La frappe s'envoie au serveur après 300 ms de silence. */
 const SEARCH_DEBOUNCE_MS = 300;
@@ -352,7 +353,7 @@ function MemberTable({
                     <span className="small block text-ink-muted">{member.category_label ?? ''}</span>
                   </td>
                   <td className="tnum px-3 py-3 whitespace-nowrap">
-                    {member.phone ?? <span className="text-ink-muted">pas de téléphone</span>}
+                    {member.phone ? spacedPhone(member.phone) : <span className="text-ink-muted">pas de téléphone</span>}
                   </td>
                   <td className="px-3 py-3">
                     {late ? <Pill tone="late">En retard</Pill> : <Pill tone="ok">À jour</Pill>}
@@ -425,7 +426,7 @@ function PrintSheet({
           {members.map((member) => (
             <tr key={member.id} className="break-inside-avoid">
               <td className="border-b border-line py-1 pr-2">{member.name}</td>
-              <td className="tnum border-b border-line py-1 pr-2">{member.phone ?? '—'}</td>
+              <td className="tnum border-b border-line py-1 pr-2">{member.phone ? spacedPhone(member.phone) : '—'}</td>
               <td className="money tnum border-b border-line py-1 text-right">
                 {isLate(member) ? (member.balance_due_formatted ?? '—') : 'À jour'}
               </td>

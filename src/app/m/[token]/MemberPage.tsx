@@ -26,11 +26,19 @@ import { PaymentSheet } from '@/components/PaymentSheet';
 import { ReceiptList } from '@/components/ReceiptList';
 import { Card, Shell } from '@/components/Shell';
 import { API_BASE, fetchMember } from '@/lib/api';
-import { formatDate, formatInstant, isPast } from '@/lib/dates';
+import { formatDate, formatDateTime, formatInstant, isPast } from '@/lib/dates';
 import { homeIconUrl, manifestHref } from '@/lib/manifest';
 import { resolveMemberState, screenForError } from '@/lib/state';
 import { resolveTenant } from '@/lib/tenant';
-import type { LastRejection, MemberCard, MemberPayload, ScreenState } from '@/lib/types';
+import type {
+  Application,
+  LastRejection,
+  MemberCard,
+  MemberPayload,
+  Referral,
+  ScreenState,
+} from '@/lib/types';
+import { whatsappLink } from '@/lib/whatsapp';
 
 type Notice = { message: string; tone: 'paid' | 'info' };
 
@@ -210,7 +218,25 @@ export function MemberPage({ token }: { token: string }) {
   }
 
   const { payload } = screen;
+  const application = payload.application ?? null;
+
+  // §17.5 — une demande à l'examen, ou refusée : la page du candidat, et rien
+  // d'autre. `application.status` décide, jamais `due === null` (piège 1).
+  if (application && application.status !== 'awaiting_first_payment') {
+    return (
+      <Shell organisationName={payload.organisation.name} logoUrl={payload.organisation.logo_url}>
+        <ApplicationPage
+          application={application}
+          name={payload.member.first_name?.trim() || payload.member.name}
+        />
+      </Shell>
+    );
+  }
+
+  /** Sous « premier paiement » : un candidat qui paie sa PREMIÈRE cotisation. */
+  const firstPayment = application?.status === 'awaiting_first_payment';
   const state = resolveMemberState(payload);
+  const referral = payload.referral ?? null;
   const due = payload.due;
   const card = payload.card ?? null;
   const current: MemberView = card ? (view ?? 'cotisation') : 'cotisation';
@@ -253,7 +279,7 @@ export function MemberPage({ token }: { token: string }) {
             onClick={() => setView('cotisation')}
             className="mx-auto min-h-11 bg-transparent px-2 text-[17px] font-bold text-link underline"
           >
-            Régler ma cotisation
+            Payer ma cotisation
           </button>
         )}
         <AttestationAction
@@ -262,6 +288,7 @@ export function MemberPage({ token }: { token: string }) {
           available={payload.attestation_available === true}
           upToDate={card.is_up_to_date}
         />
+        {referral ? <ReferralBlock referral={referral} /> : null}
       </Shell>
     );
   }
@@ -298,7 +325,7 @@ export function MemberPage({ token }: { token: string }) {
 
       {state === 'E2' ? <UpToDate payload={payload} /> : null}
       {state === 'E4' ? (
-        <PendingBlock payload={payload} focusOnMount={justSent} />
+        <PendingBlock payload={payload} focusOnMount={justSent} firstPayment={firstPayment} />
       ) : null}
       {state === 'E5' ? <AmountUnknown /> : null}
       {state === 'E6' ? <NothingDue /> : null}
@@ -308,7 +335,7 @@ export function MemberPage({ token }: { token: string }) {
           {payload.last_rejection ? (
             <RejectionNotice rejection={payload.last_rejection} />
           ) : null}
-          <DueBlock payload={payload} partial={state === 'E3b'} />
+          <DueBlock payload={payload} partial={state === 'E3b'} firstPayment={firstPayment} />
           <PaymentHowTo organisation={payload.organisation} />
         </>
       ) : null}
@@ -324,6 +351,8 @@ export function MemberPage({ token }: { token: string }) {
       ) : null}
 
       <ReceiptList receipts={payload.receipts} token={token} tenant={tenant} />
+
+      {referral ? <ReferralBlock referral={referral} /> : null}
 
       <p className="small m-0 text-center text-ink-muted">
         Gardez le message qui contient ce lien : c’est votre accès personnel.
@@ -411,7 +440,7 @@ function Greeting({
     E3b: 'Votre acompte a bien été reçu.',
     E4: null,
     E5: 'Votre cotisation est en préparation.',
-    E6: 'Rien à régler pour l’instant.',
+    E6: 'Rien à payer pour l’instant.',
   };
   const subtitle = quiet ? null : subtitles[state];
 
@@ -434,7 +463,7 @@ function UpToDate({ payload }: { payload: MemberPayload }) {
       </Pastille>
       <p className="m-0 text-[20px] leading-7 font-bold">
         {until
-          ? `Votre cotisation est réglée jusqu’au ${until}.`
+          ? `Votre cotisation est payée jusqu’au ${until}.`
           : 'Votre cotisation est à jour.'}
       </p>
     </section>
@@ -445,10 +474,13 @@ function UpToDate({ payload }: { payload: MemberPayload }) {
 function PendingBlock({
   payload,
   focusOnMount,
+  firstPayment = false,
 }: {
   payload: MemberPayload;
   /** Vrai juste après l'envoi : le focus suit l'information. */
   focusOnMount: boolean;
+  /** Un candidat (§17.5) : ce paiement accepté fera de lui un membre. */
+  firstPayment?: boolean;
 }) {
   const thanksRef = useRef<HTMLParagraphElement>(null);
   useEffect(() => {
@@ -485,8 +517,9 @@ function PendingBlock({
         role="status"
         className="m-0 rounded-[var(--radius-md)] bg-paid-soft p-4 font-semibold text-paid"
       >
-        Merci. L’association vérifiera votre paiement, et vous recevrez votre
-        reçu ici.
+        {firstPayment
+          ? 'Merci. L’association vérifiera votre paiement : vous serez membre dès qu’il sera accepté.'
+          : 'Merci. L’association vérifiera votre paiement, et vous recevrez votre reçu ici.'}
       </p>
     </>
   );
@@ -547,9 +580,15 @@ function NothingDue() {
 function DueBlock({
   payload,
   partial,
+  firstPayment = false,
 }: {
   payload: MemberPayload;
   partial: boolean;
+  /**
+   * §17.5 — un candidat sous « premier paiement » n'est pas encore membre : la
+   * page le DIT, au lieu de « Votre cotisation à payer » comme à un membre.
+   */
+  firstPayment?: boolean;
 }) {
   const due = payload.due;
   if (!due) return null;
@@ -568,12 +607,23 @@ function DueBlock({
       data-testid="due-block"
       data-late={late ? 'true' : undefined}
     >
-      <span>{partial ? 'Il vous reste à payer' : 'Votre cotisation à payer'}</span>
+      <span>
+        {firstPayment
+          ? 'Votre première cotisation'
+          : partial
+            ? 'Il vous reste à payer'
+            : 'Votre cotisation à payer'}
+      </span>
 
       {/* R1 : jamais de montant recalculé, seulement le champ *_formatted. */}
       <div className="amount text-[clamp(28px,10vw,40px)] leading-[1.15] text-due">{due.balance_formatted}</div>
 
       <div className="flex flex-col text-ink-muted">
+        {firstPayment ? (
+          <span className="font-semibold text-ink" data-testid="first-payment">
+            Vous serez membre dès qu’elle sera reçue.
+          </span>
+        ) : null}
         {period ? <span>pour l’année {period}</span> : null}
         {due.category_label?.trim() ? <span className="small">{due.category_label}</span> : null}
         {partial ? (
@@ -589,6 +639,101 @@ function DueBlock({
         ) : null}
         {late && periodStart ? <span className="small">Attendue depuis le {periodStart}.</span> : null}
       </div>
+    </section>
+  );
+}
+
+/**
+ * §17.5 — la page d'une personne qui a demandé à adhérer : sa demande est à
+ * l'examen (rien à payer, aucun bouton de paiement), ou elle a été refusée.
+ * Le motif est celui que l'association a écrit POUR elle : tel quel, en texte.
+ */
+function ApplicationPage({
+  application,
+  name,
+}: {
+  application: Application;
+  name: string;
+}) {
+  const greeting = name.trim() ? `Bonjour ${name.trim()}` : 'Bonjour';
+
+  if (application.status === 'rejected') {
+    const reason = application.rejection_reason?.trim();
+    return (
+      <>
+        <h1 className="heading m-0">{greeting}</h1>
+        <section className="flex flex-col gap-2 rounded-[var(--radius-md)] border border-line bg-surface-raised p-4" data-testid="application-rejected">
+          <p className="m-0 text-[18px] font-bold">Votre demande n’a pas été acceptée.</p>
+          {reason ? (
+            <>
+              <span className="label text-ink-muted">LE MESSAGE DE L’ASSOCIATION</span>
+              <p className="m-0 whitespace-pre-line break-words">{reason}</p>
+            </>
+          ) : null}
+          <p className="small m-0 text-ink-muted">Pour en parler, contactez l’association.</p>
+        </section>
+      </>
+    );
+  }
+
+  const submitted = formatDateTime(application.submitted_at);
+  return (
+    <>
+      <h1 className="heading m-0">{greeting}</h1>
+      <section className="flex flex-col gap-2 rounded-[var(--radius-md)] bg-indigo-soft p-4" data-testid="application-review">
+        <p className="m-0 text-[18px] font-bold">Votre demande est en cours d’examen.</p>
+        {submitted ? <p className="m-0">Vous avez demandé à adhérer le {submitted}.</p> : null}
+        <p className="m-0">
+          Vous n’avez rien à payer pour l’instant : l’association vous répondra sur WhatsApp.
+        </p>
+      </section>
+      <p className="small m-0 text-center text-ink-muted">
+        Gardez le message qui contient ce lien : c’est votre accès personnel.
+      </p>
+    </>
+  );
+}
+
+/** « 3 personnes sont venues grâce à vous », « et 1 demande en cours d'examen ». */
+export function referralCount(referral: Referral): string | null {
+  const joined = referral.joined_count;
+  const pending = referral.pending_count;
+  const pendingText = pending > 1 ? `${pending} demandes en cours d’examen` : '1 demande en cours d’examen';
+  if (joined > 0) {
+    const head = joined > 1 ? `${joined} personnes sont venues grâce à vous` : '1 personne est venue grâce à vous';
+    return pending > 0 ? `${head}, et ${pendingText}.` : `${head}. Merci !`;
+  }
+  return pending > 0 ? `${pendingText[0]?.toUpperCase()}${pendingText.slice(1)}, grâce à vous.` : null;
+}
+
+/**
+ * §17.8 — « Faites venir quelqu'un ». Le message est `share_text`, TEL QU'IL
+ * EST SERVI (tutoyé, à la première personne : un membre écrit à quelqu'un qu'il
+ * connaît). Le compteur compte des personnes — jamais « vos filleuls », jamais
+ * un montant.
+ */
+function ReferralBlock({ referral }: { referral: Referral }) {
+  const count = referralCount(referral);
+  return (
+    <section className="flex flex-col gap-3 rounded-[var(--radius-md)] border border-line bg-surface-raised p-4" data-testid="referral">
+      <h2 className="heading m-0">Faites venir quelqu’un</h2>
+      <p className="m-0">
+        Envoyez votre lien d’invitation à une personne qui voudrait adhérer : elle remplira sa
+        demande en deux minutes.
+      </p>
+      {count ? (
+        <p className="m-0 font-semibold text-paid" data-testid="referral-count">
+          {count}
+        </p>
+      ) : null}
+      <a
+        href={whatsappLink(referral.share_text)}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex min-h-14 w-full items-center justify-center rounded-[var(--radius-md)] border border-line-strong bg-surface-raised px-4 text-center text-[16px] font-semibold text-ink! no-underline"
+      >
+        Inviter par WhatsApp
+      </a>
     </section>
   );
 }
