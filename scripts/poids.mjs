@@ -23,7 +23,12 @@ const PAGES = [
   '/bureau/a-envoyer', '/bureau/campagnes', '/bureau/demandes', '/bureau/anciens',
   '/bureau/paiements', '/bureau/chiffres', '/bureau/types-de-membres',
   '/bureau/reglages', '/bureau/profil', '/bureau/mon-mot-de-passe',
+  // F6
+  '/adherer', '/bureau/demandes/en-attente', '/bureau/adhesion-en-ligne',
+  '/bureau/questions', '/bureau/questions/nouvelle',
 ];
+// Une page absente de la version mesurée (un 404) n'est pas comptée.
+const OPTIONAL = new Set(['/adherer', '/bureau/demandes/en-attente', '/bureau/adhesion-en-ligne', '/bureau/questions', '/bureau/questions/nouvelle']);
 const headers = host ? { Host: host } : {};
 const sizes = new Map();
 const br = async (src) => {
@@ -36,7 +41,9 @@ const br = async (src) => {
 
 const pages = [];
 for (const page of PAGES) {
-  const html = await (await fetch(origin + page, { headers })).text();
+  const response = await fetch(origin + page, { headers });
+  if (response.status === 404 && OPTIONAL.has(page)) continue;
+  const html = await response.text();
   const srcs = [...new Set([...html.matchAll(/<script[^>]+src="([^"]+)"/g)].map((m) => m[1]))];
   let total = 0;
   for (const src of srcs) total += await br(src);
