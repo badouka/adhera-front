@@ -86,6 +86,8 @@ export default function MembresPage() {
             ? listMembers({ status: 'active', standing: 'renewing_soon', search }, controller.signal)
             : Promise.resolve(null),
         ]);
+        // Une réponse arrivée après l'annulation n'est plus celle qu'on attend.
+        if (controller.signal.aborted) return;
         setLoad({ kind: 'ready', members, renewing });
       } catch (cause) {
         if (cause instanceof DOMException && cause.name === 'AbortError') return;

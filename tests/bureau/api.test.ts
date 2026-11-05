@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { login, logout } from '@/lib/bureau/api/auth';
 import { deleteCategory } from '@/lib/bureau/api/categories';
-import { BureauApiError, buildQuery, INVALID_CREDENTIALS, isSessionError, readRetryAfter } from '@/lib/bureau/api/core';
+import { BureauApiError, buildQuery, INVALID_CREDENTIALS, isSessionError, readJson, readRetryAfter } from '@/lib/bureau/api/core';
 import { fetchDocument } from '@/lib/bureau/api/documents';
 import { listMembers, createMember } from '@/lib/bureau/api/members';
 import { getProofUrl, listPayments } from '@/lib/bureau/api/payments';
@@ -247,5 +247,26 @@ describe('les messages de validation de l’API, tels quels', () => {
     expect(errorMessage(new ApiError(403, null, 'x'), 'repli')).toBe(
       'Cette action n’est pas autorisée pour votre association.',
     );
+  });
+});
+
+describe('une requête annulée pendant la lecture de sa réponse (recette F6, Firefox)', () => {
+  const aborted = () => new DOMException('The operation was aborted.', 'AbortError');
+
+  it('reste une annulation : la liste ne se résout pas en null', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: () => Promise.reject(aborted()),
+    } as unknown as Response);
+    await expect(listMembers({ search: 'Ami' }, new AbortController().signal)).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+  });
+
+  it('contre-épreuve : un corps illisible (502 en HTML, 204) rend toujours null', async () => {
+    const html = { json: () => Promise.reject(new SyntaxError('Unexpected token <')) } as unknown as Response;
+    expect(await readJson(html)).toBeNull();
   });
 });

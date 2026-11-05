@@ -109,7 +109,11 @@ function readFieldErrors(raw: unknown): FieldErrors {
 export async function readJson(response: Response): Promise<unknown> {
   try {
     return await response.json();
-  } catch {
+  } catch (cause) {
+    // Une requête annulée PENDANT la lecture du corps (une frappe de plus dans
+    // la recherche) reste une annulation : la rendre `null` faisait passer une
+    // liste vide pour une réponse, et l'écran tombait (Firefox, recette F6).
+    if (cause instanceof DOMException && cause.name === 'AbortError') throw cause;
     // Un 502 de nginx rend du HTML ; un 204 ne rend rien.
     return null;
   }
