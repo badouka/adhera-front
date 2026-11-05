@@ -1,5 +1,6 @@
 'use client';
 
+import { SignedPhoto } from '@/components/SignedPhoto';
 import { useState } from 'react';
 import { isSessionError } from '@/lib/bureau/api/core';
 import { getFileLink } from '@/lib/bureau/api/members';
@@ -98,15 +99,12 @@ export function AnswersList({
 export function MemberPhoto({ url, name, size = 72 }: { url: string | null | undefined; name: string; size?: number }) {
   if (!url) return null;
   return (
-    <img
+    <SignedPhoto
       src={url}
       alt={`Photo de ${name}`}
-      width={size}
-      height={size}
-      referrerPolicy="no-referrer"
-      style={{ width: size, height: size }}
+      size={size}
       className="shrink-0 rounded-[var(--radius-sm)] border border-line object-cover"
-      data-testid="member-photo"
+      testId="member-photo"
     />
   );
 }

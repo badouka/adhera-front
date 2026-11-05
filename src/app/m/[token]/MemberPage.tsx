@@ -1,5 +1,6 @@
 'use client';
 
+import { SignedPhoto } from '@/components/SignedPhoto';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   InvalidLink,
@@ -782,14 +783,12 @@ function SentToAssociation({
       <h2 className="heading m-0">Ce que vous avez envoyé à l’association</h2>
       {photo ? (
         <div className="flex items-center gap-3">
-          <img
+          <SignedPhoto
             src={photo}
             alt="Votre photo"
-            width={96}
-            height={96}
-            referrerPolicy="no-referrer"
-            className="size-24 shrink-0 rounded-[var(--radius-sm)] border border-line object-cover"
-            data-testid="my-photo"
+            size={96}
+            className="shrink-0 rounded-[var(--radius-sm)] border border-line object-cover"
+            testId="my-photo"
           />
           <p className="small m-0 text-ink-muted">Votre photo, telle qu’elle figurera sur votre carte de membre.</p>
         </div>

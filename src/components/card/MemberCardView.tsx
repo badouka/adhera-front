@@ -1,3 +1,4 @@
+import { SignedPhoto } from '@/components/SignedPhoto';
 import { formatDate } from '@/lib/dates';
 import type { CardLine, MemberCard } from '@/lib/types';
 import { QrCode } from './QrCode';
@@ -55,14 +56,12 @@ export function MemberCardView({ card }: { card: MemberCard }) {
       <div className="flex flex-col items-center gap-1">
         {card.photo_url ? (
           // §21.2 — carrée et ré-encodée par le serveur : aucun recadrage ici.
-          <img
+          <SignedPhoto
             src={card.photo_url}
             alt={`Photo de ${card.display_name}`}
-            width={128}
-            height={128}
-            referrerPolicy="no-referrer"
-            className="mb-2 size-32 rounded-[var(--radius-md)] border border-line object-cover"
-            data-testid="card-photo"
+            size={128}
+            className="mb-2 rounded-[var(--radius-md)] border border-line object-cover"
+            testId="card-photo"
           />
         ) : null}
         <p className="m-0 text-[28px] leading-[34px] font-bold break-words">{card.display_name}</p>

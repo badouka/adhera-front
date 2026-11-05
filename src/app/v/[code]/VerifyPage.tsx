@@ -1,5 +1,6 @@
 'use client';
 
+import { SignedPhoto } from '@/components/SignedPhoto';
 import { useCallback, useEffect, useState } from 'react';
 import { Loading, TechnicalError } from '@/components/Fallbacks';
 import { AlertIcon, CheckIcon } from '@/components/Icons';
@@ -161,14 +162,12 @@ function MemberLines({ member }: { member: Verification['member'] }) {
     <section className="flex flex-col gap-1">
       {/* §21 — la photo, et elle seule : elle dit que le porteur est bien celui que la carte désigne. */}
       {member.photo_url ? (
-        <img
+        <SignedPhoto
           src={member.photo_url}
           alt={`Photo de ${member.display_name}`}
-          width={120}
-          height={120}
-          referrerPolicy="no-referrer"
-          className="mb-2 size-[120px] rounded-[var(--radius-md)] border border-line object-cover"
-          data-testid="verify-photo"
+          size={120}
+          className="mb-2 rounded-[var(--radius-md)] border border-line object-cover"
+          testId="verify-photo"
         />
       ) : null}
       <p className="m-0 text-[24px] leading-8 font-bold break-words">{member.display_name}</p>
