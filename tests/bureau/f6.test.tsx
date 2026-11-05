@@ -330,6 +330,21 @@ describe('F6 § 5 — « L’adhésion en ligne »', () => {
     expect(body(fetchMock, 'PUT')).toEqual({ admission_mode: 'premier_paiement' });
   });
 
+  it('le choix se voit AU CLIC, avant la réponse ; un refus le défait (recette F6, Firefox)', async () => {
+    const user = userEvent.setup();
+    let answer: (r: Response) => void = () => undefined;
+    const fetchMock = vi.fn(() => new Promise<Response>((resolve) => (answer = resolve)));
+    vi.stubGlobal('fetch', fetchMock);
+    renderInBureau(<AdhesionEnLignePage />, { settings: OPEN });
+    const premier = screen.getByRole('radio', { name: /Toute personne qui paie/ });
+    await user.click(premier);
+    expect(premier).toBeChecked();
+    const { fakeResponse } = await import('./fixtures');
+    answer(fakeResponse(422, { message: 'Certains réglages sont invalides.', errors: { admission_mode: ['Refusé.'] } }));
+    await waitFor(() => expect(screen.getByRole('radio', { name: /Le bureau examine/ })).toBeChecked());
+    expect(screen.getByText('Refusé.')).toBeInTheDocument();
+  });
+
   it('le formulaire : l’e-mail en trois choix, la région, le mot d’accueil (vide → null)', async () => {
     const user = userEvent.setup();
     const fetchMock = fakeServer([{ method: 'PUT', match: 'membership/settings', body: OPEN }]);

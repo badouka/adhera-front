@@ -65,20 +65,27 @@ export default function AdhesionEnLignePage() {
   const [intro, setIntro] = useState(settings.join_intro ?? '');
   const [introError, setIntroError] = useState<string | null>(null);
   const clearToast = useCallback(() => setToast(null), []);
+  // Le choix se voit AU CLIC ; la réponse du serveur fait foi, un refus le défait.
+  const [shown, setShown] = useState<{
+    mode?: AdmissionMode;
+    email?: EmailMode;
+    region?: boolean;
+  }>({});
 
   useEffect(() => setOrigin(window.location.origin), []);
 
   const open = hasMembershipJoin(settings);
-  const mode = settings.admission_mode ?? 'bureau';
-  const emailMode = settings.join_email_mode ?? 'optional';
-  const askRegion = settings.join_ask_region ?? true;
+  const mode = shown.mode ?? settings.admission_mode ?? 'bureau';
+  const emailMode = shown.email ?? settings.join_email_mode ?? 'optional';
+  const askRegion = shown.region ?? settings.join_ask_region ?? true;
   const savedIntro = settings.join_intro ?? '';
   const joinUrl = origin ? `${origin}/adherer` : '';
 
-  async function save(run: () => Promise<Settings>) {
+  async function save(run: () => Promise<Settings>, show: typeof shown) {
     if (busy) return;
     setBusy(true);
     setError(null);
+    setShown(show);
     try {
       setSettings(await run());
       setToast('C’est enregistré.');
@@ -88,6 +95,7 @@ export default function AdhesionEnLignePage() {
         setError(Object.values(fields)[0] ?? errorMessage(cause, 'Ce réglage n’a pas pu être enregistré.'));
       }
     } finally {
+      setShown({});
       setBusy(false);
     }
   }
@@ -158,7 +166,7 @@ export default function AdhesionEnLignePage() {
               type="radio"
               name="admission"
               checked={mode === choice.value}
-              onChange={() => void save(() => setAdmissionMode(choice.value))}
+              onChange={() => void save(() => setAdmissionMode(choice.value), { mode: choice.value })}
               className="mt-1 size-5 shrink-0 accent-indigo"
             />
             <span className="flex flex-col gap-1">
@@ -204,7 +212,10 @@ export default function AdhesionEnLignePage() {
             type="checkbox"
             checked={askRegion}
             disabled={busy}
-            onChange={(e) => void save(() => updateJoinForm({ join_ask_region: e.target.checked }))}
+            onChange={(e) => {
+              const checked = e.target.checked;
+              void save(() => updateJoinForm({ join_ask_region: checked }), { region: checked });
+            }}
             className="size-5 shrink-0 accent-indigo"
           />
           <span>Demander la région</span>
@@ -218,7 +229,7 @@ export default function AdhesionEnLignePage() {
                 type="radio"
                 name="email-mode"
                 checked={emailMode === choice.value}
-                onChange={() => void save(() => updateJoinForm({ join_email_mode: choice.value }))}
+                onChange={() => void save(() => updateJoinForm({ join_email_mode: choice.value }), { email: choice.value })}
                 className="size-5 shrink-0 accent-indigo"
               />
               <span>{choice.label}</span>
