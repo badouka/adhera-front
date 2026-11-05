@@ -1073,6 +1073,8 @@ describe('page du membre — l’association agit, jamais un rôle (F5-bis R3)',
   const MEMBER_SURFACE = importClosure([
     join(SRC, 'app', 'm', '[token]', 'page.tsx'),
     join(SRC, 'app', 'v', '[code]', 'page.tsx'),
+    // F6 — le visiteur de /adherer lit, lui aussi, ce que fait L'ASSOCIATION.
+    join(SRC, 'app', 'adherer', 'page.tsx'),
   ]);
   const rel = (f: string) => relative(SRC, f);
 
@@ -1085,6 +1087,7 @@ describe('page du membre — l’association agit, jamais un rôle (F5-bis R3)',
       'components/card/SaveCard.tsx',
       'components/card/cardImage.ts',
       'app/v/[code]/VerifyPage.tsx',
+      'app/adherer/JoinPage.tsx',
     ]) {
       expect(files).toContain(expected);
     }
@@ -1158,5 +1161,117 @@ describe('carte en PNG — le dessin est chargé à la demande', () => {
     const code = stripComments(readFileSync(join(SRC, 'app', 'm', '[token]', 'MemberPage.tsx'), 'utf8'));
     expect(code).not.toMatch(/KeepOnPhone|Garder sur mon téléphone/);
     expect(code).toContain('<SaveCard');
+  });
+});
+
+/**
+ * F6 § 6 — les mots ajoutés d'après le lexique S5 et S6, et leurs voisins qui
+ * restent justes (« réglage », « règle »).
+ */
+describe('lexique F6 — payer, demande d’adhésion, lien d’invitation', () => {
+  it('contre-épreuve : « régler » et ses formes, candidature, inscription, filleuls sont nommés', () => {
+    expect(lexiqueOffenders('<button>Régler ma cotisation</button>')).toEqual(['régler → Régler ma cotisation']);
+    expect(lexiqueOffenders("t('Réglez sur le 77 123 45 67')")).toEqual(['régler → Réglez sur le 77 123 45 67']);
+    expect(lexiqueOffenders('<p>Rien à régler pour l’instant.</p>')).toEqual(['régler → Rien à régler pour l’instant.']);
+    expect(lexiqueOffenders('<p>Votre cotisation est réglée.</p>')).toEqual(['régler → Votre cotisation est réglée.']);
+    expect(lexiqueOffenders('<h1>Votre candidature</h1>')).toEqual(['candidature → Votre candidature']);
+    expect(lexiqueOffenders('<p>Inscription envoyée</p>')).toEqual(['inscription → Inscription envoyée']);
+    expect(lexiqueOffenders('<p>Vos filleuls</p>')).toEqual(['filleul → Vos filleuls']);
+    expect(lexiqueOffenders('<p>Votre lien de parrainage</p>')).toEqual(['lien de parrainage → Votre lien de parrainage']);
+    expect(lexiqueOffenders('<p>En attente de validation</p>')).toEqual([
+      'en attente de validation → En attente de validation',
+    ]);
+  });
+
+  it('contre-épreuve : les mots voisins passent', () => {
+    expect(lexiqueOffenders('<p>Paramètres : un réglage, une règle du bureau.</p>')).toEqual([]);
+    expect(lexiqueOffenders('<p>Rien à payer pour l’instant.</p>')).toEqual([]);
+    expect(lexiqueOffenders('<p>Votre demande d’adhésion. Votre lien d’invitation.</p>')).toEqual([]);
+    expect(lexiqueOffenders('<p>3 personnes sont venues grâce à vous.</p>')).toEqual([]);
+  });
+});
+
+/**
+ * F6 § 6 et lexique S6 — sur les écrans QUI N'EXISTENT QUE POUR LES QUESTIONS,
+ * on dit « question », « sorte de question », « réponses possibles » : jamais
+ * « champ », « option », « rubrique », « item », « valeur », ni « type » (pris
+ * par le type de membre). Ailleurs « champ » reste du bon français : la liste
+ * ne vaut QUE pour ces fichiers, nommés un par un.
+ */
+export const QUESTION_SURFACES = [
+  'src/app/bureau/questions/page.tsx',
+  'src/app/bureau/questions/[id]/page.tsx',
+  'src/app/bureau/questions/words.ts',
+];
+
+export const MOTS_BANNIS_QUESTIONS: ReadonlyArray<{ mot: string; pattern: RegExp }> = [
+  { mot: 'champ', pattern: /(?<!\p{L})champs?(?!\p{L})/iu },
+  { mot: 'option', pattern: /(?<!\p{L})options?(?!\p{L})/iu },
+  { mot: 'rubrique', pattern: /(?<!\p{L})rubriques?(?!\p{L})/iu },
+  { mot: 'item', pattern: /(?<!\p{L})items?(?!\p{L})/iu },
+  { mot: 'valeur', pattern: /(?<!\p{L})valeurs?(?!\p{L})/iu },
+  // « type de membre » est juste ; « type » d'une question ne l'est pas.
+  { mot: 'type (d’une question)', pattern: /(?<!\p{L})types?(?!\p{L})(?!\s+de\s+membres?)/iu },
+];
+
+export function questionWordOffenders(code: string, fileName?: string): string[] {
+  const out: string[] = [];
+  for (const text of displayedTexts(code, fileName)) {
+    for (const { mot, pattern } of MOTS_BANNIS_QUESTIONS) {
+      if (pattern.test(text)) out.push(`${mot} → ${text}`);
+    }
+  }
+  return out;
+}
+
+describe('les écrans des questions — question, sorte, réponses possibles (F6)', () => {
+  it('les trois fichiers suivis existent', () => {
+    for (const file of QUESTION_SURFACES) expect(() => statSync(file)).not.toThrow();
+  });
+
+  it('aucun texte affiché ne dit champ, option, rubrique, item, valeur ni type', () => {
+    const offenders = QUESTION_SURFACES.flatMap((file) =>
+      questionWordOffenders(readFileSync(file, 'utf8'), file).map((hit) => `${file} : ${hit}`),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it('contre-épreuve : les mots du développeur sont nommés, « type de membre » passe', () => {
+    expect(questionWordOffenders('<p>Ajoutez un champ</p>')).toEqual(['champ → Ajoutez un champ']);
+    expect(questionWordOffenders('<legend>Les options</legend>')).toEqual(['option → Les options']);
+    expect(questionWordOffenders('<legend>Type de question</legend>')).toEqual([
+      'type (d’une question) → Type de question',
+    ]);
+    expect(questionWordOffenders('<p>Sous le type de membre</p>')).toEqual([]);
+    expect(questionWordOffenders('<p>Les réponses possibles</p>')).toEqual([]);
+  });
+
+  it('contre-épreuve : la règle ne s’étend pas au reste du bureau, où « champ » est juste', () => {
+    const memberForm = readFileSync('src/components/bureau/MemberForm.tsx', 'utf8');
+    expect(QUESTION_SURFACES).not.toContain('src/components/bureau/MemberForm.tsx');
+    expect(questionWordOffenders('<p>Le champ téléphone</p>', 'src/components/bureau/MemberForm.tsx')).toHaveLength(1);
+    expect(typeof memberForm).toBe('string');
+  });
+});
+
+/**
+ * §20.7 — la vérification `/v/{code}` ne montre AUCUNE réponse : un tiers y
+ * apprend l'appartenance, jamais les déclarations. Ni `lines`, ni `answers`
+ * dans les fichiers qu'elle charge.
+ */
+describe('vérification publique — aucune réponse (F6, §20.7)', () => {
+  const VERIFY = importClosure([join(SRC, 'app', 'v', '[code]', 'page.tsx')]);
+
+  it('aucun fichier de /v/ ne lit lines ni answers, et la carte du membre n’y entre pas', () => {
+    const readers = VERIFY.filter((file) => /\.tsx$/.test(file))
+      .filter((file) => /\.(lines|answers)\b|\b(lines|answers)\s*[:=?]/.test(stripComments(readFileSync(file, 'utf8'))))
+      .map((file) => relative(SRC, file));
+    expect(readers).toEqual([]);
+    expect(VERIFY.map((f) => relative(SRC, f))).not.toContain('components/card/MemberCardView.tsx');
+  });
+
+  it('contre-épreuve : la carte du membre, elle, lit card.lines', () => {
+    const card = stripComments(readFileSync(join(SRC, 'components', 'card', 'MemberCardView.tsx'), 'utf8'));
+    expect(/\.lines\b/.test(card)).toBe(true);
   });
 });

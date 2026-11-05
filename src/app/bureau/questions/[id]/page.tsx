@@ -30,14 +30,15 @@ type Load =
 type Errors = Record<string, string>;
 
 /**
- * Les erreurs d'un `422` (§20.3), rangées sous le bon élément : `options.3`
- * va sous la réponse possible n° 4, `options` sous la liste.
+ * Les erreurs d'un `422` (§20.3), rangées sous le bon élément : la clé
+ * `options.3` va sous la réponse possible n° 4 (`reponse-3`), `options` sous la
+ * liste (`reponses`).
  */
 export function placeErrors(fields: Record<string, string>): Errors {
   const out: Errors = {};
   for (const [key, message] of Object.entries(fields)) {
-    const option = /^options\.(\d+)$/.exec(key);
-    out[option ? `options.${option[1]}` : key] = message;
+    const one = /^options\.(\d+)$/.exec(key);
+    out[one ? `reponse-${one[1]}` : key === 'options' ? 'reponses' : key] = message;
   }
   return out;
 }
@@ -346,9 +347,9 @@ function AnswersEditor({
             <input
               value={value}
               aria-label={`Réponse possible n° ${index + 1}`}
-              aria-invalid={errors[`options.${index}`] ? true : undefined}
+              aria-invalid={errors[`reponse-${index}`] ? true : undefined}
               onChange={(e) => onChange(values.map((v, i) => (i === index ? e.target.value : v)))}
-              className={inputClass(!!errors[`options.${index}`])}
+              className={inputClass(!!errors[`reponse-${index}`])}
             />
             <Button
               tone="ghost"
@@ -360,12 +361,12 @@ function AnswersEditor({
               Retirer
             </Button>
           </div>
-          {errors[`options.${index}`] ? (
-            <span className="small font-semibold text-late">{errors[`options.${index}`]}</span>
+          {errors[`reponse-${index}`] ? (
+            <span className="small font-semibold text-late">{errors[`reponse-${index}`]}</span>
           ) : null}
         </div>
       ))}
-      {errors.options ? <span className="small font-semibold text-late">{errors.options}</span> : null}
+      {errors.reponses ? <span className="small font-semibold text-late">{errors.reponses}</span> : null}
       <span>
         <Button disabled={!canAdd} onClick={() => onChange([...values, ''])}>
           Ajouter une réponse possible
