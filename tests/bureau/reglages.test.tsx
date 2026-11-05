@@ -78,7 +78,7 @@ describe('B11 — les types de membres et montants (rangés dans « Plus », F5)
 
     await screen.findByText(fullText('Forfait — 10 000 FCFA'));
     expect(JSON.parse(calls(fetchMock, 'POST')[0]?.init.body as string)).toEqual({
-      label: 'Jeune', mode: 'forfait', amount: 10000, sort_order: 0,
+      label: 'Jeune', mode: 'forfait', amount: 10000, sort_order: 0, is_public: true,
     });
   });
 });

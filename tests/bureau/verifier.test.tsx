@@ -281,7 +281,7 @@ describe('Écran 3 — « Je n’ai pas reçu cet argent »', () => {
     // L'aperçu : ce que Ndeye lira, avec le moyen et le montant SERVIS.
     expect(screen.getByTestId('preview')).toHaveTextContent('Le message que Ndeye recevra');
     expect(screen.getByTestId('preview')).toHaveTextContent(
-      'Le trésorier ne trouve pas votre paiement Wave de 25 000 FCFA.',
+      'L’association ne trouve pas votre paiement Wave de 25 000 FCFA.',
     );
   });
 

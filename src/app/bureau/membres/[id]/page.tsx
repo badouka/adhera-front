@@ -8,6 +8,7 @@ import { RECORD_PATH, VERIFY_PATH } from '@/components/bureau/BureauFrame';
 import { useBackBar, useBureau } from '@/components/bureau/BureauContext';
 import { ReceiptButton } from '@/components/bureau/Documents';
 import { decisionLabel, isModeUnsupported, periodLabel } from '@/components/bureau/format';
+import { AnswersList } from '@/components/bureau/Answers';
 import { ChatIcon } from '@/components/bureau/Icons';
 import {
   bigButtonClass,
@@ -255,6 +256,7 @@ export default function FicheMembrePage() {
             .filter(Boolean)
             .join(' · ')}
         </p>
+        <JoinLines member={m} />
       </div>
 
       {notice ? <Notice tone="paid">{notice}</Notice> : null}
@@ -268,7 +270,26 @@ export default function FicheMembrePage() {
         </Notice>
       ) : null}
 
-      {former ? (
+      {m.status === 'rejected' ? (
+        <Notice tone="late">
+          <span>
+            Demande d’adhésion refusée.
+            {m.application_rejection_reason ? (
+              <>
+                {' '}
+                Motif : <span className="whitespace-pre-line">{m.application_rejection_reason}</span>
+              </>
+            ) : null}
+          </span>
+        </Notice>
+      ) : m.status === 'pending' && (settings.admission_mode ?? 'bureau') === 'bureau' ? (
+        <Notice tone="info">
+          <span>Cette personne demande à adhérer.</span>
+          <Link href="/bureau/demandes" className="font-semibold">
+            Examiner sa demande
+          </Link>
+        </Notice>
+      ) : former ? (
         <Notice tone="due">
           Ancien membre
           {m.left_at ? ` depuis le ${formatDate(m.left_at)}` : ''}
@@ -334,7 +355,16 @@ export default function FicheMembrePage() {
         </>
       )}
 
-      <PaymentsSection payments={payments} onRetry={reload} />
+      {m.status === 'rejected' ? null : <PaymentsSection payments={payments} onRetry={reload} />}
+
+      {m.answers && m.answers.length > 0 ? (
+        <section className="flex flex-col gap-2">
+          <h2 className="heading m-0">Ses réponses</h2>
+          <div className="rounded-[var(--radius-md)] border border-line bg-surface-raised p-4">
+            <AnswersList answers={m.answers} />
+          </div>
+        </section>
+      ) : null}
 
       {modeSupported && claimed.length > 1 ? (
         <section className="flex flex-col gap-2" data-testid="claimed-years">
@@ -425,6 +455,7 @@ export default function FicheMembrePage() {
             <MemberForm
               memberTypes={settings.member_types}
               initial={m}
+              initialAnswers={m.answers}
               submitLabel="Enregistrer les modifications"
               onCancel={() => setAction(null)}
               onSubmit={async (input) => {
@@ -508,6 +539,42 @@ export default function FicheMembrePage() {
   );
 }
 
+/**
+ * §20.8 et §17.7 — les lignes discrètes sous le nom : qui a décidé de
+ * l'adhésion (la date seule si le compte n'existe plus, jamais « inconnu »),
+ * qui a invité ce membre, et combien de personnes il a fait venir.
+ */
+export function joinLines(member: MemberDetail): string[] {
+  const lines: string[] = [];
+  const decision = member.application_decision;
+  const when = formatDateTime(decision?.at ?? null);
+  const by = decision?.by_name?.trim();
+  if (decision?.decision === 'admitted' && when) {
+    lines.push(by ? `Admis le ${when} par ${by}` : `Admis le ${when}`);
+  }
+  if (decision?.decision === 'refused' && when) {
+    lines.push(by ? `Demande refusée le ${when} par ${by}` : `Demande refusée le ${when}`);
+  }
+  const parts: string[] = [];
+  if (member.referred_by?.display_name) parts.push(`Invitation de ${member.referred_by.display_name}`);
+  const joined = member.referrals_count?.joined ?? 0;
+  if (joined > 0) parts.push(`A fait venir ${joined > 1 ? `${joined} personnes` : '1 personne'}`);
+  if (parts.length > 0) lines.push(parts.join(' · '));
+  return lines;
+}
+
+function JoinLines({ member }: { member: MemberDetail }) {
+  const lines = joinLines(member);
+  if (lines.length === 0) return null;
+  return (
+    <div className="small mt-1 flex flex-col text-ink-muted" data-testid="join-lines">
+      {lines.map((line) => (
+        <span key={line}>{line}</span>
+      ))}
+    </div>
+  );
+}
+
 function safeDecode(value: string): string {
   try {
     return decodeURIComponent(value);
@@ -518,6 +585,7 @@ function safeDecode(value: string): string {
 
 function MemberPastille({ member, late }: { member: MemberDetail; late: boolean }) {
   if (member.status === 'former') return <Pastille tone="due">Ancien membre</Pastille>;
+  if (member.status === 'rejected') return <Pastille tone="late">Demande refusée</Pastille>;
   if (member.status === 'pending') return <Pastille tone="info">Demande d’adhésion</Pastille>;
   return late ? <Pill tone="late">En retard</Pill> : <Pill tone="ok">À jour</Pill>;
 }

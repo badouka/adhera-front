@@ -11,6 +11,9 @@ export const PLUS_ENTRIES: ReadonlyArray<{ href: string; label: string; card?: b
   { href: '/bureau/campagnes', label: 'Relancer les membres' },
   { href: '/bureau/a-envoyer', label: 'Rappels WhatsApp à envoyer' },
   { href: '/bureau/demandes', label: 'Demandes d’adhésion' },
+  // F6 § 5 — deux entrées, et deux seulement.
+  { href: '/bureau/adhesion-en-ligne', label: 'L’adhésion en ligne : le lien, et qui devient membre' },
+  { href: '/bureau/questions', label: 'Les questions de l’association' },
   { href: '/bureau/anciens', label: 'Anciens membres' },
   { href: '/bureau/paiements', label: 'Tous les paiements' },
   { href: '/bureau/chiffres', label: 'Chiffres détaillés et fichiers Excel' },

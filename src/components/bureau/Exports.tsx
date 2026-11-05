@@ -77,6 +77,7 @@ export function ExportButtons({
   const today = todayInDakar();
   const window_ = period ? `${period.from}_${period.to}` : today;
   return (
+    <div className="flex flex-col gap-2">
     <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
       <ExportButton
         label="Registre des membres (Excel)"
@@ -88,6 +89,12 @@ export function ExportButtons({
         fallbackName={`paiements-${window_}.xlsx`}
         run={() => downloadPaymentsExport(query)}
       />
+    </div>
+      {/* §20.9, FON-21 — l'aller-retour export → Excel → import perd les réponses SANS message. */}
+      <p className="small m-0 text-ink-muted" data-testid="import-sentence">
+        Le registre porte une colonne par question de l’association. Un import ne relit pas ces
+        colonnes : corrigées dans Excel puis réimportées, les réponses seraient perdues.
+      </p>
     </div>
   );
 }

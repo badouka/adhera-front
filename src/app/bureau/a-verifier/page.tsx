@@ -58,7 +58,7 @@ export function reasonPreview(reason: Reason, payment: Payment, text: string): s
   const what = `${payment.method_label} de ${payment.amount_formatted}`;
   switch (reason) {
     case 'not_found':
-      return `Le trésorier ne trouve pas votre paiement ${what}. Vérifiez le numéro auquel vous avez envoyé l’argent, puis signalez-le à nouveau sur votre page.`;
+      return `L’association ne trouve pas votre paiement ${what}. Vérifiez le numéro auquel vous avez envoyé l’argent, puis signalez-le à nouveau sur votre page.`;
     case 'wrong_amount':
       return `Le montant reçu ne correspond pas à votre paiement ${what}. Vérifiez la somme envoyée, puis signalez-le à nouveau sur votre page.`;
     case 'unreadable_proof':

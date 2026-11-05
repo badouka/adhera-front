@@ -37,18 +37,21 @@ const TITLES: Record<MemberStatus, string> = {
   active: 'Membres',
   pending: 'Demandes d’adhésion',
   former: 'Anciens membres',
+  rejected: 'Demandes refusées',
 };
 
 const SUBTITLES: Record<MemberStatus, string | undefined> = {
   active: undefined,
   pending: 'Ils ne sont pas encore membres : leur premier paiement les admet.',
   former: 'Leur historique est conservé.',
+  rejected: 'Elles gardent leur lien et le motif du refus.',
 };
 
 const EMPTY: Record<MemberStatus, string> = {
   active: 'Aucun membre ne correspond.',
   pending: 'Aucune demande d’adhésion en attente.',
   former: 'Aucun ancien membre.',
+  rejected: 'Aucune demande refusée.',
 };
 
 type Standing = NonNullable<MemberFilters['standing']>;
@@ -64,9 +67,16 @@ type Load =
  * par défaut côté serveur) et les anciens membres. La liste du quotidien est
  * « Membres » (`/bureau/membres`).
  */
-export function Registry({ status }: { status: MemberStatus }) {
+export function Registry({
+  status,
+  back = { href: '/bureau/plus', label: 'Plus' },
+}: {
+  status: MemberStatus;
+  /** « Retour » : vers « Plus » par défaut ; vers les demandes pour les candidats (F6). */
+  back?: { href: string; label: string };
+}) {
   const { settings, markModeUnsupported } = useBureau();
-  useBackBar({ href: '/bureau/plus', label: 'Plus' });
+  useBackBar(back);
   const [standing, setStanding] = useState<Standing>('');
   const [type, setType] = useState<MemberType | ''>('');
   const [categoryId, setCategoryId] = useState<number | ''>('');

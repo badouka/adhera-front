@@ -4,20 +4,63 @@ import { useEffect, useRef, useState } from 'react';
 import { fieldMessages } from '@/lib/api';
 import { listCategories } from '@/lib/bureau/api/categories';
 import { isSessionError } from '@/lib/bureau/api/core';
+import { listQuestions } from '@/lib/bureau/api/questions';
 import { errorMessage } from '@/lib/bureau/messages';
 import type {
   Category,
+  MemberAnswer,
   MemberInput,
   MemberListItem,
   MemberType,
   MemberTypes,
+  Question,
 } from '@/lib/bureau/types';
-import { todayInDakar } from '@/lib/dates';
+import { formatDate, todayInDakar } from '@/lib/dates';
 import { dateError } from './format';
 import { Button, Field, inputClass } from './ui';
 
 type FieldName = keyof MemberInput;
-type Errors = Partial<Record<FieldName, string>>;
+/** Les champs du membre, et `answers.{id}` pour une question (§20.6). */
+type Errors = Partial<Record<FieldName | `answers.${number}`, string>>;
+
+/** Une réponse en cours de saisie : `''` = pas de réponse. */
+type Draft = Record<string, string | boolean>;
+
+/** La valeur à renvoyer (§20.6 : on renvoie `value`, on affiche `value_label`). */
+function draftOf(answers: MemberAnswer[] | undefined): Draft {
+  const out: Draft = {};
+  for (const answer of answers ?? []) {
+    if (answer.archived) continue;
+    out[String(answer.question_id)] = answer.value ?? '';
+  }
+  return out;
+}
+
+/**
+ * §20.6 — le `PUT` remplace PAR QUESTION : on n'envoie que ce qui a changé, et
+ * `""` efface une réponse. À la création, seulement les réponses données.
+ * `required` ne s'applique pas ici : le bureau complétera.
+ */
+export function changedAnswers(
+  questions: Question[],
+  draft: Draft,
+  initial: Draft,
+  creating: boolean,
+): Record<string, string | boolean> {
+  const out: Record<string, string | boolean> = {};
+  for (const question of questions) {
+    const key = String(question.id);
+    const value = draft[key] ?? '';
+    const before = initial[key] ?? '';
+    const normalized = typeof value === 'string' ? value.trim() : value;
+    if (creating) {
+      if (normalized !== '') out[key] = normalized;
+    } else if (normalized !== (typeof before === 'string' ? before.trim() : before)) {
+      out[key] = normalized;
+    }
+  }
+  return out;
+}
 
 /**
  * Les champs du formulaire, dans l'ordre de l'écran : c'est l'ordre du focus
@@ -52,6 +95,7 @@ function emptyToNull(value: string): string | null {
 export function MemberForm({
   memberTypes,
   initial,
+  initialAnswers,
   submitLabel,
   onSubmit,
   onCancel,
@@ -59,6 +103,8 @@ export function MemberForm({
   memberTypes: MemberTypes;
   /** Absent à la création. */
   initial?: MemberListItem;
+  /** §20.6 — les réponses de la fiche (`answers`), archivées comprises. */
+  initialAnswers?: MemberAnswer[];
   submitLabel: string;
   /** Rend l'erreur de l'API telle quelle : le formulaire la traduit. */
   onSubmit: (input: MemberInput) => Promise<void>;
@@ -88,6 +134,22 @@ export function MemberForm({
   const [formError, setFormError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [startAnswers] = useState<Draft>(() => draftOf(initialAnswers));
+  const [answers, setAnswers] = useState<Draft>(startAnswers);
+  const retired = (initialAnswers ?? []).filter((a) => a.archived);
+
+  // Les questions ACTIVES, dans leur ordre : une question retirée ne se saisit
+  // plus (§20.3). Sans elles, le formulaire reste celui du membre.
+  useEffect(() => {
+    const controller = new AbortController();
+    listQuestions(controller.signal)
+      .then((payload) =>
+        setQuestions(payload.questions.filter((q) => !q.archived).sort((a, b) => a.position - b.position)),
+      )
+      .catch(() => setQuestions([]));
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -108,7 +170,8 @@ export function MemberForm({
   );
 
   function focusFirst(next: Errors) {
-    const first = FIELDS.find((f) => next[f]);
+    const order = [...FIELDS, ...questions.map((q) => `answers.${q.id}` as const)];
+    const first = order.find((f) => next[f]);
     if (!first) return;
     formRef.current
       ?.querySelector<HTMLElement>(`[name="${first}"]`)
@@ -139,6 +202,11 @@ export function MemberForm({
     return next;
   }
 
+  function answersPart(): { answers?: Record<string, string | boolean> } {
+    const changed = changedAnswers(questions, answers, startAnswers, !initial);
+    return Object.keys(changed).length > 0 ? { answers: changed } : {};
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (sending) return;
@@ -165,6 +233,7 @@ export function MemberForm({
         ...(numberEditable && memberNumber.trim() !== initialNumber.trim()
           ? { member_number: emptyToNull(memberNumber) }
           : {}),
+        ...answersPart(),
       });
     } catch (error) {
       if (isSessionError(error)) return;
@@ -172,6 +241,10 @@ export function MemberForm({
       const mapped: Errors = {};
       for (const field of FIELDS) {
         if (messages[field]) mapped[field] = messages[field];
+      }
+      for (const question of questions) {
+        const key = `answers.${question.id}` as const;
+        if (messages[key]) mapped[key] = messages[key];
       }
       if (Object.keys(mapped).length > 0) {
         setErrors(mapped);
@@ -291,6 +364,32 @@ export function MemberForm({
         )}
       </Field>
 
+      {questions.length > 0 || retired.length > 0 ? (
+        <fieldset className="m-0 flex flex-col gap-4 border-0 border-t border-line p-0 pt-4" data-testid="member-answers">
+          <legend className="float-left mb-1 w-full p-0 font-semibold">Ses réponses aux questions de l’association</legend>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {questions.map((question) => (
+              <AnswerInput
+                key={question.id}
+                question={question}
+                value={answers[String(question.id)] ?? ''}
+                error={errors[`answers.${question.id}`]}
+                onChange={(value) => setAnswers((prev) => ({ ...prev, [String(question.id)]: value }))}
+              />
+            ))}
+          </div>
+          {retired.length > 0 ? (
+            <div className="small flex flex-col gap-1 text-ink-muted">
+              {retired.map((answer) => (
+                <span key={answer.question_id}>
+                  {answer.label} (question retirée) : {answer.value_label ?? 'pas de réponse'}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </fieldset>
+      ) : null}
+
       <div role="alert" aria-live="polite">
         {formError ? (
           <p className="m-0 rounded-[var(--radius-sm)] bg-late-soft p-3 font-semibold text-late">{formError}</p>
@@ -308,5 +407,67 @@ export function MemberForm({
         </Button>
       </div>
     </form>
+  );
+}
+
+/** Un oui/non tel que le serveur peut le rendre : booléen, `1`/`0`, `oui`/`non`. */
+function yesNo(value: string | boolean): '' | 'oui' | 'non' {
+  if (value === true || ['1', 'true', 'oui', 'yes'].includes(String(value).toLowerCase())) return 'oui';
+  if (value === false || ['0', 'false', 'non', 'no'].includes(String(value).toLowerCase())) return 'non';
+  return '';
+}
+
+/**
+ * Une réponse saisie par le bureau : aucune n'est obligatoire ici. Une valeur
+ * absente des réponses possibles actuelles reste proposée — c'est ce que le
+ * membre a déclaré (§20.10).
+ */
+function AnswerInput({
+  question,
+  value,
+  error,
+  onChange,
+}: {
+  question: Question;
+  value: string | boolean;
+  error: string | undefined;
+  onChange: (value: string | boolean) => void;
+}) {
+  const name = `answers.${question.id}`;
+  const text = typeof value === 'string' ? value : '';
+  return (
+    <Field label={question.label} optional error={error} hint={question.type === 'date' && formatDate(text) ? formatDate(text) : undefined}>
+      {(props) =>
+        question.type === 'choice' ? (
+          <select {...props} name={name} value={text} onChange={(e) => onChange(e.target.value)} className={inputClass(!!error)}>
+            <option value="">Pas de réponse</option>
+            {(text && !question.options.includes(text) ? [text, ...question.options] : question.options).map((option) => (
+              <option key={option}>{option}</option>
+            ))}
+          </select>
+        ) : question.type === 'yes_no' ? (
+          <select
+            {...props}
+            name={name}
+            value={yesNo(value)}
+            onChange={(e) => onChange(e.target.value === 'oui' ? true : e.target.value === 'non' ? false : '')}
+            className={inputClass(!!error)}
+          >
+            <option value="">Pas de réponse</option>
+            <option value="oui">Oui</option>
+            <option value="non">Non</option>
+          </select>
+        ) : (
+          <input
+            {...props}
+            name={name}
+            type={question.type === 'date' ? 'date' : 'text'}
+            value={text}
+            onChange={(e) => onChange(e.target.value)}
+            className={inputClass(!!error)}
+          />
+        )
+      }
+    </Field>
   );
 }

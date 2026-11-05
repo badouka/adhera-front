@@ -7,7 +7,7 @@ import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AnciensPage from '@/app/bureau/anciens/page';
-import DemandesPage from '@/app/bureau/demandes/page';
+import EnAttentePage from '@/app/bureau/demandes/en-attente/page';
 import { Registry } from '@/components/bureau/Registry';
 import { resetSessionCache, saveSession } from '@/lib/bureau/session';
 import {
@@ -152,12 +152,12 @@ describe('B5 — le registre complet (F5 : il sert « Demandes d’adhésion » 
     expect(screen.queryByLabelText('Type')).not.toBeInTheDocument();
   });
 
-  it('« Demandes d’adhésion » et « Anciens membres », rangés dans « Plus », demandent leur statut', async () => {
+  it('les candidats qui n’ont pas payé (F6) et « Anciens membres » demandent leur statut', async () => {
     const fetchMock = server();
-    const { value, unmount } = renderInBureau(<DemandesPage />);
+    const { value, unmount } = renderInBureau(<EnAttentePage />);
     expect(screen.getByRole('heading', { name: 'Demandes d’adhésion' })).toBeInTheDocument();
     await waitFor(() => expect(memberUrls(fetchMock).at(-1)).toContain('status=pending'));
-    expect(value.setBack).toHaveBeenCalledWith(expect.objectContaining({ href: '/bureau/plus' }));
+    expect(value.setBack).toHaveBeenCalledWith(expect.objectContaining({ href: '/bureau/demandes' }));
     unmount();
     renderInBureau(<AnciensPage />);
     expect(screen.getByRole('heading', { name: 'Anciens membres' })).toBeInTheDocument();

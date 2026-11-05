@@ -3,7 +3,7 @@
  */
 
 import { request } from './core';
-import type { ArrearsPolicy, Settings, SettingsInput } from '../types';
+import type { AdmissionMode, ArrearsPolicy, EmailMode, Settings, SettingsInput } from '../types';
 
 /* ───────────────────────────── Réglages ───────────────────────────── */
 
@@ -50,4 +50,26 @@ export function setWeeklyReport(enabled: boolean) {
     method: 'PUT',
     json: { weekly_report_enabled: enabled },
   });
+}
+
+/* ─────────────────────── L'adhésion en ligne (§17.2, §20.5) ─────────────────────── */
+
+/** « Qui devient membre ? » — enregistré au choix, sans bouton. */
+export function setAdmissionMode(mode: AdmissionMode) {
+  return request<Settings>('membership/settings', {
+    method: 'PUT',
+    json: { admission_mode: mode },
+  });
+}
+
+/**
+ * Les réglages du formulaire public : un lot PARTIEL. Une clé absente reste
+ * inchangée ; `join_intro: null` retire le mot d'accueil (§20.5).
+ */
+export function updateJoinForm(input: {
+  join_intro?: string | null;
+  join_ask_region?: boolean;
+  join_email_mode?: EmailMode;
+}) {
+  return request<Settings>('membership/settings', { method: 'PUT', json: input });
 }

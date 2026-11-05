@@ -3,7 +3,7 @@
  */
 
 import { request } from './core';
-import type { Contact, ContactInput, LeftReason, MemberDetail, MemberFilters, MemberInput, MemberLink, MemberListItem, WhatsappMessage } from '../types';
+import type { Contact, ContactInput, DecidedMember, LeftReason, MemberDetail, MemberFilters, MemberInput, MemberLink, MemberListItem, WhatsappMessage } from '../types';
 
 /* ────────────────────────────── Membres ───────────────────────────── */
 
@@ -67,4 +67,28 @@ export function deleteContact(memberId: string, contactId: string) {
     `membership/members/${seg(memberId)}/contacts/${seg(contactId)}`,
     { method: 'DELETE' },
   );
+}
+
+/* ───────────────────── Les demandes d'adhésion (§17.6) ───────────────────── */
+
+/**
+ * « Admettre » : aucun corps. La réponse est la fiche, plus `share`, le message
+ * de bienvenue — le canal RÉEL d'un candidat sans e-mail, à proposer juste
+ * après. `409 not_a_candidate` nomme l'état du membre dans son message.
+ */
+export function admitApplication(id: string) {
+  return request<DecidedMember>(`membership/members/${seg(id)}/admit`, { method: 'POST' });
+}
+
+/**
+ * « Refuser la demande » : un motif de 10 caractères au moins, écrit POUR le
+ * candidat. AUCUN message ne part tout seul : `share` est proposé, jamais
+ * envoyé par le serveur. `409 payment_already_accepted` si un paiement l'a déjà
+ * admis.
+ */
+export function rejectApplication(id: string, reason: string) {
+  return request<DecidedMember>(`membership/members/${seg(id)}/reject-application`, {
+    method: 'POST',
+    json: { reason },
+  });
 }

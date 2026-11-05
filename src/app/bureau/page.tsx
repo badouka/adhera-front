@@ -16,6 +16,7 @@ import { plural } from '@/lib/bureau/words';
 export const MEMBERS_LATE = '/bureau/membres?filtre=retard';
 export const MEMBERS_RENEWING = '/bureau/membres?filtre=renouveler';
 export const PAYMENTS_LOG = '/bureau/paiements';
+export const APPLICATIONS_PATH = '/bureau/demandes';
 
 type Load =
   | { kind: 'loading' }
@@ -88,6 +89,8 @@ export default function AccueilPage() {
   const n = simple.to_verify_count;
   const late = simple.late_count;
   const soon = simple.renewing_soon_count;
+  // §17.9 — un TRAVAIL à faire (0 sous « premier paiement »), pas un effectif.
+  const apps = simple.applications_to_review_count ?? 0;
 
   return (
     <>
@@ -150,6 +153,21 @@ export default function AccueilPage() {
             {n > 1 ? `Vérifier ces ${n} paiements` : 'Vérifier ce paiement'}
           </Link>
         </section>
+      ) : apps > 0 ? (
+        // Un seul bouton principal par écran : les paiements d'abord, puis les demandes.
+        <section className="flex flex-col gap-3 rounded-[var(--radius-md)] bg-indigo-soft p-4" data-testid="to-review">
+          <div>
+            <h2 className="heading m-0">
+              {apps > 1 ? `${apps} personnes demandent à adhérer` : '1 personne demande à adhérer'}
+            </h2>
+            <p className="m-0">
+              Regardez qui demande à entrer, appelez si vous avez un doute, puis répondez.
+            </p>
+          </div>
+          <Link href={APPLICATIONS_PATH} className={bigButtonClass('primary')}>
+            {apps > 1 ? 'Examiner les demandes' : 'Examiner la demande'}
+          </Link>
+        </section>
       ) : (
         <section className="flex flex-col gap-1 rounded-[var(--radius-md)] border border-line bg-surface-raised p-4" data-testid="nothing-to-verify">
           <h2 className="heading m-0">Rien à vérifier</h2>
@@ -158,6 +176,11 @@ export default function AccueilPage() {
       )}
 
       <div className="flex flex-col overflow-hidden rounded-[var(--radius-md)] border border-line bg-surface-raised">
+        {n > 0 && apps > 0 ? (
+          <RowLink href={APPLICATIONS_PATH} testId="row-applications" action="Examiner">
+            <b>{apps > 1 ? `${apps} demandes d’adhésion` : '1 demande d’adhésion'}</b> à examiner
+          </RowLink>
+        ) : null}
         <RowLink href={MEMBERS_LATE} testId="row-late">
           {late === 0 ? 'Aucun membre en retard' : plural(late, 'membre en retard', 'membres en retard')}
         </RowLink>
@@ -206,10 +229,12 @@ function Tile({
 function RowLink({
   href,
   testId,
+  action = 'Voir qui',
   children,
 }: {
   href: string;
   testId: string;
+  action?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -219,7 +244,7 @@ function RowLink({
       className="flex min-h-14 items-center justify-between gap-3 border-b border-line px-4 py-2 text-ink! no-underline last:border-b-0"
     >
       <span>{children}</span>
-      <span className="font-semibold whitespace-nowrap text-indigo">Voir qui</span>
+      <span className="font-semibold whitespace-nowrap text-indigo">{action}</span>
     </Link>
   );
 }

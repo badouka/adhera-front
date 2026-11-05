@@ -93,8 +93,24 @@ export type Settings = {
    * Les options vendables allumées pour l'association (v3.8.1). Clé absente
    * d'un serveur antérieur : chaque option est alors lue comme ÉTEINTE.
    */
-  features?: { membership_card?: boolean };
+  features?: { membership_card?: boolean; membership_join?: boolean };
+  /** §17.2 — qui admet un candidat. Absent d'un serveur antérieur : `bureau`. */
+  admission_mode?: AdmissionMode;
+  /** §17.10 — l'e-mail au bureau à chaque nouvelle demande. */
+  application_notifications_enabled?: boolean;
+  /** §20.5 — le mot d'accueil du formulaire public, 300 caractères ; `null` : aucun. */
+  join_intro?: string | null;
+  join_ask_region?: boolean;
+  join_email_mode?: EmailMode;
 };
+
+export type AdmissionMode = 'bureau' | 'premier_paiement';
+export type EmailMode = 'hidden' | 'optional' | 'required';
+
+/** `features.membership_join === true` : sinon, aucun lien d'adhésion à partager (§17.1). */
+export function hasMembershipJoin(settings: Settings): boolean {
+  return settings.features?.membership_join === true;
+}
 
 /** `features.membership_card === true`, et rien d'autre. */
 export function hasMembershipCard(settings: Settings): boolean {
@@ -123,6 +139,11 @@ export type Category = {
   amount_formatted: string | null;
   sort_order: number;
   is_active: boolean;
+  /**
+   * §17.10 — proposée sur la page d'adhésion publique. ⚠️ Distincte
+   * d'`is_active`. Absente d'un serveur antérieur à S5.
+   */
+  is_public?: boolean;
   /** Faux : le produit ne sait pas dériver un montant (§4). */
   is_calculable: boolean;
 };
@@ -132,12 +153,40 @@ export type CategoryInput = {
   mode: Exclude<CategoryMode, 'bareme'>;
   amount: number | null;
   sort_order: number;
+  /** §17.10 — envoyée TELLE QU'AFFICHÉE ; absente, le serveur décide. */
+  is_public?: boolean;
 };
 
 /* ────────────────────────────── Membres ───────────────────────────── */
 
 export type MemberType = 'personne' | 'organisation';
-export type MemberStatus = 'active' | 'former' | 'pending';
+export type MemberStatus = 'active' | 'former' | 'pending' | 'rejected';
+export type JoinSource = 'import' | 'bureau' | 'lien_public' | 'parrainage';
+
+export type QuestionType = 'text' | 'choice' | 'yes_no' | 'date';
+
+/**
+ * §20.6 — une réponse sur la fiche (et sur les lignes `?status=pending` ou
+ * `rejected`). On RENVOIE `value`, on AFFICHE `value_label` (« 3 mars 1998 »,
+ * « Oui ») : jamais l'inverse.
+ */
+export type MemberAnswer = {
+  question_id: number;
+  label: string;
+  type: QuestionType | string;
+  value: string | boolean | null;
+  value_label: string | null;
+  /** Une question retirée : affichée en lecture seule. */
+  archived: boolean;
+};
+
+/** §20.8 — qui a décidé d'une demande, et quand. `by_name` peut manquer. */
+export type ApplicationDecision = {
+  decision: 'admitted' | 'refused' | null;
+  by_name: string | null;
+  /** ISO 8601 */
+  at: string | null;
+};
 export type LeftReason = 'resigned' | 'struck_off' | 'deceased' | 'other';
 
 export type MemberListItem = {
@@ -176,6 +225,19 @@ export type MemberListItem = {
   /** `null` = INCONNU, jamais « rien à payer » (§5, piège 4). */
   balance_due: number | null;
   balance_due_formatted: string | null;
+  /** §17.7 — d'où vient la fiche. Absente d'un serveur antérieur à S5. */
+  join_source?: JoinSource | string;
+  /** « Awa G. » — `null` sans parrain. */
+  referred_by?: { id: string; display_name: string } | null;
+  /** Un SIGNAL, pas un refus : l'identifiant d'une fiche qui ressemble à celle-ci. */
+  possible_duplicate_of?: string | null;
+  /** La même phrase que le candidat lit sur sa page. */
+  application_rejection_reason?: string | null;
+  /**
+   * §20.6 — servie sur `?status=pending` et `?status=rejected` seulement ;
+   * ABSENTE de toute autre liste.
+   */
+  answers?: MemberAnswer[];
 };
 
 export type DueStatus = 'due' | 'partielle' | 'reglee' | 'exoneree';
@@ -287,7 +349,16 @@ export type MemberDetail = MemberListItem & {
   missing_periods?: MissingPeriod[];
   /** La plus RÉCENTE d'abord. Absente avant v3.8. */
   attestations?: MemberAttestation[];
+  /** §17.7 — les personnes que ce membre a fait venir. */
+  referrals_count?: { joined: number; pending: number };
+  /** §20.6 — toutes les questions actives, répondues ou non, et les archivées répondues. */
+  answers?: MemberAnswer[];
+  /** §20.8 — `null` tant qu'aucune décision n'a été prise, ou avant S6. */
+  application_decision?: ApplicationDecision | null;
 };
+
+/** La réponse d'`admit` et de `reject-application` (§17.6) : la fiche, et le message. */
+export type DecidedMember = MemberDetail & { share?: Share | null };
 
 /**
  * Le nom dépend du type (v3.5.7) : `first_name` + `last_name` pour une
@@ -306,6 +377,12 @@ export type MemberInput = {
   joined_at: string | null;
   /** §16.1 — envoyé seulement s'il a changé (`PUT` uniquement). */
   member_number?: string | null;
+  /**
+   * §20.6 — par identifiant de question. Le `PUT` remplace PAR QUESTION : une
+   * question absente garde sa réponse, `""` l'efface. On n'envoie que ce qui a
+   * changé.
+   */
+  answers?: Record<string, string | boolean>;
 };
 
 /**
@@ -516,6 +593,8 @@ export type DashboardSimple = {
   to_verify_count: number;
   to_verify_total: number;
   to_verify_total_formatted: string;
+  /** §17.9 — les demandes qui attendent le bureau ; `0` sous « premier paiement ». */
+  applications_to_review_count?: number;
 };
 
 /* ─────────────────────── Relances et file WhatsApp (§9) ─────────────── */
@@ -651,4 +730,43 @@ export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
   validated: 'Accepté',
   rejected: 'Refusé',
   cancelled: 'Annulé',
+};
+
+/* ─────────────────────── Les questions de l'association (§20) ─────────────── */
+
+export type Question = {
+  id: number;
+  label: string;
+  type: QuestionType;
+  /** `[]` hors `choice`, jamais `null`. */
+  options: string[];
+  /** Sur le formulaire PUBLIC seulement : le bureau saisit sans réponse. */
+  required: boolean;
+  on_card: boolean;
+  position: number;
+  /** Servies, en FIN de liste : le repli « Questions retirées ». */
+  archived: boolean;
+  /** Décide du bouton (« Retirer du formulaire ») et verrouille la sorte. */
+  has_answers: boolean;
+};
+
+/** §20.2 — les bornes, SERVIES : l'écran n'en recopie aucune. */
+export type QuestionLimits = {
+  max_active: number;
+  max_on_card: number;
+  card_types: string[];
+  types: string[];
+  options_min: number;
+  options_max: number;
+};
+
+export type QuestionsPayload = { questions: Question[]; limits: QuestionLimits };
+
+export type QuestionInput = {
+  label: string;
+  type: QuestionType;
+  /** Envoyée pour `choice` SEULEMENT : refusée ailleurs (422 `prohibited`). */
+  options?: string[];
+  required: boolean;
+  on_card: boolean;
 };

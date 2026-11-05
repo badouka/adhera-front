@@ -156,6 +156,8 @@ describe('N3 — « Plus »', () => {
       ['Relancer les membres', '/bureau/campagnes'],
       ['Rappels WhatsApp à envoyer', '/bureau/a-envoyer'],
       ['Demandes d’adhésion', '/bureau/demandes'],
+      ['L’adhésion en ligne : le lien, et qui devient membre', '/bureau/adhesion-en-ligne'],
+      ['Les questions de l’association', '/bureau/questions'],
       ['Anciens membres', '/bureau/anciens'],
       ['Tous les paiements', '/bureau/paiements'],
       ['Chiffres détaillés et fichiers Excel', '/bureau/chiffres'],

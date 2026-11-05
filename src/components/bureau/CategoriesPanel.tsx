@@ -218,6 +218,9 @@ export function CategoriesPanel() {
                       </>
                     ) : null}
                   </span>
+                  {category.is_public === false && category.is_active ? (
+                    <span className="small text-ink-muted">Non proposé sur la page « Adhérer »</span>
+                  ) : null}
                   {category.is_calculable ? null : (
                     <span className="small font-semibold text-due">
                       Montant non calculable : aucune cotisation ne peut s’ouvrir sur ce type de membre.
@@ -285,7 +288,7 @@ export function CategoriesPanel() {
 }
 
 /** Les champs du formulaire : un `422` s'y range, avec le message de l'API tel quel. */
-const CATEGORY_FIELDS = ['label', 'mode', 'amount', 'sort_order'] as const;
+const CATEGORY_FIELDS = ['label', 'mode', 'amount', 'sort_order', 'is_public'] as const;
 
 function CategoryForm({
   initial,
@@ -303,6 +306,10 @@ function CategoryForm({
   // R1 : le seul nombre brut manipulé est la valeur du champ.
   const [amount, setAmount] = useState(initial?.amount != null ? String(initial.amount) : '');
   const [sortOrder, setSortOrder] = useState(String(initial?.sort_order ?? 0));
+  // §17.10 — décochée par défaut sur une exonérée (personne ne se déclare
+  // membre d'honneur), cochée sinon ; envoyée TELLE QU'AFFICHÉE.
+  const [isPublic, setIsPublic] = useState(initial?.is_public ?? (initial?.mode ?? 'forfait') !== 'exonere');
+  const [publicTouched, setPublicTouched] = useState(initial?.is_public !== undefined);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -334,6 +341,7 @@ function CategoryForm({
       mode: mode as CategoryInput['mode'],
       amount: needsAmount ? value : null,
       sort_order: sortOrder.trim() === '' ? 0 : order,
+      is_public: isPublic,
     };
 
     setBusy(true);
@@ -361,7 +369,16 @@ function CategoryForm({
         </Field>
         <Field label="Mode de calcul" required error={errors.mode}>
           {(props) => (
-            <select {...props} value={mode} onChange={(e) => setMode(e.target.value as CategoryMode)} className={inputClass(!!errors.mode)}>
+            <select
+              {...props}
+              value={mode}
+              onChange={(e) => {
+                const next = e.target.value as CategoryMode;
+                setMode(next);
+                if (!publicTouched) setIsPublic(next !== 'exonere');
+              }}
+              className={inputClass(!!errors.mode)}
+            >
               {modes.map((m) => (
                 <option key={m} value={m}>
                   {CATEGORY_MODES[m]}
@@ -395,6 +412,25 @@ function CategoryForm({
           )}
         </Field>
       </div>
+      <label className="flex min-h-11 cursor-pointer items-start gap-3">
+        <input
+          type="checkbox"
+          checked={isPublic}
+          onChange={(e) => {
+            setIsPublic(e.target.checked);
+            setPublicTouched(true);
+          }}
+          className="mt-[2px] size-5 shrink-0 accent-indigo"
+        />
+        <span className="flex flex-col">
+          <b>Proposé sur la page « Adhérer »</b>
+          <span className="small text-ink-muted">
+            Décoché, ce type de membre reste utilisable par le bureau, mais ne se demande pas en
+            ligne.
+          </span>
+        </span>
+      </label>
+      {errors.is_public ? <span className="small font-semibold text-late">{errors.is_public}</span> : null}
       {formError ? (
         <p role="alert" className="m-0 rounded-[var(--radius-sm)] bg-late-soft p-3 font-semibold text-late">
           {formError}
