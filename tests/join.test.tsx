@@ -212,7 +212,16 @@ describe('/adherer — la page publique (§17.3, §20.4)', () => {
 
   it('« montant libre » plutôt qu’un blanc ou « 0 FCFA »', () => {
     expect(categoryPrice({ id: 1, label: 'Bienfaiteur', amount_formatted: null, mode: 'bareme' })).toBe('montant libre');
-    expect(categoryPrice({ id: 2, label: 'Actif', amount_formatted: '25 000 FCFA', mode: 'forfait' })).toBe('25 000 FCFA par an');
+    expect(categoryPrice({ id: 2, label: 'Actif', amount_formatted: '25 000 FCFA', mode: 'forfait', period_label: 'par an' })).toBe('25 000 FCFA par an');
+  });
+
+  it('§22.8 (S8) — le rythme est celui du serveur, jamais « par an » écrit ici', () => {
+    expect(categoryPrice({ id: 3, label: 'Mensuel', amount_formatted: '2 000 FCFA', mode: 'forfait', period_label: 'par mois' })).toBe('2 000 FCFA par mois');
+    expect(categoryPrice({ id: 4, label: 'Soutien', amount_formatted: '10 000 FCFA', mode: 'minimum', period_label: 'tous les deux ans' })).toBe(
+      'au moins 10 000 FCFA tous les deux ans',
+    );
+    // Sans rythme servi : le montant seul, rien d'inventé.
+    expect(categoryPrice({ id: 5, label: 'Actif', amount_formatted: '25 000 FCFA', mode: 'forfait' })).toBe('25 000 FCFA');
   });
 });
 
@@ -330,9 +339,14 @@ describe('/adherer — l’envoi, et « Votre demande est envoyée »', () => {
     expect(first?.headers['Idempotency-Key']).toBe(second?.headers['Idempotency-Key']);
   });
 
-  it('« M’envoyer ce lien sur WhatsApp » en principal, vers le numéro du visiteur, puis « Ouvrir ma page »', async () => {
+  it('« M’envoyer ce lien sur WhatsApp » en principal, le message du serveur (§22.8), puis « Ouvrir ma page »', async () => {
     const user = userEvent.setup();
-    serve(fakeResponse(200, form()), fakeResponse(201, { message: 'ok', member_url: MEMBER_URL }));
+    const SHARE = {
+      phone: '77 000 00 22',
+      text: `Votre lien personnel : ${MEMBER_URL}`,
+      whatsapp_url: `https://wa.me/221770000022?text=Votre%20lien%20personnel`,
+    };
+    serve(fakeResponse(200, form()), fakeResponse(201, { message: 'ok', member_url: MEMBER_URL, share: SHARE }));
     render(<JoinPage parrain={null} />);
     await screen.findByText('1. Vous adhérez comme');
     await fillIdentity(user);
@@ -342,9 +356,8 @@ describe('/adherer — l’envoi, et « Votre demande est envoyée »', () => {
     await screen.findByRole('heading', { name: 'Votre demande est envoyée' });
     expect(screen.getByText(/vous répondra sur WhatsApp, au/)).toHaveTextContent('77 000 00 22');
     const wa = screen.getByRole('link', { name: 'M’envoyer ce lien sur WhatsApp' });
-    const href = new URL(wa.getAttribute('href') as string);
-    expect(href.origin + href.pathname).toBe('https://wa.me/221770000022');
-    expect(href.searchParams.get('text')).toContain(MEMBER_URL);
+    // L'adresse servie, TELLE QUELLE : l'écran ne compose plus ce message.
+    expect(wa).toHaveAttribute('href', SHARE.whatsapp_url);
     expect(wa).toHaveAttribute('rel', 'noopener noreferrer');
     expect(screen.getByRole('link', { name: 'Ouvrir ma page' })).toHaveAttribute('href', MEMBER_URL);
   });

@@ -4,6 +4,7 @@ import { useId, useRef, useState } from 'react';
 import { ApiError, fieldMessages } from '@/lib/api';
 import { useBackBar, useBureau } from '@/components/bureau/BureauContext';
 import { ConfirmDialog } from '@/components/bureau/ConfirmDialog';
+import { SettingsWarnings } from '@/components/bureau/SettingsWarnings';
 import { UploadIcon } from '@/components/Icons';
 import {
   Button,
@@ -38,6 +39,8 @@ export default function ReglagesPage() {
   return (
     <>
       <PageTitle title="Paramètres de l’association" />
+      {/* §22.4 — servis par le GET et le PUT : relus à chaque réglage enregistré. */}
+      <SettingsWarnings />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
         <AssociationPanel />
         <div className="flex flex-col gap-4">

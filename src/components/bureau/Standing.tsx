@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { CheckIcon } from '@/components/Icons';
 import { Pastille } from '@/components/Pastille';
 import type { MemberListItem } from '@/lib/bureau/types';
-import { formatDate, todayInDakar } from '@/lib/dates';
+import { formatDate, formatDateTime, todayInDakar } from '@/lib/dates';
 
 /**
  * Vrai si le membre est à jour pour l'année en cours ET doit des arriérés —
@@ -54,7 +54,11 @@ export function ArrearsLine({ member }: { member: MemberListItem }) {
  * (piège 4) : on affiche « — », jamais « 0 FCFA ».
  */
 export function standingDetail(member: MemberListItem): ReactNode {
-  if (member.status === 'pending') return 'Demande en attente';
+  if (member.status === 'pending') {
+    // §22.8 (S8) — la ligne d'un candidat porte la date de sa demande.
+    const asked = formatDateTime(member.submitted_at ?? null);
+    return asked ? `Demande du ${asked}` : 'Demande en attente';
+  }
   // Rien n'est réclamé à un ancien membre : jamais « Reste à payer ».
   if (member.status === 'former') {
     const until = formatDate(member.covered_until);

@@ -183,6 +183,27 @@ export type SettingsInput = {
 export const PERIOD_MONTHS = [1, 3, 6, 12, 24] as const;
 export type PeriodMonths = (typeof PERIOD_MONTHS)[number];
 
+/**
+ * Le choix du formulaire, AVANT que le serveur n'ait composé un `period_label` :
+ * les libellés sont ceux du contrat (§22.1), mot pour mot, et il n'y en a pas
+ * d'autre. Une fois enregistré, c'est le `period_label` servi qui s'affiche.
+ */
+export const PERIOD_CHOICES: ReadonlyArray<{ value: PeriodMonths; label: string }> = [
+  { value: 1, label: 'par mois' },
+  { value: 3, label: 'par trimestre' },
+  { value: 6, label: 'par semestre' },
+  { value: 12, label: 'par an' },
+  { value: 24, label: 'tous les deux ans' },
+];
+
+/** Le défaut du serveur : toute catégorie sans réglage vaut 12 (§22). */
+export const DEFAULT_PERIOD_MONTHS: PeriodMonths = 12;
+
+export function periodMonthsOf(category: Pick<Category, 'period_months'> | undefined): PeriodMonths {
+  const value = category?.period_months;
+  return (PERIOD_MONTHS as readonly number[]).includes(value ?? -1) ? (value as PeriodMonths) : DEFAULT_PERIOD_MONTHS;
+}
+
 export type CategoryMode = 'forfait' | 'bareme' | 'exonere' | 'minimum';
 
 export type Category = {

@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { AnswersList, MemberPhoto } from '@/components/bureau/Answers';
 import { useBackBar, useBureau } from '@/components/bureau/BureauContext';
-import { headerTitle, personName } from '@/components/bureau/BureauFrame';
 import { ChatIcon } from '@/components/bureau/Icons';
 import {
   bigButtonClass,
@@ -29,8 +28,9 @@ import { errorMessage } from '@/lib/bureau/messages';
 import { openPendingTab } from '@/lib/bureau/pendingTab';
 import type { Category, DecidedMember, MemberDetail, MemberListItem } from '@/lib/bureau/types';
 import { firstName } from '@/lib/bureau/words';
+import { formatDateTime } from '@/lib/dates';
+import { deName } from '@/lib/elision';
 import { phoneDigits, spacedPhone } from '@/lib/phone';
-import { whatsappLink } from '@/lib/whatsapp';
 
 /** Le motif d'un refus : le candidat le lira. 10 caractères au moins (§17.6). */
 export const MIN_REASON_LENGTH = 10;
@@ -47,21 +47,27 @@ type View =
   | { kind: 'refuse'; member: MemberListItem }
   | { kind: 'admitted'; member: DecidedMember };
 
-/** « Membre actif · 25 000 FCFA par an » : le tarif vient des types de membres. */
+/**
+ * « Membre actif · 25 000 FCFA par an » : le tarif ET le rythme viennent des
+ * types de membres, tels que le serveur les sert (`period_label`, §22.1) —
+ * jamais « par an » écrit ici.
+ */
 export function categoryLine(member: MemberListItem, categories: Category[]): string {
   const category = categories.find((c) => c.id === member.category_id);
   const amount = category?.amount_formatted;
-  return [member.category_label, amount ? `${amount} par an` : null].filter(Boolean).join(' · ');
+  const rhythm = category?.period_label?.trim();
+  const price = amount ? [amount, rhythm].filter(Boolean).join(' ') : null;
+  return [member.category_label, price].filter(Boolean).join(' · ');
 }
 
 /**
  * L'APERÇU du message de refus — composé ici pour l'aperçu seulement, sur le
- * modèle du `share` que le serveur rend (§17.6) : « Bonjour {prénom}, », le
- * motif mot pour mot, puis le lien de sa page. Ce qui part est le `share` de
- * la réponse, jamais cet aperçu.
+ * modèle du `share` que le serveur rend (§17.6, §23.7) : « Bonjour {prénom
+ * nom}, », le motif mot pour mot, puis le lien de sa page. Ce qui part est le
+ * `share` de la réponse, jamais cet aperçu.
  */
 export function refusalPreview(member: MemberListItem, reason: string): string {
-  return `Bonjour ${firstName(member)},\n${reason.trim() || '…'}\nVotre page : (le lien de sa page)`;
+  return `Bonjour ${member.name.trim()},\n${reason.trim() || '…'}\nVotre page : (le lien de sa page)`;
 }
 
 /**
@@ -73,7 +79,7 @@ export function refusalPreview(member: MemberListItem, reason: string): string {
  * le bureau : l'écran le dit, et renvoie à la liste des candidats.
  */
 export default function DemandesPage() {
-  const { settings, me, session } = useBureau();
+  const { settings } = useBureau();
   const mode = settings.admission_mode ?? 'bureau';
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
@@ -159,8 +165,6 @@ export default function DemandesPage() {
 
   const i = list.length > 0 ? index % list.length : 0;
   const current = list[i] ?? null;
-  const writer = personName(me, session);
-  const association = headerTitle(settings);
 
   return (
     <div className="mx-auto flex w-full max-w-[600px] flex-col gap-4">
@@ -180,7 +184,6 @@ export default function DemandesPage() {
             key={current.id}
             member={current}
             categories={categories}
-            waText={`Bonjour ${firstName(current)},\nIci ${writer}, de ${association}. Nous avons bien reçu votre demande d’adhésion. `}
             onAdmitted={(member) => setView({ kind: 'admitted', member })}
             onRefuse={() => setView({ kind: 'refuse', member: current })}
             onNext={list.length > 1 ? () => setIndex((n) => n + 1) : null}
@@ -268,7 +271,6 @@ function Fact({ label, children, wide = false }: { label: string; children: Reac
 function ApplicationCard({
   member,
   categories,
-  waText,
   onAdmitted,
   onRefuse,
   onNext,
@@ -276,7 +278,6 @@ function ApplicationCard({
 }: {
   member: MemberListItem;
   categories: Category[];
-  waText: string;
   onAdmitted: (member: DecidedMember) => void;
   onRefuse: () => void;
   onNext: (() => void) | null;
@@ -289,6 +290,9 @@ function ApplicationCard({
   const who = firstName(member);
   const samePhone =
     !!duplicate && !!member.phone && phoneDigits(duplicate.phone).slice(-9) === phoneDigits(member.phone).slice(-9);
+  // §22.8 — le premier message du bureau au candidat : composé par le serveur.
+  const firstMessage = member.share ?? null;
+  const submitted = formatDateTime(member.submitted_at ?? null);
 
   async function admit() {
     setBusy(true);
@@ -323,6 +327,7 @@ function ApplicationCard({
           <Fact label="Téléphone">
             {member.phone ? <span className="tnum">{spacedPhone(member.phone)}</span> : 'Pas de téléphone'}
           </Fact>
+          {submitted ? <Fact label="Demande du">{submitted}</Fact> : null}
           {member.region ? <Fact label="Région">{member.region}</Fact> : null}
           {member.email ? (
             <Fact label="E-mail" wide>
@@ -346,14 +351,16 @@ function ApplicationCard({
           </div>
         ) : null}
         {member.phone ? (
-          <div className="grid grid-cols-2 gap-[10px]">
+          <div className={`grid gap-[10px] ${firstMessage ? 'grid-cols-2' : 'grid-cols-1'}`}>
             <a href={`tel:${phoneDigits(member.phone)}`} className={bigButtonClass('outline')}>
               Appeler
             </a>
-            <a href={whatsappLink(waText, member.phone)} target="_blank" rel="noopener noreferrer" className={bigButtonClass('outline')}>
-              <ChatIcon size={20} />
-              WhatsApp
-            </a>
+            {firstMessage ? (
+              <a href={firstMessage.whatsapp_url} target="_blank" rel="noopener noreferrer" className={bigButtonClass('outline')}>
+                <ChatIcon size={20} />
+                WhatsApp
+              </a>
+            ) : null}
           </div>
         ) : null}
       </section>
@@ -363,8 +370,8 @@ function ApplicationCard({
           {duplicate ? (
             <p className="m-0">
               <b>
-                {samePhone ? 'Ce numéro est déjà celui de ' : 'Cette demande ressemble à la fiche de '}
-                {duplicate.name}
+                {/* §23.7 — « celui d'Ousmane », « la fiche d'Aminata » : l'élision faite ici. */}
+                {samePhone ? `Ce numéro est déjà celui ${deName(duplicate.name)}` : `Cette demande ressemble à la fiche ${deName(duplicate.name)}`}
               </b>
               {[duplicate.member_number ? `, membre n° ${duplicate.member_number}` : '', duplicate.category_label ? ` (${duplicate.category_label})` : ''].join('')}
               . C’est peut-être la même personne.
@@ -375,7 +382,7 @@ function ApplicationCard({
             </p>
           )}
           <Link href={`/bureau/membres/${encodeURIComponent(member.possible_duplicate_of)}`} className="font-semibold">
-            {duplicate ? `Voir la fiche de ${duplicate.name}` : 'Voir sa fiche'}
+            {duplicate ? `Voir la fiche ${deName(duplicate.name)}` : 'Voir sa fiche'}
           </Link>
         </section>
       ) : null}

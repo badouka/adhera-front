@@ -612,10 +612,16 @@ function DueBlock({
   const late = isPast(due.period_end);
   const periodStart = formatDate(due.period_start);
   const periodEnd = formatDate(due.period_end);
-  // Le libellé du serveur d'abord ; les dates relues en UTC à défaut.
+  // La PLAGE DE DATES : le libellé du serveur d'abord ; les dates relues en UTC
+  // à défaut. Depuis S8, une période n'est plus forcément une année (§22).
   const period =
     due.period_label?.trim() ||
     (periodStart && periodEnd ? `du ${periodStart} au ${periodEnd}` : '');
+  // §22.5 — le RYTHME du type (« par mois »), composé par le serveur : il
+  // s'appelle `category_period_label`, à ne pas confondre avec `period_label`.
+  const category = [due.category_label?.trim(), due.category_period_label?.trim()]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
     <section
@@ -640,8 +646,12 @@ function DueBlock({
             Vous serez membre dès qu’elle sera reçue.
           </span>
         ) : null}
-        {period ? <span>pour l’année {period}</span> : null}
-        {due.category_label?.trim() ? <span className="small">{due.category_label}</span> : null}
+        {period ? <span>pour la période {period}</span> : null}
+        {category ? (
+          <span className="small" data-testid="due-category">
+            {category}
+          </span>
+        ) : null}
         {partial ? (
           <span className="small">
             Déjà payé : <span className="money">{due.amount_paid_formatted}</span>
@@ -700,12 +710,29 @@ function ApplicationPage({
   }
 
   const submitted = formatDateTime(application.submitted_at);
+  const asked = application.category ?? null;
+  // §22.5 — le type demandé, son tarif et son rythme, tels que le serveur les sert.
+  const price = asked?.amount_formatted
+    ? [asked.amount_formatted, asked.period_label?.trim()].filter(Boolean).join(' ')
+    : null;
   return (
     <>
       <h1 className="heading m-0">{greeting}</h1>
       <section className="flex flex-col gap-2 rounded-[var(--radius-md)] bg-indigo-soft p-4" data-testid="application-review">
         <p className="m-0 text-[18px] font-bold">Votre demande est en cours d’examen.</p>
         {submitted ? <p className="m-0">Vous avez demandé à adhérer le {submitted}.</p> : null}
+        {asked?.label?.trim() ? (
+          <p className="m-0" data-testid="application-category">
+            Vous adhérez comme <b>{asked.label}</b>
+            {price ? (
+              <>
+                {' : '}
+                <span className="money">{price}</span>
+              </>
+            ) : null}
+            .
+          </p>
+        ) : null}
         <p className="m-0">
           Vous n’avez rien à payer pour l’instant : l’association vous répondra sur WhatsApp.
         </p>

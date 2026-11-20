@@ -316,9 +316,10 @@ export default function FicheMembrePage() {
             {/* UN seul montant. null = INCONNU, jamais « 0 FCFA » (piège 4). */}
             <span className="amount text-due">{m.balance_due_formatted ?? '—'}</span>
             <span>
+              {/* S8 — une période n'est plus forcément une année : on compte des cotisations. */}
               {claimed.length > 1
-                ? `Ses cotisations de ${claimed.length} années.`
-                : 'Sa cotisation de cette année.'}
+                ? `Ses ${claimed.length} cotisations à payer.`
+                : 'Sa cotisation à payer.'}
               {dueOn ? ` ${who} aurait dû payer le ${dueOn}.` : ''}
             </span>
           </section>
@@ -375,7 +376,7 @@ export default function FicheMembrePage() {
 
       {modeSupported && claimed.length > 1 ? (
         <section className="flex flex-col gap-2" data-testid="claimed-years">
-          <h2 className="heading m-0">Les années à payer</h2>
+          <h2 className="heading m-0">Les cotisations à payer</h2>
           <ul className="m-0 flex list-none flex-col rounded-[var(--radius-md)] border border-line bg-surface-raised px-4 py-1">
             {claimed.map((year) => (
               <li key={year.key} className="flex justify-between gap-3 border-b border-line py-[10px] last:border-b-0">

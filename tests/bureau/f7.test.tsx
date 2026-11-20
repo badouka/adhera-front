@@ -10,6 +10,7 @@ import ConnexionPage from '@/app/bureau/connexion/page';
 import DemandesPage from '@/app/bureau/demandes/page';
 import TypesDeMembresPage from '@/app/bureau/types-de-membres/page';
 import { AnswersList } from '@/components/bureau/Answers';
+import { standingDetail } from '@/components/bureau/Standing';
 import { BureauFrame } from '@/components/bureau/BureauFrame';
 import { listCategories } from '@/lib/bureau/api/categories';
 import { navigation, resetSessionCache, saveSession } from '@/lib/bureau/session';
@@ -268,5 +269,197 @@ describe('« Pas de réponse » ne s’écrit plus sous une question sans répon
     const list = screen.getByTestId('answers');
     expect(list).toHaveTextContent('Pièce d’identité');
     expect(list).not.toHaveTextContent('Pas de réponse');
+  });
+});
+
+/* ───────────────────────────── § 2 — S8 (§22) ───────────────────────────── */
+
+describe('§22.1 — le rythme de chaque type de membre', () => {
+  const MENSUEL: Category = {
+    id: 5, label: 'Membre mensuel', mode: 'forfait', amount: 2000, amount_formatted: '2 000 FCFA',
+    sort_order: 5, is_active: true, is_public: false, is_calculable: true, period_months: 1, period_label: 'par mois',
+  };
+
+  it('le tarif ET le rythme servis, jamais « par an » écrit ici', async () => {
+    saveSession(SESSION);
+    fakeServer([{ match: 'membership/categories', body: [MENSUEL, { ...CATEGORIES[1]!, period_label: 'par an' }] }]);
+    renderInBureau(<TypesDeMembresPage />);
+    const row = (await screen.findByText('Membre mensuel')).closest('li') as HTMLElement;
+    expect(within(row).getByTestId('category-price')).toHaveTextContent('2 000 FCFA par mois');
+    // Un exonéré n'a ni montant ni rythme.
+    const honoraire = screen.getByText('Honoraire').closest('li') as HTMLElement;
+    expect(within(honoraire).queryByTestId('category-price')).not.toBeInTheDocument();
+  });
+
+  it('les durées du serveur, et elles seules ; la création envoie celle choisie', async () => {
+    saveSession(SESSION);
+    const user = userEvent.setup();
+    const fetchMock = fakeServer([
+      { method: 'POST', match: 'membership/categories', status: 201, body: MENSUEL },
+      { match: 'membership/categories', body: [] },
+      { match: 'membership/settings', body: settings() },
+    ]);
+    renderInBureau(<TypesDeMembresPage />);
+    await user.click(await screen.findByRole('button', { name: 'Ajouter un type de membre' }));
+    const select = screen.getByTestId('period-months') as HTMLSelectElement;
+    expect(Array.from(select.options).map((o) => [o.value, o.text])).toEqual([
+      ['1', 'par mois'],
+      ['3', 'par trimestre'],
+      ['6', 'par semestre'],
+      ['12', 'par an'],
+      ['24', 'tous les deux ans'],
+    ]);
+    expect(select.value).toBe('12');
+    await user.type(screen.getByLabelText(/^Nom \*$/), 'Membre mensuel');
+    await user.type(screen.getByLabelText(/^Montant/), '2000');
+    await user.selectOptions(select, '1');
+    await user.click(screen.getByRole('button', { name: 'Ajouter ce type de membre' }));
+    await screen.findByText('« Membre mensuel » est ajoutée.');
+    expect(body(fetchMock, 'POST')).toMatchObject({ period_months: 1 });
+  });
+
+  it('modifier sans changer la durée : `period_months` ne part pas', async () => {
+    saveSession(SESSION);
+    const user = userEvent.setup();
+    const fetchMock = fakeServer([
+      { method: 'PUT', match: 'membership/categories/5', body: { ...MENSUEL, label: 'Mensuel' } },
+      { match: 'membership/categories', body: [MENSUEL] },
+      { match: 'membership/settings', body: settings() },
+    ]);
+    renderInBureau(<TypesDeMembresPage />);
+    await user.click(await screen.findByRole('button', { name: 'Modifier' }));
+    const name = screen.getByLabelText(/^Nom \*$/);
+    await user.clear(name);
+    await user.type(name, 'Mensuel');
+    await user.click(screen.getByRole('button', { name: 'Enregistrer ce type de membre' }));
+    await screen.findByText('« Mensuel » est modifiée.');
+    expect(body(fetchMock, 'PUT')).not.toHaveProperty('period_months');
+  });
+
+  it('§22.3 — `409 period_months_locked` : le message du serveur, et le champ grisé', async () => {
+    saveSession(SESSION);
+    const user = userEvent.setup();
+    const LOCKED = 'La durée de ce type de membre ne peut plus changer : des cotisations sont déjà ouvertes sur la grille commune.';
+    fakeServer([
+      { method: 'PUT', match: 'membership/categories/5', status: 409, body: { code: 'period_months_locked', message: LOCKED } },
+      { match: 'membership/categories', body: [MENSUEL] },
+    ]);
+    renderInBureau(<TypesDeMembresPage />);
+    await user.click(await screen.findByRole('button', { name: 'Modifier' }));
+    const select = screen.getByTestId('period-months') as HTMLSelectElement;
+    await user.selectOptions(select, '3');
+    await user.click(screen.getByRole('button', { name: 'Enregistrer ce type de membre' }));
+    expect(await screen.findByText(LOCKED)).toBeInTheDocument();
+    expect(select).toBeDisabled();
+    // La valeur revient à celle en base : on ne laisse pas croire qu'elle a changé.
+    expect(select.value).toBe('1');
+  });
+
+  it('un exonéré : ni rythme, ni `period_months` envoyé', async () => {
+    saveSession(SESSION);
+    const user = userEvent.setup();
+    const fetchMock = fakeServer([
+      { method: 'POST', match: 'membership/categories', status: 201, body: { ...CATEGORIES[1]!, id: 8, label: 'Membre d’honneur' } },
+      { match: 'membership/categories', body: [] },
+      { match: 'membership/settings', body: settings() },
+    ]);
+    renderInBureau(<TypesDeMembresPage />);
+    await user.click(await screen.findByRole('button', { name: 'Ajouter un type de membre' }));
+    await user.type(screen.getByLabelText(/^Nom \*$/), 'Membre d’honneur');
+    await user.selectOptions(screen.getByLabelText(/^Mode de calcul/), 'exonere');
+    expect(screen.queryByTestId('period-months')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Ajouter ce type de membre' }));
+    await screen.findByText('« Membre d’honneur » est ajoutée.');
+    expect(body(fetchMock, 'POST')).not.toHaveProperty('period_months');
+  });
+});
+
+describe('§22.4 — les avertissements des réglages, à chaque rendu', () => {
+  const WARNING = {
+    code: 'current_only_with_short_periods',
+    message: 'Certains de vos types de membre cotisent sur moins d’un an : avec « Repartir de l’année en cours », les périodes manquées ne seront pas réclamées.',
+  };
+
+  it('sur « Types de membres », tels que servis ; relus après un enregistrement', async () => {
+    saveSession(SESSION);
+    const user = userEvent.setup();
+    const fetchMock = fakeServer([
+      { method: 'PUT', match: 'membership/categories/1', body: { ...CATEGORIES[2]!, is_active: false } },
+      { match: 'membership/categories', body: [CATEGORIES[2]] },
+      { match: 'membership/settings', body: settings({ warnings: [] }) },
+    ]);
+    const { value } = renderInBureau(<TypesDeMembresPage />, { settings: settings({ warnings: [WARNING] }) });
+    expect(screen.getByTestId('settings-warnings')).toHaveTextContent(WARNING.message);
+    await user.click(await screen.findByRole('button', { name: 'Désactiver' }));
+    await waitFor(() => expect(calls(fetchMock).some((c) => c.url.endsWith('membership/settings'))).toBe(true));
+    await waitFor(() => expect(value.setSettings).toHaveBeenCalledWith(expect.objectContaining({ warnings: [] })));
+  });
+
+  it('aucun avertissement : rien', () => {
+    saveSession(SESSION);
+    fakeServer([{ match: 'membership/categories', body: [] }]);
+    renderInBureau(<TypesDeMembresPage />, { settings: settings({ warnings: [] }) });
+    expect(screen.queryByTestId('settings-warnings')).not.toBeInTheDocument();
+  });
+});
+
+describe('§22.8 — les demandes : le rythme, la date, le premier message du serveur', () => {
+  const AWA = memberItem({
+    id: 'm-awa',
+    name: 'Awa Gueye',
+    first_name: 'Awa',
+    last_name: 'Gueye',
+    phone: '77 000 00 40',
+    status: 'pending',
+    category_id: 5,
+    category_label: 'Membre mensuel',
+    answers: [],
+    submitted_at: '2026-11-04T10:15:00+00:00',
+    share: null,
+  });
+  const MENSUEL = { ...CATEGORIES[2]!, id: 5, label: 'Membre mensuel', amount_formatted: '2 000 FCFA', period_months: 1, period_label: 'par mois' };
+
+  function serve(pending = [AWA], extra: Parameters<typeof fakeServer>[0] = []) {
+    saveSession(SESSION);
+    return fakeServer([
+      ...extra,
+      { match: /^membership\/members\?status=pending/, body: pending },
+      { match: /^membership\/members\?status=rejected/, body: [] },
+      { match: 'membership/categories', body: [MENSUEL] },
+    ]);
+  }
+
+  it('« comme Membre mensuel · 2 000 FCFA par mois », et la date de la demande', async () => {
+    serve();
+    renderInBureau(<DemandesPage />);
+    const card = await screen.findByTestId('application');
+    expect(card).toHaveTextContent('demande à adhérer comme Membre mensuel · 2 000 FCFA par mois');
+    expect(card).toHaveTextContent('Demande du4 novembre 2026');
+  });
+
+  it('sans `share` servi : « Appeler » seul, aucun message composé ici', async () => {
+    serve();
+    renderInBureau(<DemandesPage />);
+    const card = await screen.findByTestId('application');
+    expect(within(card).getByRole('link', { name: 'Appeler' })).toBeInTheDocument();
+    expect(within(card).queryByRole('link', { name: /WhatsApp/ })).not.toBeInTheDocument();
+  });
+
+  it('§23.7 — le bandeau de doublon élide : « celui d’Ousmane », « la fiche d’Ousmane »', async () => {
+    const OUSMANE = { ...memberItem({ id: 'm-ousmane', name: 'Ousmane Sow', phone: '770000040', member_number: '0004' }), contacts: [], dues: [] };
+    serve([{ ...AWA, possible_duplicate_of: 'm-ousmane' }], [{ match: 'membership/members/m-ousmane', body: OUSMANE }]);
+    renderInBureau(<DemandesPage />);
+    const warn = await screen.findByTestId('duplicate');
+    await waitFor(() => expect(warn).toHaveTextContent('Ce numéro est déjà celui d’Ousmane Sow, membre n° 0004'));
+    expect(within(warn).getByRole('link', { name: 'Voir la fiche d’Ousmane Sow' })).toBeInTheDocument();
+  });
+});
+
+describe('§22.8 — la ligne du registre des candidats porte la date de la demande', () => {
+  it('« Demande du 4 novembre 2026 » ; sans date servie, « Demande en attente »', () => {
+    expect(standingDetail(memberItem({ status: 'pending', submitted_at: '2026-11-04T10:15:00+00:00' }))).toBe(
+      'Demande du 4 novembre 2026',
+    );
+    expect(standingDetail(memberItem({ status: 'pending', submitted_at: null }))).toBe('Demande en attente');
   });
 });

@@ -203,7 +203,7 @@ describe('E3 — cotisation due', () => {
     expect(screen.getByText('250 000 FCFA')).toBeInTheDocument();
     // `period_label` et `category_label`, tels que servis.
     expect(
-      screen.getByText('pour l’année du 5 novembre 2025 au 4 novembre 2026'),
+      screen.getByText('pour la période du 5 novembre 2025 au 4 novembre 2026'),
     ).toBeInTheDocument();
     expect(screen.getByText('Membre actif')).toBeInTheDocument();
     expect(screen.getByText('77 000 00 00')).toBeInTheDocument();
@@ -222,7 +222,7 @@ describe('E3 — cotisation due', () => {
         }),
       ),
     );
-    await screen.findByText('pour l’année du 5 novembre 2025 au 4 novembre 2026');
+    await screen.findByText('pour la période du 5 novembre 2025 au 4 novembre 2026');
   });
 
   it('un seul bouton principal : « J’ai payé », jamais « Payer »', async () => {

@@ -190,7 +190,7 @@ describe('Écran 8 — la fiche', () => {
     server();
     renderInBureau(<FicheMembrePage />);
     const box = await screen.findByTestId('due-box');
-    expect(box).toHaveTextContent('Reste à payer25 000 FCFASa cotisation de cette année. Cheikh aurait dû payer le 3 septembre 2026.');
+    expect(box).toHaveTextContent('Reste à payer25 000 FCFASa cotisation à payer. Cheikh aurait dû payer le 3 septembre 2026.');
     // R1 : le servi, jamais le brut ; et aucun autre encadré de montant.
     expect(document.body.textContent).not.toContain('25001');
     expect(screen.queryByTestId('ok-box')).not.toBeInTheDocument();
@@ -304,7 +304,7 @@ describe('Écran 8 — la fiche', () => {
     renderInBureau(<FicheMembrePage />);
     const claimed = await screen.findByTestId('claimed-years');
     expect(within(claimed).getAllByRole('listitem')).toHaveLength(3);
-    expect(screen.getByTestId('due-box')).toHaveTextContent('Ses cotisations de 3 années.');
+    expect(screen.getByTestId('due-box')).toHaveTextContent('Ses 3 cotisations à payer.');
     expect(screen.queryByTestId('unclaimed-years')).not.toBeInTheDocument();
   });
 

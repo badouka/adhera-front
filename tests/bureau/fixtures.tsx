@@ -154,10 +154,11 @@ export function memberDetail(overrides: Partial<MemberDetail> = {}): MemberDetai
   };
 }
 
+/** Depuis S8 (§22.1), chaque type porte sa durée et son rythme : 12, « par an », par défaut. */
 export const CATEGORIES: Category[] = [
-  { id: 2, label: 'Bienfaiteur', mode: 'forfait', amount: 500000, amount_formatted: '500 000 FCFA', sort_order: 0, is_active: true, is_calculable: true },
-  { id: 3, label: 'Honoraire', mode: 'exonere', amount: null, amount_formatted: null, sort_order: 0, is_active: true, is_calculable: true },
-  { id: 1, label: 'Membre actif', mode: 'forfait', amount: 250000, amount_formatted: '250 000 FCFA', sort_order: 0, is_active: true, is_calculable: true },
+  { id: 2, label: 'Bienfaiteur', mode: 'forfait', amount: 500000, amount_formatted: '500 000 FCFA', sort_order: 0, is_active: true, is_calculable: true, period_months: 12, period_label: 'par an' },
+  { id: 3, label: 'Honoraire', mode: 'exonere', amount: null, amount_formatted: null, sort_order: 0, is_active: true, is_calculable: true, period_months: 12, period_label: 'par an' },
+  { id: 1, label: 'Membre actif', mode: 'forfait', amount: 250000, amount_formatted: '250 000 FCFA', sort_order: 0, is_active: true, is_calculable: true, period_months: 12, period_label: 'par an' },
 ];
 
 /**

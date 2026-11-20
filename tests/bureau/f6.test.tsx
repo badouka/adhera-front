@@ -117,6 +117,13 @@ const BABACAR = memberItem({
   referred_by: { id: 'm-aminata', display_name: 'Aminata D.' },
   possible_duplicate_of: null,
   answers: ANSWERS,
+  // §22.8 (S8) — la date de la demande, et le premier message du bureau, servis.
+  submitted_at: '2026-11-04T10:15:00+00:00',
+  share: {
+    phone: '77 000 00 22',
+    text: 'Bonjour Babacar Kane,\nAssociation Démo a bien reçu votre demande d’adhésion.',
+    whatsapp_url: 'https://wa.me/221770000022?text=Bonjour%20Babacar%20Kane',
+  },
 });
 
 const FATOU = memberItem({
@@ -163,7 +170,12 @@ describe('F6 § 4 — « Demandes d’adhésion », une à la fois', () => {
     expect(card).not.toHaveTextContent('Pas de réponse');
     await waitFor(() => expect(card).toHaveTextContent('Invitation deAminata Diop, membre n° 0001'));
     expect(within(card).getByRole('link', { name: 'Appeler' })).toHaveAttribute('href', 'tel:770000022');
-    expect(within(card).getByRole('link', { name: /WhatsApp/ }).getAttribute('href')).toMatch(/^https:\/\/wa\.me\/221770000022\?text=/);
+    // §22.8 — le premier message est celui du serveur, tel quel.
+    expect(within(card).getByRole('link', { name: /WhatsApp/ })).toHaveAttribute(
+      'href',
+      'https://wa.me/221770000022?text=Bonjour%20Babacar%20Kane',
+    );
+    expect(card).toHaveTextContent('Demande du4 novembre 2026');
     expect(screen.getByRole('button', { name: 'Admettre Babacar comme membre' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Refuser la demande' })).toBeInTheDocument();
   });
@@ -227,7 +239,7 @@ describe('F6 § 4 — « Demandes d’adhésion », une à la fois', () => {
     await user.clear(screen.getByLabelText('La raison'));
     await user.type(screen.getByLabelText('La raison'), 'Cette association n’accepte que les techniciens en exercice.');
     expect(screen.getByTestId('refusal-preview')).toHaveTextContent(
-      'Bonjour Babacar, Cette association n’accepte que les techniciens en exercice.',
+      'Bonjour Babacar Kane, Cette association n’accepte que les techniciens en exercice.',
     );
     await user.click(screen.getByRole('button', { name: 'Refuser sans envoyer de message' }));
     await waitFor(() => expect(calls(fetchMock, 'POST')).toHaveLength(1));
@@ -267,9 +279,9 @@ describe('F6 § 4 — « Demandes d’adhésion », une à la fois', () => {
     expect(within(none).getByRole('link')).toHaveAttribute('href', '/bureau/demandes/en-attente');
   });
 
-  it('l’aperçu du refus suit le share du serveur : « Bonjour », le motif mot pour mot, le lien', () => {
+  it('l’aperçu du refus suit le share du serveur : « Bonjour {prénom nom} » (§23.7), le motif mot pour mot, le lien', () => {
     expect(refusalPreview(BABACAR, '  Réservé aux techniciens.  ')).toBe(
-      'Bonjour Babacar,\nRéservé aux techniciens.\nVotre page : (le lien de sa page)',
+      'Bonjour Babacar Kane,\nRéservé aux techniciens.\nVotre page : (le lien de sa page)',
     );
   });
 });

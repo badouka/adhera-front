@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { ApiError } from '@/lib/api';
 import { BureauApiError } from '@/lib/bureau/api/core';
 import { createCategory, deleteCategory, listCategories, updateCategory } from '@/lib/bureau/api/categories';
 import { isSessionError } from '@/lib/bureau/api/core';
@@ -8,9 +9,12 @@ import { fieldMessages } from '@/lib/api';
 import { errorMessage } from '@/lib/bureau/messages';
 import {
   CATEGORY_MODES,
+  PERIOD_CHOICES,
+  periodMonthsOf,
   type Category,
   type CategoryInput,
   type CategoryMode,
+  type PeriodMonths,
 } from '@/lib/bureau/types';
 import { parseAmount } from '@/lib/validation';
 import { Pastille } from '@/components/Pastille';
@@ -38,8 +42,18 @@ function plural(n: number, one: string, many: string): string {
   return `${n} ${n > 1 ? many : one}`;
 }
 
+/**
+ * « Forfait — 25 000 FCFA par mois » : le montant et le RYTHME servis (§22.1),
+ * jamais « par an » écrit ici. Un exonéré n'a ni montant ni rythme.
+ */
+export function categoryPrice(category: Category): string | null {
+  if (!category.amount_formatted) return null;
+  const rhythm = category.period_label?.trim();
+  return rhythm ? `${category.amount_formatted} ${rhythm}` : category.amount_formatted;
+}
+
 /** B11 — les catégories : liste, ajout, modification, désactivation. */
-export function CategoriesPanel() {
+export function CategoriesPanel({ onChanged }: { onChanged?: () => void } = {}) {
   const [categories, setCategories] = useState<Category[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -67,6 +81,8 @@ export function CategoriesPanel() {
     setCategories((prev) =>
       prev ? (prev.some((c) => c.id === next.id) ? prev.map((c) => (c.id === next.id ? next : c)) : [...prev, next]) : [next],
     );
+    // §22.4 — les avertissements des réglages dépendent des types : l'écran les relit.
+    onChanged?.();
   }
 
   async function setActive(category: Category, active: boolean) {
@@ -92,6 +108,7 @@ export function CategoriesPanel() {
     try {
       await deleteCategory(deleting.id);
       setCategories((prev) => prev?.filter((c) => c.id !== deleting.id) ?? null);
+      onChanged?.();
       setNotice(`« ${deleting.label} » est supprimée.`);
       setDeleting(null);
     } catch (cause) {
@@ -211,10 +228,12 @@ export function CategoriesPanel() {
                   <span className="font-semibold break-words">{category.label}</span>
                   <span className="small tnum text-ink-muted">
                     {CATEGORY_MODES[category.mode] ?? category.mode}
-                    {category.amount_formatted ? (
+                    {categoryPrice(category) ? (
                       <>
                         {' — '}
-                        <span className="money">{category.amount_formatted}</span>
+                        <span className="money" data-testid="category-price">
+                          {categoryPrice(category)}
+                        </span>
                       </>
                     ) : null}
                   </span>
@@ -294,7 +313,7 @@ export function CategoriesPanel() {
 }
 
 /** Les champs du formulaire : un `422` s'y range, avec le message de l'API tel quel. */
-const CATEGORY_FIELDS = ['label', 'mode', 'amount', 'sort_order', 'is_public'] as const;
+const CATEGORY_FIELDS = ['label', 'mode', 'amount', 'sort_order', 'is_public', 'period_months'] as const;
 
 function CategoryForm({
   initial,
@@ -320,6 +339,12 @@ function CategoryForm({
   const [publicTouched, setPublicTouched] = useState(false);
   // Une valeur servie ne suit plus le mode : seule l'estimation d'une création le suit.
   const publicFollowsMode = initial?.is_public === undefined;
+  // §22.1 — le rythme. Envoyé à la création, et à la modification SEULEMENT
+  // s'il change : un changement peut rendre `409 period_months_locked` (§22.3).
+  const initialPeriod = periodMonthsOf(initial);
+  const [period, setPeriod] = useState<PeriodMonths>(initialPeriod);
+  // Le serveur l'a refusé : on grise, avec son message (on ne le sait qu'après).
+  const [periodLocked, setPeriodLocked] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -352,6 +377,8 @@ function CategoryForm({
       amount: needsAmount ? value : null,
       sort_order: sortOrder.trim() === '' ? 0 : order,
       ...(publicTouched ? { is_public: isPublic } : {}),
+      // Un exonéré ne cotise pas : son rythme ne part pas, le serveur garde son défaut.
+      ...(needsAmount && (!initial || period !== initialPeriod) ? { period_months: period } : {}),
     };
 
     setBusy(true);
@@ -359,6 +386,14 @@ function CategoryForm({
       onSaved(initial ? await updateCategory(initial.id, input) : await createCategory(input));
     } catch (cause) {
       if (isSessionError(cause)) return;
+      // §22.3 — une grille est en place et ce type a déjà des périodes : sa
+      // durée ne change plus. Le champ se grise, avec le message du serveur.
+      if (cause instanceof ApiError && cause.code === 'period_months_locked') {
+        setPeriodLocked(true);
+        setPeriod(initialPeriod);
+        setErrors({ period_months: cause.message });
+        return;
+      }
       const messages = fieldMessages(cause);
       const mapped: Record<string, string> = {};
       for (const field of CATEGORY_FIELDS) if (messages[field]) mapped[field] = messages[field];
@@ -413,6 +448,29 @@ function CategoryForm({
                 onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ''))}
                 className={inputClass(!!errors.amount, 'tnum')}
               />
+            )}
+          </Field>
+        ) : null}
+        {needsAmount ? (
+          <Field label="Rythme" required error={errors.period_months}>
+            {(props) => (
+              <select
+                {...props}
+                value={period}
+                disabled={periodLocked}
+                onChange={(e) => {
+                  setPeriod(Number(e.target.value) as PeriodMonths);
+                  setErrors(({ period_months: _gone, ...rest }) => rest);
+                }}
+                className={inputClass(!!errors.period_months)}
+                data-testid="period-months"
+              >
+                {PERIOD_CHOICES.map((choice) => (
+                  <option key={choice.value} value={choice.value}>
+                    {choice.label}
+                  </option>
+                ))}
+              </select>
             )}
           </Field>
         ) : null}

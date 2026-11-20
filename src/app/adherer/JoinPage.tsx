@@ -19,7 +19,6 @@ import {
 } from '@/lib/join';
 import { phoneDigits, spacedPhone } from '@/lib/phone';
 import { resolveTenant } from '@/lib/tenant';
-import { whatsappLink } from '@/lib/whatsapp';
 
 /** La liste de la maquette : les 14 régions, et l'étranger. */
 export const REGIONS: ReadonlyArray<string> = [
@@ -38,18 +37,31 @@ type Load =
   | { kind: 'error'; rateLimited: boolean; network: boolean }
   | { kind: 'ready'; form: JoinForm };
 
-type Sent = { firstName: string; phone: string; memberUrl: string | null; category: JoinCategory | null };
+type Sent = {
+  firstName: string;
+  phone: string;
+  memberUrl: string | null;
+  category: JoinCategory | null;
+  /** §22.8 — le lien que le visiteur s'envoie, rédigé par le serveur ; `null` : pas de bouton. */
+  share: { phone: string; text: string; whatsapp_url: string } | null;
+};
 
 type Errors = Record<string, string>;
 
 /** L'identifiant DOM de chaque champ : c'est lui que l'on fait défiler et que l'on focalise. */
 export const fieldId = (key: string) => `adherer-${key.replace(/\./g, '-')}`;
 
-/** « 25 000 FCFA par an », « montant libre » : jamais un blanc, jamais « 0 FCFA » (§17.3). */
+/**
+ * « 25 000 FCFA par an », « 2 000 FCFA par mois », « montant libre » : jamais
+ * un blanc, jamais « 0 FCFA » (§17.3). Le rythme est celui que le serveur
+ * compose (`period_label`, §22.8) : sans lui, le montant seul — jamais « par
+ * an » écrit ici.
+ */
 export function categoryPrice(category: JoinCategory): string {
   if (!category.amount_formatted) return 'montant libre';
-  if (category.mode === 'minimum') return `au moins ${category.amount_formatted} par an`;
-  return `${category.amount_formatted} par an`;
+  const rhythm = category.period_label?.trim();
+  const price = rhythm ? `${category.amount_formatted} ${rhythm}` : category.amount_formatted;
+  return category.mode === 'minimum' ? `au moins ${price}` : price;
 }
 
 /**
@@ -231,7 +243,11 @@ export function JoinPage({ parrain }: { parrain: string | null }) {
 
   const { form } = load;
   return (
-    <Shell organisationName={form.organisation.name} logoUrl={form.organisation.logo_url}>
+    <Shell
+      organisationName={form.organisation.name}
+      logoUrl={form.organisation.logo_url}
+      shortName={form.organisation.short_name}
+    >
       {sent ? (
         <JoinSent form={form} sent={sent} />
       ) : (
@@ -405,6 +421,7 @@ function JoinFormView({
         phone: phone.trim(),
         memberUrl: result.member_url,
         category: categories.find((c) => c.id === categoryId) ?? null,
+        share: result.share ?? null,
       });
     } catch (error) {
       setBusy(false);
@@ -966,7 +983,6 @@ export function JoinSent({ form, sent }: { form: JoinForm; sent: Sent }) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => headingRef.current?.focus(), []);
   const review = form.admission_mode !== 'premier_paiement';
-  const name = form.organisation.name.trim();
   const amount = sent.category?.amount_formatted ?? null;
 
   return (
@@ -1002,17 +1018,17 @@ export function JoinSent({ form, sent }: { form: JoinForm; sent: Sent }) {
             demande{review ? ', puis paierez votre cotisation.' : ' et paierez votre cotisation.'}
           </p>
           <div className="flex flex-col gap-3">
-            <a
-              href={whatsappLink(
-                `Mon lien personnel${name ? ` pour ${name}` : ''} :\n${sent.memberUrl}`,
-                sent.phone,
-              )}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex min-h-14 w-full items-center justify-center rounded-[var(--radius-md)] bg-indigo px-4 text-center text-[17px] font-bold text-on-indigo! no-underline"
-            >
-              M’envoyer ce lien sur WhatsApp
-            </a>
+            {/* §22.8 — le message et l'adresse sont ceux du serveur, tels quels. */}
+            {sent.share ? (
+              <a
+                href={sent.share.whatsapp_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex min-h-14 w-full items-center justify-center rounded-[var(--radius-md)] bg-indigo px-4 text-center text-[17px] font-bold text-on-indigo! no-underline"
+              >
+                M’envoyer ce lien sur WhatsApp
+              </a>
+            ) : null}
             <a
               href={sent.memberUrl}
               className="flex min-h-14 w-full items-center justify-center rounded-[var(--radius-md)] border border-line-strong bg-surface-raised px-4 text-center text-[16px] font-semibold text-ink! no-underline"

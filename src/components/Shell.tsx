@@ -21,6 +21,7 @@ export function PoweredBy() {
 export function Shell({
   organisationName,
   logoUrl,
+  shortName,
   children,
   header = true,
   footer = <PoweredBy />,
@@ -33,9 +34,16 @@ export function Shell({
   organisationName?: string;
   /** `organisation.logo_url` : versionnée par son contenu, jamais recomposée. */
   logoUrl?: string | null;
+  /**
+   * §22.8 (S8) — le sigle servi (`short_name`), sur « Adhérer » : il passe en
+   * titre, le nom complet dessous. Jamais fabriqué ici.
+   */
+  shortName?: string | null;
   children: ReactNode;
 }) {
   const name = organisationName?.trim();
+  const sigle = shortName?.trim();
+  const withSigle = !!sigle && sigle !== name;
 
   return (
     <div className="flex min-h-dvh flex-col bg-surface text-ink">
@@ -52,7 +60,16 @@ export function Shell({
               className="size-10 shrink-0 rounded-[var(--radius-sm)] object-contain"
             />
           ) : null}
-          <p className="title m-0 min-w-0 text-center text-balance">{name}</p>
+          {withSigle ? (
+            <div className="flex min-w-0 flex-col items-center">
+              <p className="title m-0 text-center text-balance" data-testid="org-sigle">
+                {sigle}
+              </p>
+              <p className="small m-0 text-center text-balance text-ink-muted">{name}</p>
+            </div>
+          ) : (
+            <p className="title m-0 min-w-0 text-center text-balance">{name}</p>
+          )}
         </header>
       ) : (
         <header className="border-b border-line bg-surface-raised px-4 py-3" />

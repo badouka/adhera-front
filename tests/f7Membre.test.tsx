@@ -277,3 +277,107 @@ describe('« Enregistrer ma carte dans mes photos » : le logo de l’associatio
     expect(logoBox(0, 10)).toEqual({ w: 0, h: 0 });
   });
 });
+
+/* ───────────────────────────── § 2 — S8 (§22) ───────────────────────────── */
+
+describe('§22.8 — « Adhérer » : le sigle, le tarif et le rythme de chaque type', () => {
+  const FORM: JoinForm = {
+    organisation: { name: 'Association des techniciens supérieurs', logo_url: null, short_name: 'ATSARS' },
+    admission_mode: 'bureau',
+    categories: [
+      { id: 25, label: 'Membre actif', amount_formatted: '25 000 FCFA', mode: 'forfait', period_label: 'par an' },
+      { id: 26, label: 'Membre mensuel', amount_formatted: '2 000 FCFA', mode: 'forfait', period_label: 'par mois' },
+    ],
+    referrer: null,
+    consent_text: 'J’accepte qu’ATSARS utilise ces informations.',
+    ask_region: false,
+    email_mode: 'hidden',
+    questions: [],
+  };
+
+  it('le sigle en titre, le nom complet dessous ; chaque type avec son rythme', async () => {
+    fetchMock.mockResolvedValue(fakeResponse(200, FORM));
+    render(<JoinPage parrain={null} />);
+    expect(await screen.findByTestId('org-sigle')).toHaveTextContent('ATSARS');
+    expect(screen.getByText('Association des techniciens supérieurs')).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /Membre mensuel.*2 000 FCFA par mois/ })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /Membre actif.*25 000 FCFA par an/ })).toBeInTheDocument();
+  });
+
+  it('sans sigle : le nom seul, comme avant', async () => {
+    fetchMock.mockResolvedValue(fakeResponse(200, { ...FORM, organisation: { ...FORM.organisation, short_name: null } }));
+    render(<JoinPage parrain={null} />);
+    await screen.findByText('Association des techniciens supérieurs');
+    expect(screen.queryByTestId('org-sigle')).not.toBeInTheDocument();
+  });
+
+  it('`share` à `null` : pas de bouton WhatsApp composé ici, « Ouvrir ma page » reste', async () => {
+    const user = userEvent.setup();
+    fetchMock.mockImplementation(async (_url: string, init?: RequestInit) =>
+      (init?.method ?? 'GET') === 'GET'
+        ? fakeResponse(200, FORM)
+        : fakeResponse(201, { message: 'ok', member_url: 'https://demo-asso.adhera.africa/m/<JETON>', share: null }),
+    );
+    render(<JoinPage parrain={null} />);
+    await user.click(await screen.findByRole('radio', { name: /Membre actif/ }));
+    await user.type(screen.getByLabelText(/Votre prénom/), 'Awa');
+    await user.type(screen.getByLabelText(/Votre nom/), 'Gueye');
+    await user.type(screen.getByLabelText(/Votre numéro WhatsApp/), '77 123 45 67');
+    await user.click(screen.getByRole('checkbox'));
+    await user.click(screen.getByRole('button', { name: /Envoyer ma demande/ }));
+    await screen.findByRole('heading', { name: 'Votre demande est envoyée' });
+    expect(screen.queryByRole('link', { name: 'M’envoyer ce lien sur WhatsApp' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Ouvrir ma page' })).toBeInTheDocument();
+  });
+});
+
+describe('§22.5 — le rythme sur la page du membre et du candidat', () => {
+  it('le bloc « à payer » : la plage de dates, puis le type et son rythme (`category_period_label`)', async () => {
+    fetchMock.mockResolvedValue(
+      fakeResponse(
+        200,
+        payload({
+          standing: { is_up_to_date: false, covered_until: null },
+          due: {
+            period_start: '2026-11-01',
+            period_end: '2026-11-30',
+            period_label: 'du 1er novembre 2026 au 30 novembre 2026',
+            category_label: 'Membre mensuel',
+            category_period_label: 'par mois',
+            amount_due: 2000,
+            amount_due_formatted: '2 000 FCFA',
+            amount_paid: 0,
+            amount_paid_formatted: '0 FCFA',
+            balance: 2000,
+            balance_formatted: '2 000 FCFA',
+            status: 'due',
+          },
+        }),
+      ),
+    );
+    render(<MemberPage token={TOKEN} />);
+    expect(await screen.findByText('pour la période du 1er novembre 2026 au 30 novembre 2026')).toBeInTheDocument();
+    expect(screen.getByTestId('due-category')).toHaveTextContent('Membre mensuel · par mois');
+  });
+
+  it('le candidat en cours d’examen : son type, son tarif et son rythme, même sans `due`', async () => {
+    fetchMock.mockResolvedValue(
+      fakeResponse(
+        200,
+        payload({
+          standing: { is_up_to_date: false, covered_until: null },
+          application: {
+            status: 'under_review',
+            submitted_at: '2026-11-04T10:15:00+00:00',
+            rejection_reason: null,
+            category: { label: 'Membre mensuel', amount_formatted: '2 000 FCFA', period_label: 'par mois' },
+          },
+        }),
+      ),
+    );
+    render(<MemberPage token={TOKEN} />);
+    expect(await screen.findByTestId('application-category')).toHaveTextContent(
+      'Vous adhérez comme Membre mensuel : 2 000 FCFA par mois.',
+    );
+  });
+});
