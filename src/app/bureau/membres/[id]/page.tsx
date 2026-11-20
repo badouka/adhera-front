@@ -31,15 +31,19 @@ import { errorMessage } from '@/lib/bureau/messages';
 import { openPendingTab } from '@/lib/bureau/pendingTab';
 import { remindByWhatsapp } from '@/lib/bureau/remind';
 import {
+  canDo,
   hasMembershipCard,
   LEFT_REASONS,
   PAYMENT_STATUS_LABELS,
+  standingOf,
   type MemberDetail,
   type Payment,
+  type Standing,
 } from '@/lib/bureau/types';
 import { firstName } from '@/lib/bureau/words';
-import { formatDate, formatDateTime } from '@/lib/dates';
+import { formatDate, formatDateTime, todayInDakar } from '@/lib/dates';
 import { spacedPhone } from '@/lib/phone';
+import { deName } from '@/lib/elision';
 
 /**
  * Chargés à la demande (F4 § 4) : les panneaux d'« Autres actions » ne
@@ -132,7 +136,7 @@ function owes(member: MemberDetail): boolean {
 export default function FicheMembrePage() {
   const params = useParams<{ id: string }>();
   const id = typeof params?.id === 'string' ? safeDecode(params.id) : '';
-  const { settings, modeSupported, markModeUnsupported } = useBureau();
+  const { settings, modeSupported, markModeUnsupported, me } = useBureau();
   useBackBar({ href: '/bureau/membres', label: 'Les membres' });
 
   const [member, setMember] = useState<Load<MemberDetail>>({ kind: 'loading' });
@@ -219,7 +223,14 @@ export default function FicheMembrePage() {
   const cardEnabled = hasMembershipCard(settings);
   const { claimed, unclaimed } = yearsOf(m);
   const late = !former && owes(m);
+  const standing = standingOf(m);
   const dueOn = formatDate(m.next_due_date);
+  // §23.5 (S9) — un exonéré (et un ancien membre) : ni échéance, ni « a payé ».
+  const canRecord = m.can_record_payment !== false;
+  const exempt = !former && m.status === 'active' && !canRecord;
+  // §23.2 — un geste interdit à ce rôle n'apparaît pas (le serveur refuse de toute façon).
+  const canCancel = canDo(me, 'cancel_payment');
+  const canDeletePhoto = canDo(me, 'delete_photo');
 
   async function remind() {
     setBlocked(null);
@@ -252,7 +263,7 @@ export default function FicheMembrePage() {
             <MemberPhoto url={m.photo_url} name={m.name} size={64} />
             <h1 className="title m-0 min-w-0 break-words">{m.name}</h1>
           </span>
-          <MemberPastille member={m} late={late} />
+          <MemberPastille member={m} late={late} standing={standing} />
         </div>
         <p className="m-0 text-ink-muted">
           {[
@@ -320,16 +331,18 @@ export default function FicheMembrePage() {
               {claimed.length > 1
                 ? `Ses ${claimed.length} cotisations à payer.`
                 : 'Sa cotisation à payer.'}
-              {dueOn ? ` ${who} aurait dû payer le ${dueOn}.` : ''}
+              {dueOn ? ` ${dueSentence(who, standing, m.next_due_date, dueOn)}` : ''}
             </span>
           </section>
           <div className="flex flex-col gap-[10px]">
-            <Link
-              href={`${RECORD_PATH}?membre=${encodeURIComponent(m.id)}`}
-              className={bigButtonClass('primary')}
-            >
-              {who} a payé : l’enregistrer
-            </Link>
+            {canRecord ? (
+              <Link
+                href={`${RECORD_PATH}?membre=${encodeURIComponent(m.id)}`}
+                className={bigButtonClass('primary')}
+              >
+                {who} a payé : l’enregistrer
+              </Link>
+            ) : null}
             {m.phone ? (
               <button type="button" onClick={() => void remind()} className={bigButtonClass('outline')}>
                 <ChatIcon size={22} />
@@ -346,20 +359,30 @@ export default function FicheMembrePage() {
         <>
           <section className="flex flex-col items-start gap-1 rounded-[var(--radius-md)] bg-paid-soft px-4 py-5" data-testid="ok-box">
             <Label className="text-paid">Cotisation</Label>
-            <b className="text-paid">
-              {formatDate(m.covered_until)
-                ? `À jour jusqu’au ${formatDate(m.covered_until)}`
-                : m.status === 'pending'
-                  ? 'Demande d’adhésion en attente'
-                  : 'À jour'}
+            <b className="text-paid" data-testid="ok-line">
+              {/* §23.5 — un exonéré est à jour par sa catégorie : aucune date qui expire. */}
+              {exempt
+                ? 'À jour'
+                : formatDate(m.covered_until)
+                  ? `À jour jusqu’au ${formatDate(m.covered_until)}`
+                  : m.status === 'pending'
+                    ? 'Demande d’adhésion en attente'
+                    : 'À jour'}
             </b>
+            {exempt ? (
+              <span className="small text-ink-muted" data-testid="exempt-line">
+                Son type de membre ne paie pas de cotisation.
+              </span>
+            ) : null}
           </section>
-          <Link
-            href={`${RECORD_PATH}?membre=${encodeURIComponent(m.id)}`}
-            className={bigButtonClass('outline-indigo')}
-          >
-            {who} a payé : l’enregistrer
-          </Link>
+          {canRecord ? (
+            <Link
+              href={`${RECORD_PATH}?membre=${encodeURIComponent(m.id)}`}
+              className={bigButtonClass('outline-indigo')}
+            >
+              {who} a payé : l’enregistrer
+            </Link>
+          ) : null}
         </>
       )}
 
@@ -428,7 +451,9 @@ export default function FicheMembrePage() {
         aria-controls="autres-actions"
         onClick={() => setMore((v) => !v)}
       >
-        Autres actions (modifier, départ, annuler un paiement)
+        {canCancel && modeSupported
+          ? 'Autres actions (modifier, départ, annuler un paiement)'
+          : 'Autres actions (modifier, départ)'}
       </button>
 
       {more ? (
@@ -439,7 +464,7 @@ export default function FicheMembrePage() {
             </MoreRow>
             {m.status === 'rejected' ? null : (
               <MoreRow on={action === 'photo'} onClick={() => openAction('photo')}>
-                Sa photo : l’ajouter, la changer ou la retirer
+                {canDeletePhoto ? 'Sa photo : l’ajouter, la changer ou la retirer' : 'Sa photo : l’ajouter ou la changer'}
               </MoreRow>
             )}
             {cardEnabled ? (
@@ -457,7 +482,7 @@ export default function FicheMembrePage() {
                 Enregistrer son départ
               </MoreRow>
             )}
-            {modeSupported ? (
+            {modeSupported && canCancel ? (
               <MoreRow on={action === 'cancel'} onClick={() => openAction('cancel')}>
                 Annuler un paiement (erreur de saisie)
               </MoreRow>
@@ -486,6 +511,7 @@ export default function FicheMembrePage() {
               memberId={m.id}
               memberName={m.name}
               photoUrl={m.photo_url ?? null}
+              canDelete={canDeletePhoto}
               onClose={() => setAction(null)}
               onChanged={(message) => {
                 setAction(null);
@@ -529,7 +555,7 @@ export default function FicheMembrePage() {
             />
           ) : null}
 
-          {action === 'cancel' ? (
+          {action === 'cancel' && canCancel ? (
             <CancelSection
               payments={payments}
               memberName={m.name}
@@ -583,7 +609,8 @@ export function joinLines(member: MemberDetail): string[] {
     lines.push(by ? `Refus le ${when} par ${by}` : `Refus le ${when}`);
   }
   const parts: string[] = [];
-  if (member.referred_by?.display_name) parts.push(`Invitation de ${member.referred_by.display_name}`);
+  // §23.7 — « Invitation d’Aminata D. » : l'élision des phrases composées ici.
+  if (member.referred_by?.display_name) parts.push(`Invitation ${deName(member.referred_by.display_name)}`);
   const joined = member.referrals_count?.joined ?? 0;
   if (joined > 0) parts.push(`A fait venir ${joined > 1 ? `${joined} personnes` : '1 personne'}`);
   if (parts.length > 0) lines.push(parts.join(' · '));
@@ -610,11 +637,25 @@ function safeDecode(value: string): string {
   }
 }
 
-function MemberPastille({ member, late }: { member: MemberDetail; late: boolean }) {
+function MemberPastille({ member, late, standing }: { member: MemberDetail; late: boolean; standing: Standing }) {
   if (member.status === 'former') return <Pastille tone="due">Ancien membre</Pastille>;
   if (member.status === 'rejected') return <Pastille tone="late">Demande refusée</Pastille>;
   if (member.status === 'pending') return <Pastille tone="info">Demande d’adhésion</Pastille>;
+  // §23.3 (S9) — le jour de l'échéance, on est « à payer » ; « en retard » le lendemain.
+  if (standing === 'to_pay') return <Pill tone="due">À payer</Pill>;
   return late ? <Pill tone="late">En retard</Pill> : <Pill tone="ok">À jour</Pill>;
+}
+
+/**
+ * La phrase d'échéance de la fiche (§23.3) : « Cheikh aurait dû payer le 3
+ * septembre » pour un membre EN RETARD ; « Cheikh doit payer aujourd'hui » ou
+ * « … le 3 septembre » pour un membre À PAYER — jamais « aurait dû » le jour même.
+ */
+export function dueSentence(who: string, standing: Standing, nextDue: string | null, dueOn: string): string {
+  if (standing === 'to_pay') {
+    return nextDue === todayInDakar() ? `${who} doit payer aujourd’hui.` : `${who} doit payer le ${dueOn}.`;
+  }
+  return `${who} aurait dû payer le ${dueOn}.`;
 }
 
 function MoreRow({

@@ -11,7 +11,7 @@ import { isSessionError } from '@/lib/bureau/api/core';
 import { listMembers } from '@/lib/bureau/api/members';
 import { errorMessage } from '@/lib/bureau/messages';
 import { remindByWhatsapp } from '@/lib/bureau/remind';
-import type { MemberListItem } from '@/lib/bureau/types';
+import { standingOf, type MemberListItem, type Standing } from '@/lib/bureau/types';
 import { firstName } from '@/lib/bureau/words';
 import { formatDate, todayInDakar } from '@/lib/dates';
 import { spacedPhone } from '@/lib/phone';
@@ -19,9 +19,14 @@ import { spacedPhone } from '@/lib/phone';
 /** La frappe s'envoie au serveur après 300 ms de silence. */
 const SEARCH_DEBOUNCE_MS = 300;
 
-export type Filter = 'tous' | 'retard' | 'a-jour' | 'renouveler';
+/**
+ * §23.3 (S9) — « En retard » (échéance passée) et « À payer » (échéance
+ * aujourd'hui ou à venir) sont deux listes. Les deux ensemble (`pas-a-jour`) et « À
+ * renouveler » ne s'affichent que si l'on arrive de l'accueil, sur leur chiffre.
+ */
+export type Filter = 'tous' | 'retard' | 'a-payer' | 'pas-a-jour' | 'a-jour' | 'renouveler';
 
-const FILTERS: ReadonlyArray<Filter> = ['tous', 'retard', 'a-jour', 'renouveler'];
+const FILTERS: ReadonlyArray<Filter> = ['tous', 'retard', 'a-payer', 'pas-a-jour', 'a-jour', 'renouveler'];
 
 /** « En retard » d'abord, comme la maquette : c'est la liste qu'on cherche. */
 export function readFilter(search: string): Filter {
@@ -29,14 +34,16 @@ export function readFilter(search: string): Filter {
   return FILTERS.includes(value as Filter) ? (value as Filter) : 'retard';
 }
 
-/** Un membre en retard : ce que le SERVEUR dit (`is_up_to_date`), rien d'autre. */
-function isLate(member: MemberListItem): boolean {
-  return !member.is_up_to_date;
+/** Un membre qui doit encore : ce que le SERVEUR dit (`standing`), rien d'autre. */
+function owes(member: MemberListItem): boolean {
+  return standingOf(member) !== 'up_to_date';
 }
 
 const PRINT_TITLE: Record<Filter, string> = {
   tous: 'Tous les membres',
   retard: 'Les membres en retard',
+  'a-payer': 'Les membres qui ont leur cotisation à payer',
+  'pas-a-jour': 'Les membres en retard ou à payer',
   'a-jour': 'Les membres à jour',
   renouveler: 'Les membres qui doivent renouveler',
 };
@@ -103,18 +110,25 @@ export default function MembresPage() {
   }, [search, wantsRenewing, attempt, markModeUnsupported]);
 
   const all = useMemo(() => (load.kind === 'ready' ? load.members : []), [load]);
-  const late = useMemo(() => all.filter(isLate), [all]);
-  const ok = useMemo(() => all.filter((m) => !isLate(m)), [all]);
+  const of = useCallback((standing: Standing) => all.filter((m) => standingOf(m) === standing), [all]);
+  const late = useMemo(() => of('late'), [of]);
+  const toPay = useMemo(() => of('to_pay'), [of]);
+  const ok = useMemo(() => of('up_to_date'), [of]);
+  const owing = useMemo(() => all.filter(owes), [all]);
   const shown =
     filter === 'tous'
       ? all
       : filter === 'retard'
         ? late
-        : filter === 'a-jour'
-          ? ok
-          : load.kind === 'ready'
-            ? (load.renewing ?? [])
-            : [];
+        : filter === 'a-payer'
+          ? toPay
+          : filter === 'pas-a-jour'
+            ? owing
+            : filter === 'a-jour'
+              ? ok
+              : load.kind === 'ready'
+                ? (load.renewing ?? [])
+                : [];
 
   const choose = useCallback((next: Filter) => {
     setFilter(next);
@@ -171,9 +185,17 @@ export default function MembresPage() {
         <Chip on={filter === 'retard'} late onClick={() => choose('retard')}>
           En retard · {late.length}
         </Chip>
+        <Chip on={filter === 'a-payer'} onClick={() => choose('a-payer')}>
+          À payer · {toPay.length}
+        </Chip>
         <Chip on={filter === 'a-jour'} onClick={() => choose('a-jour')}>
           À jour · {ok.length}
         </Chip>
+        {filter === 'pas-a-jour' ? (
+          <Chip on onClick={() => choose('pas-a-jour')}>
+            En retard ou à payer · {owing.length}
+          </Chip>
+        ) : null}
         {filter === 'renouveler' ? (
           <Chip on onClick={() => choose('renouveler')}>
             À renouveler
@@ -205,7 +227,7 @@ export default function MembresPage() {
       {load.kind === 'ready' ? (
         <>
           <MemberRows members={shown} />
-          <MemberTable members={shown} today={today} onRemind={(m) => void remind(m)} />
+          <MemberTable members={shown} onRemind={(m) => void remind(m)} />
           <PrintSheet
             members={shown}
             title={PRINT_TITLE[filter]}
@@ -249,6 +271,13 @@ function Chip({
   );
 }
 
+/** « En retard », « À payer », « À jour » : l'écran traduit l'identifiant servi (§23.3). */
+export function StandingPill({ standing }: { standing: Standing }) {
+  if (standing === 'late') return <Pill tone="late">En retard</Pill>;
+  if (standing === 'to_pay') return <Pill tone="due">À payer</Pill>;
+  return <Pill tone="ok">À jour</Pill>;
+}
+
 function memberHref(member: MemberListItem): string {
   return `/bureau/membres/${encodeURIComponent(member.id)}`;
 }
@@ -290,7 +319,7 @@ function MemberRows({ members }: { members: MemberListItem[] }) {
 }
 
 function Situation({ member }: { member: MemberListItem }) {
-  if (isLate(member)) {
+  if (owes(member)) {
     return (
       <span className="shrink-0 text-right">
         <Label>Reste à payer</Label>
@@ -306,11 +335,9 @@ function Situation({ member }: { member: MemberListItem }) {
 /** Ordinateur : le tableau, et les deux gestes de chaque ligne. */
 function MemberTable({
   members,
-  today,
   onRemind,
 }: {
   members: MemberListItem[];
-  today: string;
   onRemind: (member: MemberListItem) => void;
 }) {
   return (
@@ -322,7 +349,7 @@ function MemberTable({
             <th scope="col" className="px-3 py-3 font-semibold">Nom</th>
             <th scope="col" className="px-3 py-3 font-semibold">Téléphone</th>
             <th scope="col" className="px-3 py-3 font-semibold">Situation</th>
-            <th scope="col" className="px-3 py-3 font-semibold">Aurait dû payer le</th>
+            <th scope="col" className="px-3 py-3 font-semibold">Échéance</th>
             <th scope="col" className="px-3 py-3 text-right font-semibold">Reste à payer</th>
             <th scope="col" className="px-3 py-3 font-semibold">
               <span className="sr-only">Actions</span>
@@ -338,11 +365,10 @@ function MemberTable({
             </tr>
           ) : (
             members.map((member) => {
-              const late = isLate(member);
-              const due =
-                late && member.next_due_date && member.next_due_date <= today
-                  ? formatDate(member.next_due_date)
-                  : '';
+              const standing = standingOf(member);
+              const late = standing !== 'up_to_date';
+              // L'échéance de qui doit encore : passée (en retard), ou aujourd'hui et à venir (à payer).
+              const due = late && member.next_due_date ? formatDate(member.next_due_date) : '';
               return (
                 <tr key={member.id} className="border-b border-line last:border-b-0">
                   <td className="tnum px-3 py-3 whitespace-nowrap" data-testid="member-number">
@@ -358,7 +384,7 @@ function MemberTable({
                     {member.phone ? spacedPhone(member.phone) : <span className="text-ink-muted">pas de téléphone</span>}
                   </td>
                   <td className="px-3 py-3">
-                    {late ? <Pill tone="late">En retard</Pill> : <Pill tone="ok">À jour</Pill>}
+                    <StandingPill standing={standing} />
                   </td>
                   <td className="px-3 py-3">{due || '—'}</td>
                   <td className="money tnum px-3 py-3 text-right font-bold text-due">
@@ -430,7 +456,7 @@ function PrintSheet({
               <td className="border-b border-line py-1 pr-2">{member.name}</td>
               <td className="tnum border-b border-line py-1 pr-2">{member.phone ? spacedPhone(member.phone) : '—'}</td>
               <td className="money tnum border-b border-line py-1 text-right">
-                {isLate(member) ? (member.balance_due_formatted ?? '—') : 'À jour'}
+                {owes(member) ? (member.balance_due_formatted ?? '—') : 'À jour'}
               </td>
             </tr>
           ))}

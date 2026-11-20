@@ -179,7 +179,7 @@ describe('Écran 7 — les membres', () => {
       'Nom',
       'Téléphone',
       'Situation',
-      'Aurait dû payer le',
+      'Échéance',
       'Reste à payer',
       'Actions',
     ]);

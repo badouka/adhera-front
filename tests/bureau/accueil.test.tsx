@@ -61,11 +61,13 @@ describe('Écran 1 — l’accueil, tout depuis `simple` (§18.3)', () => {
     renderInBureau(<AccueilPage />);
     const received = await screen.findByTestId('tile-received');
     // L'année est `simple.year`, jamais celle du téléphone.
-    expect(received).toHaveTextContent('Reçu en 2031235 000 FCFA');
+    // S9 — « dans Adhera » : un trésorier qui vient d'importer ses membres ne lit pas « 0 FCFA reçu » comme une erreur.
+    expect(received).toHaveTextContent('Reçu dans Adhera en 2031235 000 FCFA');
     expect(received).toHaveAttribute('href', '/bureau/paiements');
     const remaining = screen.getByTestId('tile-remaining');
-    expect(remaining).toHaveTextContent('Reste à recevoir290 000 FCFAce que doivent encore les 8 membres en retard');
-    expect(remaining).toHaveAttribute('href', '/bureau/membres?filtre=retard');
+    // §23.3 — ceux qui doivent encore : en retard ET à payer, et la liste de CETTE population.
+    expect(remaining).toHaveTextContent('Reste à recevoir290 000 FCFAce que doivent encore les 8 membres en retard ou à payer');
+    expect(remaining).toHaveAttribute('href', '/bureau/membres?filtre=pas-a-jour');
     const verify = screen.getByTestId('tile-verify');
     expect(verify).toHaveTextContent('À vérifier2 paiementsannoncés par des membres, 45 000 FCFA');
     expect(verify).toHaveAttribute('href', '/bureau/a-verifier');

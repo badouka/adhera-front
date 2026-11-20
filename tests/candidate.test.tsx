@@ -89,7 +89,8 @@ describe('§17.5 — la page d’une personne qui a demandé à adhérer', () =>
     const block = await screen.findByTestId('application-rejected');
     expect(block).toHaveTextContent('Votre demande n’a pas été acceptée.');
     expect(block).toHaveTextContent('Cette association n’accepte que les techniciens en exercice.');
-    expect(block).toHaveTextContent('Pour en parler, contactez l’association.');
+    // §23.6 — sans `contact_hint` servi : la phrase qui ne promet aucun canal.
+    expect(block).toHaveTextContent('Pour en parler, adressez-vous à l’association.');
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
     expect(screen.queryByText(/Gardez le message/)).not.toBeInTheDocument();
   });

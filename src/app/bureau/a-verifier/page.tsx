@@ -34,6 +34,7 @@ import type {
 } from '@/lib/bureau/types';
 import { firstName } from '@/lib/bureau/words';
 import { formatDate, formatDateTime } from '@/lib/dates';
+import { queName } from '@/lib/elision';
 
 /** Le texte libre d'un refus : le membre le lira. 10 caractères au moins (§18.4). */
 export const MIN_REJECTION_LENGTH = 10;
@@ -572,7 +573,7 @@ function RefuseScreen({
       ) : null}
 
       <section className="flex flex-col gap-1 rounded-[var(--radius-md)] border border-line bg-surface-raised p-4" data-testid="preview">
-        <Label>Le message que {who} recevra</Label>
+        <Label>Le message {queName(who)} recevra</Label>
         <p className="m-0 whitespace-pre-line break-words">
           « Bonjour {who},{'\n'}
           {reasonPreview(reason, payment, text)}

@@ -238,16 +238,21 @@ function Figures({ data }: { data: Dashboard }) {
                 : 'des membres actifs sont à jour'}
             </span>
           </div>
-          <dl className="m-0 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {/* §23.3 (S9) — « En retard » et « À payer » sont deux comptes : late + to_pay = pas à jour. */}
+          <dl className="m-0 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             <Count label="Membres actifs" value={members.active} />
             <Count label="À jour" value={members.up_to_date} />
-            <Count label="En retard" value={members.not_up_to_date} />
+            <Count label="En retard" value={members.late ?? members.not_up_to_date} />
+            {members.to_pay !== undefined ? <Count label="À payer" value={members.to_pay} /> : null}
             <Count label="Demandes d’adhésion" value={members.pending} />
           </dl>
+          {/* §23.3 — le MÊME nombre que l'accueil, et désormais la même phrase : des membres à jour dont la couverture s'arrête bientôt. */}
           <p className="m-0 font-semibold" data-testid="upcoming">
             {upcoming.count === 0
-              ? `Aucune échéance dans les ${upcoming.days} prochains jours.`
-              : `${plural(upcoming.count, 'échéance', 'échéances')} dans les ${upcoming.days} prochains jours.`}
+              ? `Aucun membre ne doit renouveler d’ici ${upcoming.days} jours.`
+              : upcoming.count > 1
+                ? `${upcoming.count} membres doivent renouveler d’ici ${upcoming.days} jours.`
+                : `1 membre doit renouveler d’ici ${upcoming.days} jours.`}
           </p>
         </Panel>
 

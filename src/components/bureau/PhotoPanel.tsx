@@ -5,6 +5,7 @@ import { fieldMessages } from '@/lib/api';
 import { isSessionError } from '@/lib/bureau/api/core';
 import { deletePhoto, uploadPhoto } from '@/lib/bureau/api/members';
 import { errorMessage } from '@/lib/bureau/messages';
+import { deName } from '@/lib/elision';
 import { MAX_FILE_BYTES, PHOTO_ACCEPT, TOO_LARGE } from '@/lib/files';
 import { MemberPhoto } from './Answers';
 import { Button, Panel } from './ui';
@@ -19,12 +20,18 @@ export function PhotoPanel({
   memberId,
   memberName,
   photoUrl,
+  canDelete = true,
   onChanged,
   onClose,
 }: {
   memberId: string;
   memberName: string;
   photoUrl: string | null;
+  /**
+   * §23.2 (S9) — `can.delete_photo` : le retrait n'apparaît pas pour un rôle
+   * qui ne l'a pas. Le DÉPÔT reste ouvert à tous (§23.1).
+   */
+  canDelete?: boolean;
   /** Après un envoi ou un retrait : la fiche est relue (le lien est signé). */
   onChanged: (message: string) => void;
   onClose: () => void;
@@ -104,11 +111,11 @@ export function PhotoPanel({
             Fermer
           </Button>
         </div>
-        {photoUrl ? (
+        {photoUrl && canDelete ? (
           confirmDelete ? (
             <div className="flex flex-col gap-2 rounded-[var(--radius-sm)] border-2 border-late bg-late-soft p-3" role="alertdialog" aria-label="Retirer la photo">
               <p className="m-0 font-semibold">
-                Retirer la photo de {memberName} ? Le fichier est supprimé pour de bon : sa carte n’aura
+                Retirer la photo {deName(memberName)} ? Le fichier est supprimé pour de bon : sa carte n’aura
                 plus de photo.
               </p>
               <span className="flex flex-wrap gap-2">

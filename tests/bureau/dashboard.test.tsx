@@ -98,7 +98,7 @@ describe('Tableau de bord — les chiffres', () => {
     expect(screen.getByText('Membres actifs').nextSibling).toHaveTextContent('5');
     expect(screen.getByText('En retard').nextSibling).toHaveTextContent('2');
     expect(screen.getByText('Demandes d’adhésion').nextSibling).toHaveTextContent('1');
-    expect(screen.getByTestId('upcoming')).toHaveTextContent('2 échéances dans les 30 prochains jours.');
+    expect(screen.getByTestId('upcoming')).toHaveTextContent('2 membres doivent renouveler d’ici 30 jours.');
 
     const methods = screen.getByRole('heading', { name: 'Par moyen de paiement' }).closest('section') as HTMLElement;
     // Les 5 moyens, à 0 compris, dans l'ordre servi.

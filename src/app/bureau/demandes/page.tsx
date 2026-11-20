@@ -26,10 +26,10 @@ import {
 } from '@/lib/bureau/api/members';
 import { errorMessage } from '@/lib/bureau/messages';
 import { openPendingTab } from '@/lib/bureau/pendingTab';
-import type { Category, DecidedMember, MemberDetail, MemberListItem } from '@/lib/bureau/types';
+import { canDo, type Category, type DecidedMember, type MemberDetail, type MemberListItem } from '@/lib/bureau/types';
 import { firstName } from '@/lib/bureau/words';
 import { formatDateTime } from '@/lib/dates';
-import { deName } from '@/lib/elision';
+import { deName, queName } from '@/lib/elision';
 import { phoneDigits, spacedPhone } from '@/lib/phone';
 
 /** Le motif d'un refus : le candidat le lira. 10 caractères au moins (§17.6). */
@@ -79,7 +79,9 @@ export function refusalPreview(member: MemberListItem, reason: string): string {
  * le bureau : l'écran le dit, et renvoie à la liste des candidats.
  */
 export default function DemandesPage() {
-  const { settings } = useBureau();
+  const { settings, me } = useBureau();
+  // §23.2 (S9) — admettre et refuser sont réservés : sans le droit, les boutons n'apparaissent pas.
+  const canDecide = canDo(me, 'admit_application');
   const mode = settings.admission_mode ?? 'bureau';
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
@@ -184,6 +186,7 @@ export default function DemandesPage() {
             key={current.id}
             member={current}
             categories={categories}
+            canDecide={canDecide}
             onAdmitted={(member) => setView({ kind: 'admitted', member })}
             onRefuse={() => setView({ kind: 'refuse', member: current })}
             onNext={list.length > 1 ? () => setIndex((n) => n + 1) : null}
@@ -271,6 +274,7 @@ function Fact({ label, children, wide = false }: { label: string; children: Reac
 function ApplicationCard({
   member,
   categories,
+  canDecide,
   onAdmitted,
   onRefuse,
   onNext,
@@ -278,6 +282,7 @@ function ApplicationCard({
 }: {
   member: MemberListItem;
   categories: Category[];
+  canDecide: boolean;
   onAdmitted: (member: DecidedMember) => void;
   onRefuse: () => void;
   onNext: (() => void) | null;
@@ -390,12 +395,20 @@ function ApplicationCard({
       {error ? <Notice tone="late">{error}</Notice> : null}
 
       <div className="flex flex-col gap-[10px]">
-        <button type="button" disabled={busy} onClick={() => void admit()} className={bigButtonClass('primary')}>
-          {busy ? 'Admission…' : `Admettre ${who} comme membre`}
-        </button>
-        <button type="button" disabled={busy} onClick={onRefuse} className={bigButtonClass('outline-red')}>
-          Refuser la demande
-        </button>
+        {canDecide ? (
+          <>
+            <button type="button" disabled={busy} onClick={() => void admit()} className={bigButtonClass('primary')}>
+              {busy ? 'Admission…' : `Admettre ${who} comme membre`}
+            </button>
+            <button type="button" disabled={busy} onClick={onRefuse} className={bigButtonClass('outline-red')}>
+              Refuser la demande
+            </button>
+          </>
+        ) : (
+          <p className="small m-0 text-ink-muted" data-testid="cannot-decide">
+            Votre rôle ne permet pas de décider d’une demande d’adhésion.
+          </p>
+        )}
         {onNext ? (
           <button type="button" onClick={onNext} className={LINK_BUTTON}>
             Passer à la demande suivante
@@ -445,7 +458,7 @@ function Admitted({
       {share ? (
         <>
           <p className="m-0">
-            Envoyez-lui son lien : c’est là que {who} paiera sa cotisation et retrouvera sa carte de
+            Envoyez-lui son lien : c’est là {queName(who)} paiera sa cotisation et retrouvera sa carte de
             membre.
           </p>
           <a href={share.whatsapp_url} target="_blank" rel="noopener noreferrer" className={bigButtonClass('primary')} data-testid="wa-welcome">
@@ -601,7 +614,7 @@ function Refuse({
       </div>
 
       <section className="flex flex-col gap-2 rounded-[var(--radius-md)] border border-line bg-surface-raised p-4">
-        <Label>Le message que {who} recevra</Label>
+        <Label>Le message {queName(who)} recevra</Label>
         <p className="m-0 whitespace-pre-line break-words" data-testid="refusal-preview">
           {refusalPreview(member, reason)}
         </p>

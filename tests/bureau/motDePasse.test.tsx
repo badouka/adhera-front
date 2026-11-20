@@ -8,7 +8,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MonMotDePassePage, { PASSWORD_CHANGED, PASSWORD_HINT } from '@/app/bureau/mon-mot-de-passe/page';
 import { getSession, navigation, resetSessionCache, saveSession } from '@/lib/bureau/session';
-import { calls, fakeServer, renderInBureau, SESSION, TOKEN } from './fixtures';
+import { calls, fakeServer, renderInBureau, SESSION, TOKEN, TOO_MANY_ATTEMPTS } from './fixtures';
 
 beforeEach(() => {
   window.sessionStorage.clear();
@@ -209,7 +209,7 @@ describe('F3.2 — « Mon mot de passe » : les réponses', () => {
   it('429 (§14.3, forme nue, sans `code`) : le délai est lu dans `Retry-After`', async () => {
     fakeServer([{
       method: 'PUT', match: 'me/password', status: 429,
-      body: { message: 'Too Many Attempts.' }, headers: { 'Retry-After': '170' },
+      body: TOO_MANY_ATTEMPTS, headers: { 'Retry-After': '170' },
     }]);
     await fillAndSave('Ancien-Mot-1', 'Baobab-Lagune-4827');
     expect(await screen.findByRole('alert')).toHaveTextContent('Trop de tentatives. Réessayez dans 3 minutes.');
@@ -218,7 +218,7 @@ describe('F3.2 — « Mon mot de passe » : les réponses', () => {
   it('429 du verrou par compte (10 / heure) : le délai long de `Retry-After`', async () => {
     fakeServer([{
       method: 'PUT', match: 'me/password', status: 429,
-      body: { message: 'Too Many Attempts.' }, headers: { 'Retry-After': '3329' },
+      body: TOO_MANY_ATTEMPTS, headers: { 'Retry-After': '3329' },
     }]);
     await fillAndSave('Ancien-Mot-1', 'Baobab-Lagune-4827');
     expect(await screen.findByRole('alert')).toHaveTextContent('Trop de tentatives. Réessayez dans 56 minutes.');

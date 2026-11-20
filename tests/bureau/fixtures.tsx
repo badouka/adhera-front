@@ -31,6 +31,14 @@ export const SESSION: BureauSession = {
   admin: { id: 3, name: 'Trésorier Démo', email: 'tresorier@demo-asso.test', role: 'tresorier' },
 };
 
+/**
+ * Le corps d'un `429` depuis v3.14-M1 : les messages du framework sont en
+ * français. La phrase est QUELCONQUE, à dessein : aucun écran ni aucun test ne
+ * dépend de ce texte, seulement du statut et de `Retry-After` (F7, vérifié par
+ * `tests/bureau/f7.test.tsx`).
+ */
+export const TOO_MANY_ATTEMPTS = { message: 'Trop de requêtes, patientez avant de réessayer.' };
+
 /** `GET admin/me` (§18.7). */
 export const ME = {
   name: 'Fatim Diarra',

@@ -381,3 +381,78 @@ describe('§22.5 — le rythme sur la page du membre et du candidat', () => {
     );
   });
 });
+
+/* ───────────────────────────── § 3 — S9 (§23.6) ───────────────────────────── */
+
+describe('§23.6 — joindre l’association', () => {
+  const ORG = payload().organisation;
+
+  it('le refusé : la phrase de contact composée par le serveur, telle quelle', async () => {
+    fetchMock.mockResolvedValue(
+      fakeResponse(
+        200,
+        payload({
+          organisation: { ...ORG, contact_phone: '77 123 45 67', contact_email: 'bureau@amicale.sn' },
+          application: {
+            status: 'rejected',
+            submitted_at: '2026-11-04T10:15:00+00:00',
+            rejection_reason: 'L’adhésion est réservée aux techniciens diplômés.',
+            contact_hint: 'Pour en parler, écrivez ou téléphonez au 77 123 45 67 ou à bureau@amicale.sn.',
+          },
+        }),
+      ),
+    );
+    render(<MemberPage token={TOKEN} />);
+    expect(await screen.findByTestId('contact-hint')).toHaveTextContent(
+      'Pour en parler, écrivez ou téléphonez au 77 123 45 67 ou à bureau@amicale.sn.',
+    );
+    // Pas de doublon : la ligne du bas ne répète pas les coordonnées au refusé.
+    expect(screen.queryByTestId('association-contact')).not.toBeInTheDocument();
+  });
+
+  it('le refusé, sans coordonnées : la phrase ne promet aucun canal', async () => {
+    fetchMock.mockResolvedValue(
+      fakeResponse(
+        200,
+        payload({
+          application: {
+            status: 'rejected',
+            submitted_at: null,
+            rejection_reason: null,
+            contact_hint: 'Pour en parler, adressez-vous à l’association.',
+          },
+        }),
+      ),
+    );
+    render(<MemberPage token={TOKEN} />);
+    expect(await screen.findByTestId('contact-hint')).toHaveTextContent('Pour en parler, adressez-vous à l’association.');
+  });
+
+  it('la page du membre : « Une question ? », juste au-dessus de « Propulsé par Adhera »', async () => {
+    fetchMock.mockResolvedValue(
+      fakeResponse(200, payload({ organisation: { ...ORG, contact_phone: '771234567', contact_email: 'bureau@amicale.sn' } })),
+    );
+    render(<MemberPage token={TOKEN} />);
+    const line = await screen.findByTestId('association-contact');
+    expect(line).toHaveTextContent('Une question ? Contactez l’association : 77 123 45 67 · bureau@amicale.sn');
+    expect(screen.getByRole('link', { name: '77 123 45 67' })).toHaveAttribute('href', 'tel:771234567');
+    expect(screen.getByRole('link', { name: 'bureau@amicale.sn' })).toHaveAttribute('href', 'mailto:bureau@amicale.sn');
+    // Juste au-dessus du pied de page.
+    const footer = screen.getByText('Propulsé par Adhera').closest('footer') as HTMLElement;
+    expect(line.parentElement?.nextElementSibling).toBe(footer);
+  });
+
+  it('un seul des deux : lui seul, sans séparateur', async () => {
+    fetchMock.mockResolvedValue(fakeResponse(200, payload({ organisation: { ...ORG, contact_phone: null, contact_email: 'bureau@amicale.sn' } })));
+    render(<MemberPage token={TOKEN} />);
+    expect(await screen.findByTestId('association-contact')).toHaveTextContent(/^Une question \? Contactez l’association : bureau@amicale\.sn$/);
+  });
+
+  it('aucun des deux : rien — et jamais les numéros marchands à leur place', async () => {
+    fetchMock.mockResolvedValue(fakeResponse(200, payload({ organisation: { ...ORG, contact_phone: null, contact_email: null } })));
+    render(<MemberPage token={TOKEN} />);
+    await screen.findByText(/Bonjour/);
+    expect(screen.queryByTestId('association-contact')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Une question/)).not.toBeInTheDocument();
+  });
+});

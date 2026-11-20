@@ -34,6 +34,7 @@ import {
   zonedParts,
   zonedToIso,
 } from '@/lib/dates';
+import { deName } from '@/lib/elision';
 
 const SEGMENTS: ReadonlyArray<{ value: CampaignSegment; label: string; recap: string }> = [
   {
@@ -530,7 +531,7 @@ function NewCampaignPanel({
                   className={inputClass(false, 'w-auto')}
                 />
               </label>
-              <span className="small pb-3 text-ink-muted">Heure de {cityOf(zone)}</span>
+              <span className="small pb-3 text-ink-muted">Heure {deName(cityOf(zone))}</span>
             </div>
           ) : null}
         </fieldset>

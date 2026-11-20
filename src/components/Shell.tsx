@@ -22,6 +22,7 @@ export function Shell({
   organisationName,
   logoUrl,
   shortName,
+  footerNote,
   children,
   header = true,
   footer = <PoweredBy />,
@@ -39,6 +40,8 @@ export function Shell({
    * titre, le nom complet dessous. Jamais fabriqué ici.
    */
   shortName?: string | null;
+  /** Une ligne juste AU-DESSUS du pied de page (les coordonnées de l'association, F7). */
+  footerNote?: ReactNode;
   children: ReactNode;
 }) {
   const name = organisationName?.trim();
@@ -78,6 +81,8 @@ export function Shell({
       <main className="mx-auto flex w-full max-w-[420px] grow flex-col gap-4 px-4 pt-6 pb-4">
         {children}
       </main>
+
+      {footerNote ? <div className="px-4 pt-3 text-center">{footerNote}</div> : null}
 
       {footer ? (
         <footer className="small flex items-center justify-center gap-[6px] px-4 pt-3 pb-4 text-ink-muted">

@@ -5,6 +5,7 @@ import { AlertIcon } from '@/components/Icons';
 import type { ExistingPayment } from '@/lib/bureau/types';
 import { zonedParts } from '@/lib/dates';
 import { bigButtonClass, Label } from '../ui';
+import { deName } from '@/lib/elision';
 
 /** « à 21 h 21 », lu dans le fuseau de l'association. */
 export function recordedAtLabel(recordedAt: string, zone: string | null | undefined): string {
@@ -60,7 +61,7 @@ export function DuplicateQuestion({
         <h1 className="title m-0 text-ink">Est-ce le même paiement ?</h1>
       </div>
       <p className="m-0">
-        Ce paiement de {memberName} est déjà enregistré aujourd’hui.
+        Ce paiement {deName(memberName)} est déjà enregistré aujourd’hui.
       </p>
 
       <div className="grid grid-cols-2 gap-[10px]">

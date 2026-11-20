@@ -8,6 +8,7 @@ import { errorMessage } from '@/lib/bureau/messages';
 import type { Payment } from '@/lib/bureau/types';
 import { formatShortDate } from '@/lib/dates';
 import { Button, Field, inputClass } from './ui';
+import { deName } from '@/lib/elision';
 
 /** Le motif d'une annulation : 10 caractères au moins, espaces de bord non comptées (§11.3). */
 export const MIN_CANCEL_LENGTH = 10;
@@ -86,7 +87,7 @@ export function CancelPaymentPanel({
     >
       <p id={`${ids}-recap`} className="m-0 font-semibold break-words" data-testid="cancel-recap">
         Annuler <span className="money">{payment.amount_formatted}</span>
-        {details ? ` (${details})` : ''} de {memberName} ? Sa cotisation redeviendra à payer
+        {details ? ` (${details})` : ''} {deName(memberName)} ? Sa cotisation redeviendra à payer
         {payment.receipt ? ` et le reçu ${payment.receipt.reference} sera marqué annulé` : ''}.
         Rien n’est supprimé.
       </p>

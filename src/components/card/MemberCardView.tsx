@@ -2,6 +2,7 @@ import { SignedPhoto } from '@/components/SignedPhoto';
 import { formatDate } from '@/lib/dates';
 import type { CardLine, MemberCard } from '@/lib/types';
 import { QrCode } from './QrCode';
+import { deName } from '@/lib/elision';
 
 /**
  * La carte de membre (F4 § 1.2) : un objet qu'on présente à un guichet. Grande,
@@ -58,7 +59,7 @@ export function MemberCardView({ card }: { card: MemberCard }) {
           // §21.2 — carrée et ré-encodée par le serveur : aucun recadrage ici.
           <SignedPhoto
             src={card.photo_url}
-            alt={`Photo de ${card.display_name}`}
+            alt={`Photo ${deName(card.display_name)}`}
             size={128}
             className="mb-2 rounded-[var(--radius-md)] border border-line object-cover"
             testId="card-photo"

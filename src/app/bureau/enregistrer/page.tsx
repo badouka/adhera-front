@@ -394,7 +394,18 @@ export default function EnregistrerPage() {
         </>
       )}
 
-      {member && r ? (
+      {/* §23.5 (S9) — `can_record_payment: false` : un exonéré, ou un ancien membre. Pas de formulaire. */}
+      {member && member.can_record_payment === false ? (
+        <Notice tone="info">
+          <span data-testid="cannot-record">
+            {member.status === 'former'
+              ? 'Aucun paiement ne s’enregistre pour un ancien membre.'
+              : `${firstName(member)} ne paie pas de cotisation : son type de membre en est exonéré.`}
+          </span>
+        </Notice>
+      ) : null}
+
+      {member && r && member.can_record_payment !== false ? (
         <form
           className="m-0 flex flex-col gap-4"
           noValidate

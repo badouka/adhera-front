@@ -9,6 +9,7 @@ import { ApiError, fetchVerification } from '@/lib/api';
 import { formatDate, formatDateTime, formatInstant } from '@/lib/dates';
 import { resolveTenant } from '@/lib/tenant';
 import type { Verification, VerificationStanding } from '@/lib/types';
+import { deName } from '@/lib/elision';
 
 type Screen =
   | { kind: 'loading' }
@@ -182,7 +183,7 @@ function MemberLines({ member }: { member: Verification['member'] }) {
       {member.photo_url ? (
         <SignedPhoto
           src={member.photo_url}
-          alt={`Photo de ${member.display_name}`}
+          alt={`Photo ${deName(member.display_name)}`}
           size={120}
           className="mb-2 rounded-[var(--radius-md)] border border-line object-cover"
           testId="verify-photo"

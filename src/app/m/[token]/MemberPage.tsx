@@ -29,6 +29,7 @@ import { ReceiptList } from '@/components/ReceiptList';
 import { Card, Shell } from '@/components/Shell';
 import { API_BASE, fetchMember } from '@/lib/api';
 import { formatDate, formatDateTime, formatInstant, isPast } from '@/lib/dates';
+import { phoneDigits, spacedPhone } from '@/lib/phone';
 import { homeIconUrl, manifestHref } from '@/lib/manifest';
 import { resolveMemberState, screenForError } from '@/lib/state';
 import { resolveTenant } from '@/lib/tenant';
@@ -226,7 +227,12 @@ export function MemberPage({ token }: { token: string }) {
   // d'autre. `application.status` décide, jamais `due === null` (piège 1).
   if (application && application.status !== 'awaiting_first_payment') {
     return (
-      <Shell organisationName={payload.organisation.name} logoUrl={payload.organisation.logo_url}>
+      <Shell
+        organisationName={payload.organisation.name}
+        logoUrl={payload.organisation.logo_url}
+        // Le refusé a déjà sa phrase de contact (`contact_hint`) : pas de doublon.
+        footerNote={application.status === 'rejected' ? null : <AssociationContact organisation={payload.organisation} />}
+      >
         <ApplicationPage
           application={application}
           name={payload.member.first_name?.trim() || payload.member.name}
@@ -304,6 +310,7 @@ export function MemberPage({ token }: { token: string }) {
     <Shell
       organisationName={payload.organisation.name}
       logoUrl={payload.organisation.logo_url}
+      footerNote={<AssociationContact organisation={payload.organisation} />}
     >
       {installLinks}
       {offlineBanner}
@@ -703,7 +710,10 @@ function ApplicationPage({
               <p className="m-0 whitespace-pre-line break-words">{reason}</p>
             </>
           ) : null}
-          <p className="small m-0 text-ink-muted">Pour en parler, contactez l’association.</p>
+          {/* §23.6 (S9) — composée par le serveur, avec ou sans coordonnées. */}
+          <p className="small m-0 text-ink-muted" data-testid="contact-hint">
+            {application.contact_hint?.trim() || 'Pour en parler, adressez-vous à l’association.'}
+          </p>
         </section>
       </>
     );
@@ -742,6 +752,33 @@ function ApplicationPage({
         Gardez le message qui contient ce lien : c’est votre accès personnel.
       </p>
     </>
+  );
+}
+
+/**
+ * §23.6 (S9), F7 — « Une question ? Contactez l’association : 77 123 45 67 ·
+ * bureau@amicale.sn », juste au-dessus de « Propulsé par Adhera ». Rien si le
+ * bureau n'a saisi ni l'un ni l'autre. ⚠️ Jamais les numéros marchands.
+ */
+export function AssociationContact({ organisation }: { organisation: MemberPayload['organisation'] }) {
+  const phone = organisation.contact_phone?.trim() || null;
+  const email = organisation.contact_email?.trim() || null;
+  if (!phone && !email) return null;
+  return (
+    <p className="small m-0 text-ink-muted" data-testid="association-contact">
+      Une question ? Contactez l’association :{' '}
+      {phone ? (
+        <a href={`tel:${phoneDigits(phone)}`} className="tnum whitespace-nowrap">
+          {spacedPhone(phone)}
+        </a>
+      ) : null}
+      {phone && email ? ' · ' : null}
+      {email ? (
+        <a href={`mailto:${email}`} className="break-all">
+          {email}
+        </a>
+      ) : null}
+    </p>
   );
 }
 

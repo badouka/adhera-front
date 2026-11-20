@@ -12,8 +12,14 @@ import { errorMessage } from '@/lib/bureau/messages';
 import type { DashboardSimple } from '@/lib/bureau/types';
 import { plural } from '@/lib/bureau/words';
 
-/** Les listes que l'accueil ouvre : le registre, déjà filtré (§18.3). */
+/**
+ * Les listes que l'accueil ouvre : le registre, déjà filtré (§18.3). Chaque
+ * chiffre s'ouvre sur SA population (§23.3) : « en retard » (`late`), « à
+ * payer » (`to_pay`), et les deux ensemble, ceux qui doivent encore.
+ */
 export const MEMBERS_LATE = '/bureau/membres?filtre=retard';
+export const MEMBERS_TO_PAY = '/bureau/membres?filtre=a-payer';
+export const MEMBERS_OWING = '/bureau/membres?filtre=pas-a-jour';
 export const MEMBERS_RENEWING = '/bureau/membres?filtre=renouveler';
 export const PAYMENTS_LOG = '/bureau/paiements';
 export const APPLICATIONS_PATH = '/bureau/demandes';
@@ -87,7 +93,11 @@ export default function AccueilPage() {
 
   const { simple } = load;
   const n = simple.to_verify_count;
+  // §23.3 — `late_count` compte désormais les EN RETARD seuls ; ceux qui
+  // doivent encore payer sont `late + to_pay` (= `not_up_to_date`).
   const late = simple.late_count;
+  const toPay = simple.to_pay_count ?? 0;
+  const owing = late + toPay;
   const soon = simple.renewing_soon_count;
   // §17.9 — un TRAVAIL à faire (0 sous « premier paiement »), pas un effectif.
   const apps = simple.applications_to_review_count ?? 0;
@@ -100,22 +110,23 @@ export default function AccueilPage() {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <Tile href={PAYMENTS_LOG} testId="tile-received">
-          <Label>Reçu en {simple.year}</Label>
+          {/* S9 — ce qu'Adhera a reçu : un trésorier qui vient d'importer ses membres ne lit pas « 0 FCFA reçu » comme une erreur. */}
+          <Label>Reçu dans Adhera en {simple.year}</Label>
           <span className="money tnum text-[clamp(17px,5.3vw,22px)] leading-7 font-bold text-paid lg:text-[28px] lg:leading-[34px]">
             {simple.received_this_year_formatted}
           </span>
           <span className="small text-ink-muted">tous les paiements depuis le 1er janvier</span>
         </Tile>
-        <Tile href={MEMBERS_LATE} testId="tile-remaining">
+        <Tile href={MEMBERS_OWING} testId="tile-remaining">
           <Label>Reste à recevoir</Label>
           <span className="money tnum text-[clamp(17px,5.3vw,22px)] leading-7 font-bold text-due lg:text-[28px] lg:leading-[34px]">
             {simple.remaining_formatted}
           </span>
           <span className="small text-ink-muted">
-            {late > 1
-              ? `ce que doivent encore les ${late} membres en retard`
-              : late === 1
-                ? 'ce que doit encore le membre en retard'
+            {owing > 1
+              ? `ce que doivent encore les ${owing} membres en retard ou à payer`
+              : owing === 1
+                ? 'ce que doit encore le membre en retard ou à payer'
                 : 'aucun membre en retard'}
           </span>
         </Tile>
@@ -184,6 +195,12 @@ export default function AccueilPage() {
         <RowLink href={MEMBERS_LATE} testId="row-late">
           {late === 0 ? 'Aucun membre en retard' : plural(late, 'membre en retard', 'membres en retard')}
         </RowLink>
+        {/* §23.3 — l'échéance est aujourd'hui (ou à venir) : « à payer », pas « en retard ». */}
+        {toPay > 0 ? (
+          <RowLink href={MEMBERS_TO_PAY} testId="row-to-pay">
+            {plural(toPay, 'membre à payer', 'membres à payer')}
+          </RowLink>
+        ) : null}
         {soon > 0 ? (
           <RowLink href={MEMBERS_RENEWING} testId="row-renewing">
             {soon > 1

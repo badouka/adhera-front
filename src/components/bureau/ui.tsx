@@ -306,12 +306,15 @@ function useToastTimer(message: string | null, onDone: () => void) {
   }, [message, onDone]);
 }
 
-/** La pastille de la maquette : « À jour » sur vert pâle, « En retard » sur rouge pâle. */
-export function Pill({ tone, children }: { tone: 'ok' | 'late'; children: ReactNode }) {
+/**
+ * La pastille de la maquette : « À jour » sur vert pâle, « En retard » sur
+ * rouge pâle, « À payer » (§23.3, S9) sur ocre pâle.
+ */
+export function Pill({ tone, children }: { tone: 'ok' | 'late' | 'due'; children: ReactNode }) {
   return (
     <span
       className={`inline-flex h-7 shrink-0 items-center rounded-[var(--radius-pill)] px-3 text-[14px] font-semibold whitespace-nowrap ${
-        tone === 'ok' ? 'bg-paid-soft text-paid' : 'bg-late-soft text-late'
+        tone === 'ok' ? 'bg-paid-soft text-paid' : tone === 'due' ? 'bg-due-soft text-due' : 'bg-late-soft text-late'
       }`}
     >
       {children}

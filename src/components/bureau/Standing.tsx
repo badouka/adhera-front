@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 import { CheckIcon } from '@/components/Icons';
 import { Pastille } from '@/components/Pastille';
-import type { MemberListItem } from '@/lib/bureau/types';
-import { formatDate, formatDateTime, todayInDakar } from '@/lib/dates';
+import { standingOf, type MemberListItem } from '@/lib/bureau/types';
+import { formatDate, formatDateTime } from '@/lib/dates';
 
 /**
  * Vrai si le membre est à jour pour l'année en cours ET doit des arriérés —
@@ -26,13 +26,16 @@ export function StandingPastille({ member }: { member: MemberListItem }) {
   if (member.status === 'pending') return <Pastille tone="info">Demande d’adhésion</Pastille>;
   if (member.status === 'former') return <Pastille tone="due">Ancien membre</Pastille>;
   if (upToDateWithArrears(member)) return <Pastille tone="due">Arriérés à payer</Pastille>;
-  if (member.is_up_to_date) {
+  const standing = standingOf(member);
+  if (standing === 'up_to_date') {
     return (
       <Pastille tone="paid" icon={<CheckIcon />}>
         À jour
       </Pastille>
     );
   }
+  // §23.3 (S9) — le jour de l'échéance, on est « à payer » ; « en retard » le lendemain.
+  if (standing === 'to_pay') return <Pastille tone="due">À payer</Pastille>;
   return <Pastille tone="late">En retard</Pastille>;
 }
 
@@ -79,21 +82,19 @@ export function standingDetail(member: MemberListItem): ReactNode {
 /**
  * L'échéance d'une fiche (§12.7). `next_due_date` est l'échéance RÉCLAMÉE, celle
  * que nomment la relance et la file WhatsApp : on ne la calcule jamais, on la
- * lit, on la compare à aujourd'hui (à Dakar), et on choisit le libellé.
+ * lit, et le retard est celui que le serveur dit (`standing`, §23.3).
  *
  * Un ANCIEN membre n'a pas d'échéance : son `next_due_date` est le début de la
  * période qui le couvrait encore, alors qu'il ne doit rien et que son lien est
  * clos (décor f31, §8.3). On n'affiche rien pour lui.
  */
-export function dueDateLine(
-  member: MemberListItem,
-  today: string = todayInDakar(),
-): { late: boolean; label: string; value: string } | null {
+export function dueDateLine(member: MemberListItem): { late: boolean; label: string; value: string } | null {
   if (member.status === 'former') return null;
   const date = formatDate(member.next_due_date);
+  // §23.5 — un exonéré n'a pas d'échéance : `null`, et rien ne s'affiche.
   if (!date || !member.next_due_date) return null;
-  const late =
-    member.status === 'active' && !member.is_up_to_date && member.next_due_date < today;
+  // §23.3 — le retard est ce que le SERVEUR dit (`standing`), plus un calcul ici.
+  const late = member.status === 'active' && standingOf(member) === 'late';
   return late
     ? { late, label: 'Échéance', value: `En retard depuis le ${date}` }
     : { late, label: 'Prochaine échéance', value: date };

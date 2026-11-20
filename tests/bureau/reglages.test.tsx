@@ -120,7 +120,8 @@ describe('B11 — l’association', () => {
     await screen.findByText('Réglages enregistrés.');
     const body = JSON.parse(calls(fetchMock, 'PUT')[0]?.init.body as string);
     expect(Object.keys(body).sort()).toEqual(
-      ['issuer_name', 'om_merchant_number', 'payment_instructions', 'short_name', 'wave_merchant_number'],
+      // §23.6 (S9) — les coordonnées de contact partent aussi, `null` si vides.
+      ['contact_email', 'contact_phone', 'issuer_name', 'om_merchant_number', 'payment_instructions', 'short_name', 'wave_merchant_number'],
     );
     expect(body.payment_instructions).toBe('Nouveau texte');
     // Le sigle part TOUJOURS, même quand on ne l'a pas touché (ici : aucun).

@@ -168,7 +168,10 @@ export function Registry({
             >
               <option value="">Toutes</option>
               <option value="up_to_date">À jour</option>
-              <option value="not_up_to_date">En retard</option>
+              {/* §23.3 (S9) — les filtres du serveur : `late` et `to_pay`, et les deux ensemble. */}
+              <option value="late">En retard</option>
+              <option value="to_pay">À payer</option>
+              <option value="not_up_to_date">En retard ou à payer</option>
             </select>
           </label>
         ) : null}

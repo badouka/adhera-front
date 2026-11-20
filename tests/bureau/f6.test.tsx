@@ -306,7 +306,7 @@ describe('F6 § 4 — la fiche : qui a décidé, l’invitation', () => {
           referrals_count: { joined: 3, pending: 1 },
         }),
       ),
-    ).toEqual(['Invitation de Aminata D. · A fait venir 3 personnes']);
+    ).toEqual(['Invitation d’Aminata D. · A fait venir 3 personnes']);
   });
 });
 

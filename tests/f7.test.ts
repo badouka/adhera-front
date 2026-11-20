@@ -116,3 +116,40 @@ describe('§23.2 — `can` masque un geste, il ne garde rien', () => {
     expect(canDo(me(), 'delete_photo')).toBe(true);
   });
 });
+
+/* ───────────────────────── Les garde-fous de S8 ───────────────────────── */
+
+const SRC_DIR = join(process.cwd(), 'src');
+function sources(): string[] {
+  const walk = (dir: string): string[] =>
+    readdirSync(dir).flatMap((name) => {
+      const path = join(dir, name);
+      return statSync(path).isDirectory() ? walk(path) : [path];
+    });
+  return walk(SRC_DIR).filter((file) => /\.(ts|tsx)$/.test(file));
+}
+/** Le code sans ses commentaires : un commentaire peut citer ce que l'écran ne dit pas. */
+function code(file: string): string {
+  return readFileSync(file, 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:])\/\/.*$/gm, '$1');
+}
+
+describe('§22 — le rythme est celui du serveur, jamais « par an » écrit à l’écran', () => {
+  it('« par an » n’existe que dans le choix du formulaire (avant que le serveur ne compose)', () => {
+    const offenders = sources()
+      .filter((file) => /(?<!\p{L})par an(?!\p{L})/u.test(code(file)))
+      .map((file) => relative(process.cwd(), file));
+    expect(offenders).toEqual(['src/lib/bureau/types.ts']);
+  });
+});
+
+describe('§22.8 — trois messages ne sont plus composés à l’écran', () => {
+  it('`whatsappLink` ne sert plus qu’à l’invitation d’un membre (texte servi, `referral.share_text`)', () => {
+    const callers = sources()
+      .filter((file) => relative(process.cwd(), file) !== 'src/lib/whatsapp.ts')
+      .filter((file) => /\bwhatsappLink\(/.test(code(file)))
+      .map((file) => relative(process.cwd(), file));
+    expect(callers).toEqual(['src/app/m/[token]/MemberPage.tsx']);
+  });
+});

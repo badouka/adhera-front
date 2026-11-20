@@ -7,6 +7,7 @@ import { getFileLink } from '@/lib/bureau/api/members';
 import { errorMessage } from '@/lib/bureau/messages';
 import { openPendingTab } from '@/lib/bureau/pendingTab';
 import type { MemberAnswer } from '@/lib/bureau/types';
+import { deName } from '@/lib/elision';
 
 /**
  * §21.5 — une pièce justificative : son NOM d'origine (ce que le bureau
@@ -102,7 +103,7 @@ export function MemberPhoto({ url, name, size = 72 }: { url: string | null | und
   return (
     <SignedPhoto
       src={url}
-      alt={`Photo de ${name}`}
+      alt={`Photo ${deName(name)}`}
       size={size}
       className="shrink-0 rounded-[var(--radius-sm)] border border-line object-cover"
       testId="member-photo"

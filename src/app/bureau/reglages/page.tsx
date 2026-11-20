@@ -129,6 +129,8 @@ const SETTINGS_FIELDS = [
   'om_merchant_number',
   'wave_merchant_number',
   'payment_instructions',
+  'contact_phone',
+  'contact_email',
 ] as const;
 
 function AssociationPanel() {
@@ -138,6 +140,9 @@ function AssociationPanel() {
   const [om, setOm] = useState(settings.om_merchant_number ?? '');
   const [wave, setWave] = useState(settings.wave_merchant_number ?? '');
   const [instructions, setInstructions] = useState(settings.payment_instructions ?? '');
+  // §23.6 (S9) — pour JOINDRE l'association ; ce ne sont pas les numéros marchands.
+  const [contactPhone, setContactPhone] = useState(settings.contact_phone ?? '');
+  const [contactEmail, setContactEmail] = useState(settings.contact_email ?? '');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -167,6 +172,9 @@ function AssociationPanel() {
         wave_merchant_number: wave.trim() || null,
         // Texte libre : envoyé tel quel, retours à la ligne compris.
         payment_instructions: instructions.trim() === '' ? null : instructions,
+        // §23.6 — vides, elles deviennent `null`. Le serveur juge le format, et son message s'affiche.
+        contact_phone: contactPhone.trim() || null,
+        contact_email: contactEmail.trim() || null,
       });
       setSettings(updated);
       setSaved(true);
@@ -207,6 +215,29 @@ function AssociationPanel() {
           <Field label="Numéro marchand Wave" optional error={errors.wave_merchant_number}>
             {(props) => (
               <input {...props} inputMode="tel" maxLength={32} value={wave} onChange={(e) => setWave(e.target.value)} className={inputClass(!!errors.wave_merchant_number, 'tnum')} />
+            )}
+          </Field>
+        </div>
+        {/* §23.6 — joindre l'association : page du membre, page du candidat refusé. */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field
+            label="Téléphone de l’association"
+            optional
+            error={errors.contact_phone}
+            hint="Pour joindre l’association. Il s’affiche aux membres et aux candidats."
+          >
+            {(props) => (
+              <input {...props} type="tel" inputMode="tel" autoComplete="off" maxLength={32} value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} className={inputClass(!!errors.contact_phone, 'tnum')} />
+            )}
+          </Field>
+          <Field
+            label="E-mail de l’association"
+            optional
+            error={errors.contact_email}
+            hint="Pour écrire à l’association. Il s’affiche aux membres et aux candidats."
+          >
+            {(props) => (
+              <input {...props} type="email" inputMode="email" autoComplete="off" maxLength={255} value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} className={inputClass(!!errors.contact_email)} />
             )}
           </Field>
         </div>

@@ -7,7 +7,13 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ConnexionPage from '@/app/bureau/connexion/page';
+import ChiffresPage from '@/app/bureau/chiffres/page';
 import DemandesPage from '@/app/bureau/demandes/page';
+import EnregistrerPage from '@/app/bureau/enregistrer/page';
+import FicheMembrePage, { dueSentence } from '@/app/bureau/membres/[id]/page';
+import MembresPage from '@/app/bureau/membres/page';
+import AccueilPage from '@/app/bureau/page';
+import ReglagesPage from '@/app/bureau/reglages/page';
 import TypesDeMembresPage from '@/app/bureau/types-de-membres/page';
 import { AnswersList } from '@/components/bureau/Answers';
 import { standingDetail } from '@/components/bureau/Standing';
@@ -18,9 +24,14 @@ import type { Category, MemberAnswer } from '@/lib/bureau/types';
 import {
   calls,
   CATEGORIES,
+  dashboard,
   fakeServer,
+  memberDetail,
   memberItem,
   ME,
+  payment,
+  simple,
+  TOO_MANY_ATTEMPTS,
   renderInBureau,
   SESSION,
   settings,
@@ -462,4 +473,253 @@ describe('§22.8 — la ligne du registre des candidats porte la date de la dema
     );
     expect(standingDetail(memberItem({ status: 'pending', submitted_at: null }))).toBe('Demande en attente');
   });
+});
+
+/* ───────────────────────────── § 3 — S9 (§23) ───────────────────────────── */
+
+const CAN_ALL = { cancel_payment: true, admit_application: true, delete_photo: true };
+const PRESIDENT = { ...ME, role: 'president', role_label: 'Président', can: { ...CAN_ALL, cancel_payment: false } };
+const MEMBRE_BUREAU = { ...ME, role: 'membre_bureau', role_label: 'Membre du bureau', can: { cancel_payment: false, admit_application: false, delete_photo: false } };
+const TRESORIER = { ...ME, can: CAN_ALL };
+
+describe('§23.2 — les rôles : une action interdite n’apparaît pas', () => {
+  const FATOU = memberDetail({
+    id: 'm-fatou', name: 'Fatou Sarr', first_name: 'Fatou', last_name: 'Sarr',
+    is_up_to_date: true, standing: 'up_to_date', covered_until: '2027-03-01', next_due_date: '2027-03-02',
+    balance_due: 0, balance_due_formatted: '0 FCFA', photo_url: 'https://api.eventflow.africa/api/v1/admin/membership/files/photo-signee',
+    can_record_payment: true,
+  });
+
+  function fiche(me: typeof ME) {
+    saveSession(SESSION);
+    nav.params = { id: 'm-fatou' };
+    fakeServer([
+      { match: /^membership\/members\/m-fatou$/, body: FATOU },
+      { match: /^membership\/payments/, body: [payment({ member_id: 'm-fatou', status: 'validated', receipt: { id: 'r1', reference: 'REC-1' } })] },
+    ]);
+    return renderInBureau(<FicheMembrePage />, { me });
+  }
+
+  it('le président : pas d’« Annuler un paiement » ; la photo se retire', async () => {
+    const user = userEvent.setup();
+    fiche(PRESIDENT);
+    await user.click(await screen.findByRole('button', { name: 'Autres actions (modifier, départ)' }));
+    expect(screen.queryByRole('button', { name: /Annuler un paiement/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Sa photo : l’ajouter, la changer ou la retirer/ })).toBeInTheDocument();
+  });
+
+  it('le trésorier : « Annuler un paiement » est là', async () => {
+    const user = userEvent.setup();
+    fiche(TRESORIER);
+    await user.click(await screen.findByRole('button', { name: 'Autres actions (modifier, départ, annuler un paiement)' }));
+    expect(screen.getByRole('button', { name: /Annuler un paiement/ })).toBeInTheDocument();
+  });
+
+  it('un membre du bureau : la photo se DÉPOSE toujours, elle ne se retire pas', async () => {
+    const user = userEvent.setup();
+    fiche(MEMBRE_BUREAU);
+    await user.click(await screen.findByRole('button', { name: 'Autres actions (modifier, départ)' }));
+    await user.click(screen.getByRole('button', { name: 'Sa photo : l’ajouter ou la changer' }));
+    const panel = await screen.findByTestId('photo-panel');
+    expect(within(panel).getByRole('button', { name: 'Enregistrer cette photo' })).toBeInTheDocument();
+    expect(within(panel).queryByRole('button', { name: 'Retirer la photo' })).not.toBeInTheDocument();
+    // Ce qui n'est pas dans la matrice reste ouvert : « … a payé » est là.
+    expect(screen.getByRole('link', { name: 'Fatou a payé : l’enregistrer' })).toBeInTheDocument();
+  });
+
+  it('les demandes, pour un membre du bureau : ni « Admettre » ni « Refuser », une phrase', async () => {
+    saveSession(SESSION);
+    fakeServer([
+      { match: /^membership\/members\?status=pending/, body: [memberItem({ id: 'm-awa', name: 'Awa Gueye', first_name: 'Awa', status: 'pending', answers: [] })] },
+      { match: /^membership\/members\?status=rejected/, body: [] },
+      { match: 'membership/categories', body: CATEGORIES },
+    ]);
+    renderInBureau(<DemandesPage />, { me: MEMBRE_BUREAU });
+    await screen.findByTestId('application');
+    expect(screen.queryByRole('button', { name: /Admettre/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Refuser la demande' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('cannot-decide')).toHaveTextContent('Votre rôle ne permet pas de décider d’une demande d’adhésion.');
+  });
+
+  it('le serveur refuse quand même (`403 role_not_allowed`) : SON message, tel quel', async () => {
+    saveSession(SESSION);
+    const user = userEvent.setup();
+    const REFUS = 'Seuls le président, le secrétaire et le trésorier peuvent décider d’une candidature.';
+    fakeServer([
+      { method: 'POST', match: 'membership/members/m-awa/admit', status: 403, body: { code: 'role_not_allowed', message: REFUS } },
+      { match: /^membership\/members\?status=pending/, body: [memberItem({ id: 'm-awa', name: 'Awa Gueye', first_name: 'Awa', status: 'pending', answers: [] })] },
+      { match: /^membership\/members\?status=rejected/, body: [] },
+      { match: 'membership/categories', body: CATEGORIES },
+    ]);
+    // `admin/me` n'a pas encore répondu : rien n'est masqué, le serveur tranche.
+    renderInBureau(<DemandesPage />, { me: null });
+    await user.click(await screen.findByRole('button', { name: 'Admettre Awa comme membre' }));
+    expect(await screen.findByText(REFUS)).toBeInTheDocument();
+  });
+});
+
+describe('§23.3 — « À payer » et « En retard », partout', () => {
+  const LATE = memberItem({ id: 'm-late', name: 'Moussa Ndiaye', first_name: 'Moussa', standing: 'late', is_up_to_date: false, next_due_date: '2026-10-01' });
+  const TO_PAY = memberItem({ id: 'm-topay', name: 'Khadidiatou Seck', first_name: 'Khadidiatou', standing: 'to_pay', is_up_to_date: false, next_due_date: '2026-11-20', balance_due: 25000, balance_due_formatted: '25 000 FCFA' });
+  const OK = memberItem({ id: 'm-ok', name: 'Fatou Sarr', first_name: 'Fatou', standing: 'up_to_date', is_up_to_date: true, balance_due: 0, balance_due_formatted: '0 FCFA' });
+
+  it('l’accueil : « Reçu dans Adhera en … », et une ligne par population, chacune cliquable sur la sienne', async () => {
+    saveSession(SESSION);
+    fakeServer([{ match: 'membership/dashboard', body: dashboard({ simple: simple({ late_count: 7, to_pay_count: 1 }) }) }]);
+    renderInBureau(<AccueilPage />);
+    expect(await screen.findByTestId('tile-received')).toHaveTextContent('Reçu dans Adhera en 2026');
+    expect(screen.getByTestId('row-late')).toHaveTextContent('7 membres en retard');
+    expect(screen.getByTestId('row-late')).toHaveAttribute('href', '/bureau/membres?filtre=retard');
+    expect(screen.getByTestId('row-to-pay')).toHaveTextContent('1 membre à payer');
+    expect(screen.getByTestId('row-to-pay')).toHaveAttribute('href', '/bureau/membres?filtre=a-payer');
+    // `late_count` a changé de sens : ceux qui doivent sont late + to_pay.
+    expect(screen.getByTestId('tile-remaining')).toHaveTextContent('ce que doivent encore les 8 membres en retard ou à payer');
+  });
+
+  it('aucun « à payer » : pas de ligne vide', async () => {
+    saveSession(SESSION);
+    fakeServer([{ match: 'membership/dashboard', body: dashboard({ simple: simple({ late_count: 2, to_pay_count: 0 }) }) }]);
+    renderInBureau(<AccueilPage />);
+    await screen.findByTestId('row-late');
+    expect(screen.queryByTestId('row-to-pay')).not.toBeInTheDocument();
+  });
+
+  it('le registre : quatre filtres comptés, et chaque pastille dit sa situation', async () => {
+    saveSession(SESSION);
+    const user = userEvent.setup();
+    window.history.replaceState(null, '', '/bureau/membres?filtre=tous');
+    fakeServer([{ match: /^membership\/members/, body: [LATE, TO_PAY, OK] }]);
+    renderInBureau(<MembresPage />);
+    const group = await screen.findByRole('group', { name: 'Afficher' });
+    await waitFor(() => expect(within(group).getByRole('button', { name: 'Tous · 3' })).toBeInTheDocument());
+    expect(within(group).getByRole('button', { name: 'En retard · 1' })).toBeInTheDocument();
+    expect(within(group).getByRole('button', { name: 'À payer · 1' })).toBeInTheDocument();
+    expect(within(group).getByRole('button', { name: 'À jour · 1' })).toBeInTheDocument();
+    const table = screen.getByTestId('member-table');
+    const row = within(table).getByRole('link', { name: 'Khadidiatou Seck' }).closest('tr') as HTMLElement;
+    expect(row).toHaveTextContent('À payer');
+    expect(row).not.toHaveTextContent('En retard');
+    await user.click(within(group).getByRole('button', { name: 'À payer · 1' }));
+    expect(window.location.search).toBe('?filtre=a-payer');
+    expect(within(screen.getByTestId('member-table')).queryByRole('link', { name: 'Moussa Ndiaye' })).not.toBeInTheDocument();
+    window.history.replaceState(null, '', '/bureau');
+  });
+
+  it('depuis la tuile de l’accueil : « En retard ou à payer », les deux ensemble', async () => {
+    saveSession(SESSION);
+    window.history.replaceState(null, '', '/bureau/membres?filtre=pas-a-jour');
+    fakeServer([{ match: /^membership\/members/, body: [LATE, TO_PAY, OK] }]);
+    renderInBureau(<MembresPage />);
+    const group = await screen.findByRole('group', { name: 'Afficher' });
+    await waitFor(() => expect(within(group).getByRole('button', { name: 'En retard ou à payer · 2' })).toHaveAttribute('aria-pressed', 'true'));
+    window.history.replaceState(null, '', '/bureau');
+  });
+
+  it('la fiche : « À payer » le jour de l’échéance, « En retard » le lendemain', () => {
+    expect(dueSentence('Khadidiatou', 'to_pay', '2999-01-01', '1er janvier 2999')).toBe('Khadidiatou doit payer le 1er janvier 2999.');
+    expect(dueSentence('Moussa', 'late', '2026-10-01', '1er octobre 2026')).toBe('Moussa aurait dû payer le 1er octobre 2026.');
+  });
+
+  it('la fiche d’un membre à payer : la pastille « À payer », jamais « En retard »', async () => {
+    saveSession(SESSION);
+    nav.params = { id: 'm-topay' };
+    fakeServer([
+      { match: /^membership\/members\/m-topay$/, body: { ...memberDetail(), ...TO_PAY } },
+      { match: /^membership\/payments/, body: [] },
+    ]);
+    renderInBureau(<FicheMembrePage />);
+    await screen.findByTestId('due-box');
+    expect(screen.getByText('À payer')).toBeInTheDocument();
+    expect(screen.queryByText('En retard')).not.toBeInTheDocument();
+  });
+
+  it('« Chiffres » : « En retard » et « À payer », deux comptes ; le même nombre « à renouveler » que l’accueil', async () => {
+    saveSession(SESSION);
+    fakeServer([
+      {
+        match: 'membership/dashboard',
+        body: dashboard({ members: { active: 15, up_to_date: 7, not_up_to_date: 8, late: 7, to_pay: 1, pending: 0, former: 0 }, upcoming: { days: 30, count: 2 } }),
+      },
+    ]);
+    renderInBureau(<ChiffresPage />);
+    const late = (await screen.findByText('En retard')).parentElement as HTMLElement;
+    expect(late).toHaveTextContent('7');
+    expect((screen.getByText('À payer').parentElement as HTMLElement)).toHaveTextContent('1');
+    expect(screen.getByTestId('upcoming')).toHaveTextContent('2 membres doivent renouveler d’ici 30 jours.');
+  });
+});
+
+describe('§23.5 — un exonéré : ni échéance, ni « a payé »', () => {
+  const HONNEUR = memberDetail({
+    id: 'm-honneur', name: 'Mame Diarra Lo', first_name: 'Mame Diarra', last_name: 'Lo', category_label: 'Membre d’honneur',
+    is_up_to_date: true, standing: 'up_to_date', covered_until: '2026-12-11', next_due_date: null,
+    balance_due: 0, balance_due_formatted: '0 FCFA', dues: [], can_record_payment: false,
+  });
+
+  it('la fiche : « À jour » sans date qui expire, et aucun bouton « a payé »', async () => {
+    saveSession(SESSION);
+    nav.params = { id: 'm-honneur' };
+    fakeServer([
+      { match: /^membership\/members\/m-honneur$/, body: HONNEUR },
+      { match: /^membership\/payments/, body: [] },
+    ]);
+    renderInBureau(<FicheMembrePage />);
+    expect(await screen.findByTestId('ok-line')).toHaveTextContent(/^À jour$/);
+    expect(screen.getByTestId('exempt-line')).toHaveTextContent('Son type de membre ne paie pas de cotisation.');
+    expect(screen.queryByText(/a payé : l’enregistrer/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/jusqu’au 11 décembre 2026/)).not.toBeInTheDocument();
+  });
+
+  it('« Un membre a payé », arrivé par son nom : pas de formulaire, une phrase', async () => {
+    saveSession(SESSION);
+    window.history.replaceState(null, '', '/bureau/enregistrer?membre=m-honneur');
+    fakeServer([{ match: /^membership\/members\/m-honneur$/, body: HONNEUR }]);
+    renderInBureau(<EnregistrerPage />);
+    expect(await screen.findByTestId('cannot-record')).toHaveTextContent(
+      'Mame Diarra ne paie pas de cotisation : son type de membre en est exonéré.',
+    );
+    expect(screen.queryByRole('button', { name: 'Enregistrer ce paiement' })).not.toBeInTheDocument();
+    window.history.replaceState(null, '', '/bureau');
+  });
+});
+
+describe('§23.6 — les coordonnées de l’association, dans « Paramètres »', () => {
+  it('elles partent avec les réglages ; vides, elles valent `null`', async () => {
+    saveSession(SESSION);
+    const user = userEvent.setup();
+    const fetchMock = fakeServer([{ method: 'PUT', match: 'membership/settings', body: settings({ contact_phone: '77 123 45 67' }) }]);
+    renderInBureau(<ReglagesPage />, { settings: settings({ contact_phone: null, contact_email: null }) });
+    await user.type(screen.getByLabelText(/Téléphone de l’association/), '77 123 45 67');
+    await user.click(screen.getByRole('button', { name: 'Enregistrer les réglages' }));
+    await screen.findByText('Réglages enregistrés.');
+    expect(body(fetchMock, 'PUT')).toMatchObject({ contact_phone: '77 123 45 67', contact_email: null });
+  });
+
+  it('un domaine réservé : le message du serveur, sous le champ', async () => {
+    saveSession(SESSION);
+    const user = userEvent.setup();
+    const MESSAGE = 'Cette adresse e-mail utilise un domaine réservé : indiquez une adresse réelle.';
+    fakeServer([{ method: 'PUT', match: 'membership/settings', status: 422, body: { message: MESSAGE, errors: { contact_email: [MESSAGE] } } }]);
+    renderInBureau(<ReglagesPage />);
+    await user.type(screen.getByLabelText(/E-mail de l’association/), 'bureau@amicale.test');
+    await user.click(screen.getByRole('button', { name: 'Enregistrer les réglages' }));
+    expect(await screen.findByText(MESSAGE)).toBeInTheDocument();
+  });
+});
+
+describe('v3.14-M1 — un 429 : seuls le statut et `Retry-After` comptent, jamais le texte', () => {
+  it.each([TOO_MANY_ATTEMPTS, { message: 'Too Many Attempts.' }, {}])(
+    'le même écran, quel que soit le corps servi (%o)',
+    async (served) => {
+      nav.pathname = '/bureau/connexion';
+      const user = userEvent.setup();
+      fakeServer([{ method: 'POST', match: 'login', status: 429, body: served, headers: { 'Retry-After': '170' } }]);
+      render(<ConnexionPage />);
+      await user.type(await screen.findByLabelText('E-mail'), 'bureau@exemple.sn');
+      await user.type(screen.getByLabelText('Mot de passe'), 'ce-qui-est-tapé');
+      await user.click(screen.getByRole('button', { name: 'Se connecter' }));
+      await screen.findByText('Trop de tentatives. Réessayez dans 3 minutes.');
+      expect(screen.queryByText(/Trop de requêtes|Too Many/)).not.toBeInTheDocument();
+    },
+  );
 });

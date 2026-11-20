@@ -11,7 +11,7 @@ import PlusPage from '@/app/bureau/plus/page';
 import { useBackBar } from '@/components/bureau/BureauContext';
 import { BureauFrame } from '@/components/bureau/BureauFrame';
 import { getSession, navigation, resetSessionCache, saveSession } from '@/lib/bureau/session';
-import { calls, fakeServer, ME, SESSION, settings } from './fixtures';
+import { calls, fakeServer, ME, SESSION, settings, TOO_MANY_ATTEMPTS } from './fixtures';
 
 const nav = vi.hoisted(() => ({
   pathname: '/bureau',
@@ -315,7 +315,7 @@ describe('B1 — la connexion', () => {
   it('un 429 sans `retry_after` : le délai de l’en-tête `Retry-After`', async () => {
     fakeServer([{
       method: 'POST', match: 'login', status: 429,
-      body: { message: 'Too Many Attempts.' },
+      body: TOO_MANY_ATTEMPTS,
       headers: { 'Retry-After': '3329' },
     }]);
     await fill('tresorier@demo-asso.test', 'x');
@@ -327,7 +327,7 @@ describe('B1 — la connexion', () => {
     // CORS depuis S3d — le délai affiché est enfin le sien, pas une borne.
     fakeServer([{
       method: 'POST', match: 'login', status: 429,
-      body: { message: 'Too Many Attempts.' },
+      body: TOO_MANY_ATTEMPTS,
       headers: { 'Retry-After': '170' },
     }]);
     await fill('tresorier@demo-asso.test', 'x');
@@ -336,7 +336,7 @@ describe('B1 — la connexion', () => {
 
   it('un 429 du limiteur IP, sans délai lisible : sa borne, 1 minute', async () => {
     // Un serveur qui ne servirait pas l'en-tête : le repli tient encore.
-    fakeServer([{ method: 'POST', match: 'login', status: 429, body: { message: 'Too Many Attempts.' } }]);
+    fakeServer([{ method: 'POST', match: 'login', status: 429, body: TOO_MANY_ATTEMPTS }]);
     await fill('tresorier@demo-asso.test', 'x');
     await screen.findByText('Trop de tentatives. Réessayez dans 1 minute.');
   });
