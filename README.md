@@ -361,3 +361,48 @@ retirée : ce qui sert rarement est rangé dans « Plus ».
     jamais une pièce par une chaîne.
   - `email_mode = hidden` ignore désormais un e-mail posté au lieu de le
     refuser ; l'écran n'en envoyait déjà aucun.
+
+## F7 — avant le premier client payant (contrats `v3.12-adhera-S8` §22 et `v3.13-adhera-S9` §23, backend `v3.14-M1`)
+
+- **La licence (B11)** : un refus `license_expired`, `trial_expired` ou
+  `tenant_inactive`, reçu par **n'importe quel** appel du bureau, ouvre l'écran
+  de la licence (`BureauFrame`, signal posé par `src/lib/bureau/api/core.ts`) :
+  une phrase par code et les contacts d'Adhera, y compris à la connexion.
+  Exception décidée à la règle « message de l'API » (`src/lib/licence.ts`) ;
+  `BY_CODE` reste gelé. Côté membre (page, vérification, « Adhérer »,
+  paiement, attestation, photo) : « Ce service est momentanément
+  indisponible. Contactez votre association. » pour tout 403.
+  **« Erreur technique, vérifiez votre connexion » est réservé à une panne
+  réseau** (`status` 0) ; un 5xx dit « Service momentanément indisponible ».
+- **Le contact d'Adhera** (WhatsApp, e-mail) vit dans `src/lib/adhera.ts`, et
+  nulle part ailleurs (garde-fou). L'adresse `wa.me` est composée par
+  `src/lib/whatsapp.ts` (`whatsappChat`).
+- **Le rythme (§22)** : `period_months` (1, 3, 6, 12, 24) et le `period_label`
+  servi, partout où l'on montrait un tarif. **« par an » n'est jamais écrit à
+  l'écran** : il n'existe que dans le choix du formulaire (`PERIOD_CHOICES`),
+  garde-fou à l'appui. `period_months` part à la création ou s'il change ;
+  `409 period_months_locked` grise le champ. Les avertissements de `settings`
+  s'affichent tels quels (types de membres, Paramètres). La grille
+  (`cycle_start`) n'a pas d'écran : elle se pose à la mise en service.
+- **Trois messages viennent du serveur** (`share`) : le lien que le visiteur
+  s'envoie, le premier message au candidat, l'invitation à adhérer.
+  `share: null` → pas de bouton WhatsApp, jamais un texte composé ici.
+- **`is_public` ne part que si la case a été touchée** : sinon il écraserait
+  le défaut du serveur.
+- **Les rôles (§23.2)** : `canDo(me, …)` masque annuler un paiement,
+  admettre ou refuser une demande, retirer une photo. Rien d'autre n'est
+  masqué ; sans réponse de `admin/me`, rien ne l'est, et le serveur tranche.
+- **« À payer » et « En retard » (§23.3)** : `standingOf(member)` lit
+  `standing` ; l'écran traduit l'identifiant. Le registre filtre `late`,
+  `to_pay`, et les deux (`?filtre=pas-a-jour`, « En retard ou à payer » : le
+  lexique refuse « pas à jour »). `late_count` compte les seuls en retard.
+- **L'exonéré (§23.5)** : `can_record_payment: false` → ni « … a payé », ni
+  formulaire d'enregistrement, ni date qui expire.
+- **Les coordonnées de l'association (§23.6)** se règlent dans Paramètres ;
+  le refusé lit `contact_hint` ; la page du membre porte « Une question ?
+  Contactez l'association : … » au-dessus de « Propulsé par Adhera ».
+- **L'élision (§23.7)** des phrases composées ici : `deName`, `queName`
+  (`src/lib/elision.ts`) — « d'Ousmane », « qu'Aminata ».
+- **L'image de la carte porte le logo**, tiré en blob comme la photo
+  (`cardImage.ts`) ; sans CORS, elle se dessine sans logo.
+- **Next.js 16.4.6** (16.4.3 avait une vulnérabilité modérée, `npm audit`).
