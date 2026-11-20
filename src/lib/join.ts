@@ -18,6 +18,11 @@ export type JoinCategory = {
   /** `null` quand le montant n'est pas fixe — jamais « 0 FCFA » (§17.3). */
   amount_formatted: string | null;
   mode: string;
+  /**
+   * §22.8 (S8) — le RYTHME, composé par le serveur (« par an », « par mois ») :
+   * affiché tel quel. Absent d'un serveur antérieur : aucun rythme affiché.
+   */
+  period_label?: string | null;
 };
 
 export type QuestionType = 'text' | 'choice' | 'yes_no' | 'date' | 'file';
@@ -38,7 +43,16 @@ export type PhotoMode = 'hidden' | 'optional' | 'required';
 export type AdmissionMode = 'bureau' | 'premier_paiement';
 
 export type JoinForm = {
-  organisation: { name: string; logo_url: string | null; icon_url?: string | null };
+  organisation: {
+    name: string;
+    logo_url: string | null;
+    icon_url?: string | null;
+    /** §22.8 (S8) — le sigle ; `null` sans sigle. Jamais fabriqué ici. */
+    short_name?: string | null;
+    /** §23.6 (S9) — servies ici aussi ; `null` tant que le bureau n'a rien saisi. */
+    contact_phone?: string | null;
+    contact_email?: string | null;
+  };
   admission_mode: AdmissionMode | string;
   categories: JoinCategory[];
   /** « Aminata D. » ; `null`, EN SILENCE, pour un code invalide (§17.3). */
@@ -77,6 +91,11 @@ export type JoinResult = {
   message: string;
   /** Le lien personnel : jamais renvoyé une seconde fois. `null` : pot de miel. */
   member_url: string | null;
+  /**
+   * §22.8 (S8) — le lien que le VISITEUR s'envoie, message composé par le
+   * serveur. `null` si pas de numéro ; absent d'un serveur antérieur.
+   */
+  share?: { phone: string; text: string; whatsapp_url: string } | null;
 };
 
 async function send(url: string, init: RequestInit): Promise<Response> {

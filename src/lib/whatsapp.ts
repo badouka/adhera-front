@@ -1,12 +1,13 @@
 /**
  * Le SEUL endroit du code qui compose une adresse WhatsApp (F6). Partout
- * ailleurs, le lien `wa.me` est servi par l'API (`share.whatsapp_url`, §18.5) et
- * passé tel quel. Trois messages n'ont pas d'adresse servie :
+ * ailleurs, le lien `wa.me` est servi par l'API (`share.whatsapp_url`, §18.5,
+ * §22.8) et passé tel quel. Depuis S8, le serveur sert aussi le lien que le
+ * visiteur s'envoie, le premier message au candidat et l'invitation à adhérer.
+ * Il reste deux adresses composées ici :
  *
- * - le visiteur qui s'envoie son lien personnel (§17.4 : « il faut
- *   l'afficher, et inviter à le garder ») ;
- * - le membre qui envoie son lien d'invitation (`referral.share_text`, §17.8) ;
- * - le bureau qui partage le lien pour adhérer dans ses groupes.
+ * - le membre qui envoie son lien d'invitation (`referral.share_text`, §17.8) :
+ *   le texte est servi, pas l'adresse ;
+ * - la conversation avec Adhera (`src/lib/adhera.ts`, F7) : aucun texte.
  *
  * Le texte n'est jamais réécrit ici : il est encodé, c'est tout. Le lien
  * s'ouvre toujours avec `rel="noopener noreferrer"` — la page d'où l'on part
@@ -24,4 +25,9 @@ const WA = 'https://wa.me/';
 export function whatsappLink(text: string, phone?: string | null): string {
   const to = phone ? whatsappNumber(phone) : null;
   return `${WA}${to ?? ''}?${new URLSearchParams({ text }).toString().replace(/\+/g, '%20')}`;
+}
+
+/** Une conversation avec un numéro DÉJÀ au format `wa.me` (indicatif, sans « + »), sans texte. */
+export function whatsappChat(number: string): string {
+  return `${WA}${number}`;
 }

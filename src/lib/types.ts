@@ -21,6 +21,13 @@ export type Organisation = {
   wave_merchant_number: string | null;
   /** Texte libre, à rendre en TEXTE avec ses retours à la ligne, jamais en HTML. */
   payment_instructions: string | null;
+  /**
+   * §23.6 (S9) — pour JOINDRE l'association, réglées par le bureau. Toujours
+   * présentes, `null` tant que rien n'est saisi ; absentes d'un serveur
+   * antérieur. ⚠️ Jamais les numéros marchands, qui servent à payer.
+   */
+  contact_phone?: string | null;
+  contact_email?: string | null;
 };
 
 export type Member = {
@@ -44,9 +51,14 @@ export type Due = {
   period_start: string;
   /** `YYYY-MM-DD` */
   period_end: string;
-  /** « du 1er janvier 2026 au 31 décembre 2026 », rédigé par le serveur. */
+  /**
+   * La PLAGE DE DATES (« du 1er janvier 2026 au 31 décembre 2026 »), rédigée
+   * par le serveur. ⚠️ Pas le rythme : lui s'appelle `category_period_label`.
+   */
   period_label: string | null;
   category_label: string | null;
+  /** §22.5 (S8) — le RYTHME du type de membre (« par mois »), composé par le serveur. */
+  category_period_label?: string | null;
   /** Peut être null : état E5, montant pas encore fixé. */
   amount_due: number | null;
   amount_due_formatted: string | null;
@@ -150,6 +162,23 @@ export type Application = {
   submitted_at: string | null;
   /** Écrit par l'association POUR le candidat : affiché tel quel, en texte. */
   rejection_reason: string | null;
+  /**
+   * §22.5 (S8) — le type demandé, son tarif et son rythme : servi MÊME quand
+   * `due` est `null` (candidat en cours d'examen).
+   */
+  category?: ApplicationCategory | null;
+  /**
+   * §23.6 (S9) — la phrase de contact d'un REFUSÉ, composée par le serveur
+   * (avec ou sans coordonnées) ; `null` pour tout autre état.
+   */
+  contact_hint?: string | null;
+};
+
+export type ApplicationCategory = {
+  label: string;
+  /** `null` quand le montant n'est pas fixe : jamais « 0 FCFA ». */
+  amount_formatted: string | null;
+  period_label: string | null;
 };
 
 /**
@@ -234,8 +263,13 @@ export type Verification = {
   standing: VerificationStanding;
   /** Toujours `null` pour un ancien membre. */
   valid_until: string | null;
-  /** ISO 8601 — l'instant de la vérification, à afficher. */
+  /** ISO 8601, dans le fuseau de l'association (§23.7). */
   checked_at: string;
+  /**
+   * §23.7 (S9) — « 18 novembre 2026 à 10h30 (heure de Dakar) », prêt à
+   * afficher. Absent d'un serveur antérieur : on retombe sur `checked_at`.
+   */
+  checked_at_label?: string | null;
   /** `null` sans `?attestation=`, ou si la référence ne correspond pas. */
   attestation: VerifiedAttestation | null;
 };
@@ -271,10 +305,13 @@ export type DeclarationResult = {
 export type ScreenState =
   /** E1 — lien invalide (404 member_not_found, ou hôte hors adhera.africa). */
   | { kind: 'E1' }
-  /** E8 — service indisponible (403 / 409). */
+  /** E8 — service indisponible : une réponse 403 / 409 que le serveur a bien rendue. */
   | { kind: 'E8' }
-  /** E9 — erreur technique (429, 5xx, réseau). */
-  | { kind: 'E9'; rateLimited: boolean }
+  /**
+   * E9 — 429, 5xx, réseau. `network` : AUCUNE réponse du serveur. « Erreur
+   * technique, vérifiez votre connexion » ne se dit QUE dans ce cas (F7, B11).
+   */
+  | { kind: 'E9'; rateLimited: boolean; network?: boolean }
   /** Chargement en cours. */
   | { kind: 'loading' }
   /** Charge utile obtenue : l'état précis se déduit par `resolveMemberState`. */

@@ -37,7 +37,28 @@ export type Me = {
   email: string;
   role: AdminRole | string;
   role_label: string;
+  /**
+   * §23.2 (S9) — les trois gestes restreints. Les trois clés sont TOUJOURS
+   * présentes ; absent d'un serveur antérieur. Un confort d'écran, jamais une
+   * garde : le serveur refuse de toute façon (`403 role_not_allowed`).
+   */
+  can?: Can;
 };
+
+/** §23.1 — tout ce qui n'est pas ici est ouvert à tous les rôles : c'est une décision. */
+export type Can = {
+  cancel_payment: boolean;
+  admit_application: boolean;
+  delete_photo: boolean;
+};
+
+/**
+ * Un geste se montre tant que `admin/me` n'a pas dit non : sans réponse (ou
+ * d'un serveur antérieur à S9), on ne masque rien, et le serveur tranche.
+ */
+export function canDo(me: Me | null, gesture: keyof Can): boolean {
+  return me?.can?.[gesture] !== false;
+}
 
 /** `POST /admin/login` → `data` de l'enveloppe EventFlow. */
 export type LoginData = {
@@ -104,7 +125,31 @@ export type Settings = {
   join_email_mode?: EmailMode;
   /** §21.2 — la photo sur le formulaire d'adhésion. Absent avant S7. */
   join_photo_mode?: EmailMode;
+  /**
+   * §22.2 (S8) — la grille commune : `null` = chacun à sa date d'adhésion.
+   * ⚠️ Aucun écran dans F7 : elle se pose à la mise en service, par DIGISSOL.
+   */
+  cycle_start?: string | null;
+  cycle_start_locked?: boolean;
+  /** §22.4 — servi par le GET ET le PUT ; `[]` sinon. À afficher à chaque rendu. */
+  warnings?: SettingsWarning[];
+  /**
+   * §22.8 — l'invitation à adhérer, composée par le serveur ; `null` si
+   * l'adhésion en ligne est éteinte. Le `whatsapp_url` est SANS destinataire.
+   */
+  share?: JoinShare | null;
+  /**
+   * §23.6 (S9) — les coordonnées pour JOINDRE l'association : ni l'un ni
+   * l'autre n'est un numéro marchand. `null` tant que le bureau n'a rien saisi.
+   */
+  contact_phone?: string | null;
+  contact_email?: string | null;
 };
+
+export type SettingsWarning = { code: string; message: string };
+
+/** §22.8 — l'invitation à adhérer que le bureau partage dans ses groupes. */
+export type JoinShare = { text: string; url: string; whatsapp_url: string };
 
 export type AdmissionMode = 'bureau' | 'premier_paiement';
 export type EmailMode = 'hidden' | 'optional' | 'required';
@@ -127,9 +172,16 @@ export type SettingsInput = {
   om_merchant_number: string | null;
   wave_merchant_number: string | null;
   payment_instructions: string | null;
+  /** §23.6 — envoyées par l'écran Paramètres (F7) ; `null` efface la coordonnée. */
+  contact_phone?: string | null;
+  contact_email?: string | null;
 };
 
 /* ──────────────────────────── Catégories ──────────────────────────── */
+
+/** §22.1 — les seules durées que le serveur accepte (`period_months.in`). */
+export const PERIOD_MONTHS = [1, 3, 6, 12, 24] as const;
+export type PeriodMonths = (typeof PERIOD_MONTHS)[number];
 
 export type CategoryMode = 'forfait' | 'bareme' | 'exonere' | 'minimum';
 
@@ -148,6 +200,14 @@ export type Category = {
   is_public?: boolean;
   /** Faux : le produit ne sait pas dériver un montant (§4). */
   is_calculable: boolean;
+  /** §22.1 (S8) — 1, 3, 6, 12 ou 24. Absent d'un serveur antérieur : 12. */
+  period_months?: number;
+  /**
+   * §22.1 — le RYTHME, composé par le serveur (« par mois », « tous les deux
+   * ans ») : affiché tel quel, jamais écrit ici. ⚠️ À ne pas confondre avec le
+   * `period_label` d'une période, qui est une plage de dates.
+   */
+  period_label?: string | null;
 };
 
 export type CategoryInput = {
@@ -155,8 +215,16 @@ export type CategoryInput = {
   mode: Exclude<CategoryMode, 'bareme'>;
   amount: number | null;
   sort_order: number;
-  /** §17.10 — envoyée TELLE QU'AFFICHÉE ; absente, le serveur décide. */
+  /**
+   * §17.10 — envoyée SEULEMENT si la case a été touchée : sinon elle écraserait
+   * le défaut du serveur (F7, P4). Absente, le serveur décide.
+   */
   is_public?: boolean;
+  /**
+   * §22.1 — envoyée seulement si elle a changé (ou à la création) : un
+   * changement peut rendre `409 period_months_locked` (§22.3).
+   */
+  period_months?: PeriodMonths;
 };
 
 /* ────────────────────────────── Membres ───────────────────────────── */
@@ -223,12 +291,27 @@ export type MemberListItem = {
   status: MemberStatus;
   left_at: string | null;
   left_reason: LeftReason | null;
+  /** Conservée (§23.3) : vaut exactement `standing === 'up_to_date'`. */
   is_up_to_date: boolean;
+  /**
+   * §23.3 (S9) — un IDENTIFIANT, que l'écran traduit : « À jour », « En
+   * retard » (échéance strictement passée), « À payer » (aujourd'hui ou à
+   * venir). Absent d'un serveur antérieur : lire `standingOf()`.
+   */
+  standing?: Standing;
   covered_until: string | null;
+  /** §23.5 — `null` pour un exonéré : il n'a pas d'échéance. */
   next_due_date: string | null;
   /** `null` = INCONNU, jamais « rien à payer » (§5, piège 4). */
   balance_due: number | null;
   balance_due_formatted: string | null;
+  /** §22.8 (S8) — la date de la demande, sur la ligne d'un candidat. ISO 8601. */
+  submitted_at?: string | null;
+  /**
+   * §22.8 — sur la ligne d'un candidat : le premier message du bureau, composé
+   * par le serveur. `null` pour un refusé, ou sans numéro.
+   */
+  share?: Share | null;
   /** §17.7 — d'où vient la fiche. Absente d'un serveur antérieur à S5. */
   join_source?: JoinSource | string;
   /** « Awa G. » — `null` sans parrain. */
@@ -361,6 +444,11 @@ export type MemberDetail = MemberListItem & {
   answers?: MemberAnswer[];
   /** §20.8 — `null` tant qu'aucune décision n'a été prise, ou avant S6. */
   application_decision?: ApplicationDecision | null;
+  /**
+   * §23.5 (S9) — `false` pour un exonéré et pour un ancien membre : le bouton
+   * « … a payé » disparaît. Absent d'un serveur antérieur : le bouton reste.
+   */
+  can_record_payment?: boolean;
 };
 
 /** La réponse d'`admit` et de `reject-application` (§17.6) : la fiche, et le message. */
@@ -395,7 +483,28 @@ export type MemberInput = {
  * `renewing_soon` (§18.3) : des membres À JOUR dont la couverture se termine
  * dans les `renewing_soon_days` jours. Renouveler n'est pas être en retard.
  */
-export type MemberStanding = 'up_to_date' | 'not_up_to_date' | 'renewing_soon';
+export type MemberStanding = 'up_to_date' | 'not_up_to_date' | 'late' | 'to_pay' | 'renewing_soon';
+
+/** §23.3 — la situation d'un membre : `late + to_pay = not_up_to_date`, toujours. */
+export type Standing = 'up_to_date' | 'late' | 'to_pay';
+
+/**
+ * La situation servie (`standing`). D'un serveur antérieur à S9, seul
+ * `is_up_to_date` existe : « pas à jour » se lisait alors « en retard ».
+ */
+export function standingOf(member: Pick<MemberListItem, 'standing' | 'is_up_to_date'>): Standing {
+  if (member.standing === 'up_to_date' || member.standing === 'late' || member.standing === 'to_pay') {
+    return member.standing;
+  }
+  return member.is_up_to_date ? 'up_to_date' : 'late';
+}
+
+/** L'écran traduit l'identifiant (§23.3) ; la carte, elle, dit « Cotisation à payer ». */
+export const STANDING_LABELS: Record<Standing, string> = {
+  up_to_date: 'À jour',
+  late: 'En retard',
+  to_pay: 'À payer',
+};
 
 export type MemberFilters = {
   status?: MemberStatus | '';
@@ -531,7 +640,11 @@ export type Dashboard = {
     active: number;
     /** Un exonéré y est compté. */
     up_to_date: number;
+    /** §23.3 — `late + to_pay = not_up_to_date`, toujours. */
     not_up_to_date: number;
+    /** §23.3 (S9) — absents d'un serveur antérieur. */
+    late?: number;
+    to_pay?: number;
     pending: number;
     former: number;
   };
@@ -587,7 +700,14 @@ export type Dashboard = {
 export type DashboardSimple = {
   active_count: number;
   up_to_date_count: number;
+  /**
+   * ⚠️ §23.3 (S9) — a CHANGÉ de sens : il compte les membres EN RETARD (échéance
+   * strictement passée), plus les « pas à jour ». Ceux qui doivent payer sont
+   * `late_count + to_pay_count`.
+   */
   late_count: number;
+  /** §23.3 — échéance aujourd'hui ou à venir. Absent d'un serveur antérieur : 0. */
+  to_pay_count?: number;
   remaining: number;
   remaining_formatted: string;
   /** L'année CIVILE : ce chiffre ignore le filtre de période. */
