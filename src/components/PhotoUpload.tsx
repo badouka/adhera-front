@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { ApiError, fieldMessages, uploadMemberPhoto } from '@/lib/api';
 import { MAX_FILE_BYTES, PHOTO_ACCEPT, TOO_LARGE } from '@/lib/files';
+import { licenceCode, MEMBER_UNAVAILABLE_TEXT } from '@/lib/licence';
 
 /**
  * §21.2 — « Ajouter ma photo » / « Changer ma photo », sur la page du membre.
@@ -46,7 +47,9 @@ export function PhotoUpload({
         fields.photo ??
           (cause instanceof ApiError && cause.status === 429
             ? 'Trop d’envois de photo : réessayez dans une heure.'
-            : cause instanceof ApiError && cause.code && cause.message
+            : licenceCode(cause)
+              ? MEMBER_UNAVAILABLE_TEXT
+              : cause instanceof ApiError && cause.code && cause.message
               ? cause.message
               : 'Votre photo n’a pas pu être envoyée. Réessayez dans un instant.'),
       );

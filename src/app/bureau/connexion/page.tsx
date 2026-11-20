@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { Shell } from '@/components/Shell';
+import { AdheraContact } from '@/components/bureau/AdheraContact';
 import { NO_AUTOCORRECT, PasswordField } from '@/components/bureau/PasswordField';
 import { Field, inputClass, Notice } from '@/components/bureau/ui';
 import { ApiError } from '@/lib/api';
@@ -10,6 +11,7 @@ import { login } from '@/lib/bureau/api/auth';
 import { INVALID_CREDENTIALS } from '@/lib/bureau/api/core';
 import { errorMessage } from '@/lib/bureau/messages';
 import { currentTenant, getSession, saveSession } from '@/lib/bureau/session';
+import { BUREAU_LICENCE_TEXT, licenceCode } from '@/lib/licence';
 
 type Status =
   | { kind: 'checking' }
@@ -30,6 +32,7 @@ export default function ConnexionPage() {
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [formError, setFormError] = useState<string | null>(null);
+  const [licenceRefused, setLicenceRefused] = useState(false);
   const [sending, setSending] = useState(false);
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
@@ -76,8 +79,13 @@ export default function ConnexionPage() {
       router.replace('/bureau');
     } catch (error) {
       setPassword('');
+      const licence = licenceCode(error);
+      setLicenceRefused(licence !== null);
       if (error instanceof ApiError && error.code === INVALID_CREDENTIALS) {
         setFormError('E-mail ou mot de passe incorrect.');
+      } else if (licence) {
+        // B11 (F7) — la licence : une phrase par code, et à qui écrire.
+        setFormError(BUREAU_LICENCE_TEXT[licence]);
       } else {
         // Un 429 y compris : « Réessayez dans 42 minutes », le délai réel.
         setFormError(errorMessage(error, 'La connexion n’a pas abouti. Réessayez.'));
@@ -138,9 +146,10 @@ export default function ConnexionPage() {
 
             <div ref={errorRef} tabIndex={-1} role="alert" aria-live="polite">
               {formError ? (
-                <p className="m-0 rounded-[var(--radius-sm)] bg-late-soft p-3 font-semibold text-late">
-                  {formError}
-                </p>
+                <div className="flex flex-col gap-1 rounded-[var(--radius-sm)] bg-late-soft p-3 font-semibold text-late">
+                  <p className="m-0">{formError}</p>
+                  {licenceRefused ? <AdheraContact /> : null}
+                </div>
               ) : null}
             </div>
 

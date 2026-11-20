@@ -205,7 +205,7 @@ export function MemberPage({ token }: { token: string }) {
   if (screen.kind === 'E9') {
     return (
       <Shell>
-        <TechnicalError rateLimited={screen.rateLimited} onRetry={retry} />
+        <TechnicalError rateLimited={screen.rateLimited} network={screen.network} onRetry={retry} />
       </Shell>
     );
   }
@@ -265,10 +265,12 @@ export function MemberPage({ token }: { token: string }) {
     return (
       <Shell header={false} footer={null}>
         {installLinks}
+        {/* `-mt-6` : la barre recouvre tout le `pt-6` de `main` (la bande de 8 px de F6). */}
         <button
           type="button"
           onClick={() => setView('cotisation')}
-          className="-mx-4 -mt-4 flex h-14 items-center gap-[6px] border-b border-line bg-surface-raised px-4 text-left font-semibold text-indigo"
+          className="-mx-4 -mt-6 flex h-14 items-center gap-[6px] border-b border-line bg-surface-raised px-4 text-left font-semibold text-indigo"
+          data-testid="back-to-dues"
         >
           <ChevronLeft />
           Ma cotisation
@@ -776,7 +778,9 @@ function SentToAssociation({
   photo?: PhotoTarget | null;
 }) {
   const photo = withPhoto ? (payload.photo_url ?? null) : null;
-  const answers = (payload.answers ?? []).filter((a) => a.label?.trim());
+  // F7 — ce que la personne a ENVOYÉ : une question sans réponse n'y figure pas
+  // (plus de « Pas de réponse » sous la question).
+  const answers = (payload.answers ?? []).filter((a) => a.label?.trim() && a.value_label?.trim());
   if (!photo && answers.length === 0 && !target) return null;
   return (
     <section className="flex flex-col gap-3 rounded-[var(--radius-md)] border border-line bg-surface-raised p-4" data-testid="sent">
@@ -799,9 +803,7 @@ function SentToAssociation({
           {answers.map((answer) => (
             <div key={answer.question_id} className="flex flex-col">
               <dt className="small text-ink-muted">{answer.label}</dt>
-              <dd className={`m-0 break-words ${answer.value_label ? '' : 'text-ink-muted'}`}>
-                {answer.value_label?.trim() || 'Pas de réponse'}
-              </dd>
+              <dd className="m-0 break-words">{answer.value_label}</dd>
             </div>
           ))}
         </dl>

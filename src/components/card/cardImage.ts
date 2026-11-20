@@ -1,8 +1,14 @@
 /**
- * La carte de membre DESSINÉE EN PNG, dans le navigateur (F5 § 3) : le nom de
- * l'association, le nom du membre, son type, son numéro, sa pastille et le QR
- * de vérification. Aucune image n'est demandée à un tiers (R3) : le logo, servi
- * par un autre domaine, n'y est pas — il « salirait » le canevas.
+ * La carte de membre DESSINÉE EN PNG, dans le navigateur (F5 § 3) : le logo et
+ * le nom de l'association, le nom du membre, son type, son numéro, sa pastille
+ * et le QR de vérification — comme la carte à l'écran (F7).
+ *
+ * Aucune image n'est demandée à un tiers (R3) : le logo et la photo viennent de
+ * l'API, tirés en BLOB (`fetch`), jamais par `<img>` — une image d'un autre
+ * domaine « salirait » le canevas, et le PNG ne pourrait plus être produit.
+ * ⚠️ Le blob exige que l'hôte serve `Access-Control-Allow-Origin` : sans lui
+ * (relevé le 2026-11-20 sur `/storage-tenant…/`), le `fetch` échoue et la
+ * carte se dessine SANS logo, au lieu de ne pas se dessiner du tout.
  *
  * ⚠️ Ce module n'est chargé QU'AU TOUCHER de « Enregistrer ma carte dans mes
  * photos » (`import()`), comme la bibliothèque QR : il n'entre dans le premier
@@ -94,11 +100,11 @@ export function cardFileName(card: MemberCard): string {
 }
 
 /**
- * §21.3 — la photo, tirée en blob depuis l'API (CORS ouvert, `connect-src`
- * l'autorise) : une image tirée par `<img>` d'un autre domaine salirait le
- * canevas. Un lien périmé ou une panne : la carte se dessine sans photo.
+ * §21.3 — la photo, et le logo (F7) : tirés en blob depuis l'API (`connect-src`
+ * l'autorise), jamais par `<img>`, qui salirait le canevas. Un lien périmé, un
+ * hôte sans CORS ou une panne : la carte se dessine sans cette image.
  */
-async function loadPhoto(url: string | null | undefined): Promise<ImageBitmap | null> {
+export async function loadImage(url: string | null | undefined): Promise<ImageBitmap | null> {
   if (!url || typeof createImageBitmap !== 'function') return null;
   try {
     const response = await fetch(url, { cache: 'no-store', referrerPolicy: 'no-referrer' });
@@ -110,11 +116,21 @@ async function loadPhoto(url: string | null | undefined): Promise<ImageBitmap | 
 }
 
 const PHOTO = 320;
+/** Le logo tient dans ce carré, sans être déformé ni recadré (`object-contain` à l'écran). */
+const LOGO = 176;
+
+/** La taille du logo dans son carré : il garde ses proportions. */
+export function logoBox(width: number, height: number, box: number = LOGO): { w: number; h: number } {
+  if (width <= 0 || height <= 0) return { w: 0, h: 0 };
+  const scale = Math.min(box / width, box / height);
+  return { w: Math.round(width * scale), h: Math.round(height * scale) };
+}
 
 /** Dessine la carte et rend le PNG, et son adresse `data:` pour l'afficher. */
 export async function drawCard(card: MemberCard): Promise<{ blob: Blob; dataUrl: string }> {
   const colors = palette();
-  const photo = await loadPhoto(card.photo_url);
+  const [photo, logo] = await Promise.all([loadImage(card.photo_url), loadImage(card.logo_url)]);
+  const logoSize = logo ? logoBox(logo.width, logo.height) : null;
   const family = fontFamily();
   const verifyUrl = card.verify_url?.trim() ?? '';
   const matrix = verifyUrl ? await makeQrMatrix(verifyUrl) : null;
@@ -140,6 +156,7 @@ export async function drawCard(card: MemberCard): Promise<{ blob: Blob; dataUrl:
   const qrSize = 520;
 
   let height = PAD;
+  height += logoSize ? logoSize.h + 24 : 0;
   height += orgLines.length * 58 + (orgLines.length ? 40 : 0);
   height += photo ? PHOTO + 32 : 0;
   height += nameLines.length * 84 + 16;
@@ -168,6 +185,12 @@ export async function drawCard(card: MemberCard): Promise<{ blob: Blob; dataUrl:
   ctx.textBaseline = 'top';
   const cx = WIDTH / 2;
   let y = PAD;
+
+  if (logo && logoSize) {
+    // Le nom est écrit dessous : comme à l'écran, le logo est posé au-dessus.
+    ctx.drawImage(logo, cx - logoSize.w / 2, y, logoSize.w, logoSize.h);
+    y += logoSize.h + 24;
+  }
 
   if (orgLines.length) {
     ctx.fillStyle = colors.ink;

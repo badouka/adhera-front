@@ -218,7 +218,13 @@ export function CategoriesPanel() {
                       </>
                     ) : null}
                   </span>
-                  {category.is_public === false && category.is_active ? (
+                  {/* P4 (F7) — l'état positif se lit aussi, pas seulement l'absence. */}
+                  {category.is_active && category.is_public === true ? (
+                    <span className="small text-paid" data-testid="category-public">
+                      Proposé sur la page « Adhérer »
+                    </span>
+                  ) : null}
+                  {category.is_active && category.is_public === false ? (
                     <span className="small text-ink-muted">Non proposé sur la page « Adhérer »</span>
                   ) : null}
                   {category.is_calculable ? null : (
@@ -307,9 +313,13 @@ function CategoryForm({
   const [amount, setAmount] = useState(initial?.amount != null ? String(initial.amount) : '');
   const [sortOrder, setSortOrder] = useState(String(initial?.sort_order ?? 0));
   // §17.10 — décochée par défaut sur une exonérée (personne ne se déclare
-  // membre d'honneur), cochée sinon ; envoyée TELLE QU'AFFICHÉE.
+  // membre d'honneur), cochée sinon. ⚠️ P4 (F7) : la case n'est ENVOYÉE que si
+  // elle a été touchée ; sinon elle écraserait le défaut du serveur (création)
+  // ou la valeur en base (modification).
   const [isPublic, setIsPublic] = useState(initial?.is_public ?? (initial?.mode ?? 'forfait') !== 'exonere');
-  const [publicTouched, setPublicTouched] = useState(initial?.is_public !== undefined);
+  const [publicTouched, setPublicTouched] = useState(false);
+  // Une valeur servie ne suit plus le mode : seule l'estimation d'une création le suit.
+  const publicFollowsMode = initial?.is_public === undefined;
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -341,7 +351,7 @@ function CategoryForm({
       mode: mode as CategoryInput['mode'],
       amount: needsAmount ? value : null,
       sort_order: sortOrder.trim() === '' ? 0 : order,
-      is_public: isPublic,
+      ...(publicTouched ? { is_public: isPublic } : {}),
     };
 
     setBusy(true);
@@ -375,7 +385,7 @@ function CategoryForm({
               onChange={(e) => {
                 const next = e.target.value as CategoryMode;
                 setMode(next);
-                if (!publicTouched) setIsPublic(next !== 'exonere');
+                if (!publicTouched && publicFollowsMode) setIsPublic(next !== 'exonere');
               }}
               className={inputClass(!!errors.mode)}
             >

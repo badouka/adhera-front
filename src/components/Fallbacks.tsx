@@ -1,3 +1,4 @@
+import { MEMBER_UNAVAILABLE_TEXT } from '@/lib/licence';
 import { AlertIcon, BrokenLinkIcon, RetryIcon } from './Icons';
 
 function Centered({ children }: { children: React.ReactNode }) {
@@ -27,7 +28,11 @@ export function InvalidLink() {
   );
 }
 
-/** E8 — 403 / 409 : le service est fermé pour cette association. */
+/**
+ * E8 — une réponse 403 (licence échue, option éteinte…) ou 409 : le serveur a
+ * répondu, et il a dit non. C'est l'association qui parle au membre (B11, F7) :
+ * jamais la licence, jamais Adhera.
+ */
 export function Unavailable() {
   return (
     <Centered>
@@ -35,20 +40,26 @@ export function Unavailable() {
         <AlertIcon />
       </span>
       <h1 className="title m-0">Service indisponible</h1>
-      <p className="m-0 max-w-[320px]">
-        Ce service n’est pas disponible actuellement. Contactez votre
-        association.
+      <p className="m-0 max-w-[320px]" data-testid="unavailable">
+        {MEMBER_UNAVAILABLE_TEXT}
       </p>
     </Centered>
   );
 }
 
-/** E9 — 429, 5xx, réseau. */
+/**
+ * E9 — 429, 5xx, réseau. « Erreur technique » et « vérifiez votre connexion »
+ * sont RÉSERVÉS à une vraie panne réseau (`network`) : une réponse que le
+ * serveur a rendue ne fait jamais accuser la connexion du membre (B11, F7).
+ */
 export function TechnicalError({
   rateLimited,
+  network = false,
   onRetry,
 }: {
   rateLimited: boolean;
+  /** Aucune réponse du serveur (`status` 0). */
+  network?: boolean;
   onRetry: () => void;
 }) {
   return (
@@ -57,12 +68,14 @@ export function TechnicalError({
         <AlertIcon />
       </span>
       <h1 className="title m-0">
-        {rateLimited ? 'Trop de tentatives' : 'Erreur technique'}
+        {rateLimited ? 'Trop de tentatives' : network ? 'Erreur technique' : 'Service momentanément indisponible'}
       </h1>
       <p className="m-0 max-w-[320px]">
         {rateLimited
           ? 'Trop de tentatives, réessayez dans une minute.'
-          : 'Votre page n’a pas pu être chargée. Vérifiez votre connexion, puis réessayez.'}
+          : network
+            ? 'Votre page n’a pas pu être chargée. Vérifiez votre connexion, puis réessayez.'
+            : 'Votre page n’a pas pu être chargée. Réessayez dans un instant.'}
       </p>
       <button
         type="button"

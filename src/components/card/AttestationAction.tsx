@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { DownloadIcon } from '@/components/Icons';
 import { ApiError, attestationUrl, checkAttestation } from '@/lib/api';
+import { licenceCode, MEMBER_UNAVAILABLE_TEXT } from '@/lib/licence';
 import { browser } from '@/lib/navigate';
 
 export const ATTESTATION_WAIT =
@@ -15,6 +16,8 @@ export const ATTESTATION_WAIT =
  */
 export function attestationErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
+    // B11 (F7) — le message de la licence parle au bureau : au membre, l'association.
+    if (licenceCode(error)) return MEMBER_UNAVAILABLE_TEXT;
     if (error.code && error.message.trim()) return error.message;
     if (error.status === 0) {
       return 'Connexion impossible. Vérifiez votre réseau, puis réessayez.';

@@ -35,6 +35,8 @@ import { whatsappLink } from '@/lib/whatsapp';
 /** Le motif d'un refus : le candidat le lira. 10 caractères au moins (§17.6). */
 export const MIN_REASON_LENGTH = 10;
 
+const BACK_TO_PLUS = { href: '/bureau/plus', label: 'Plus' } as const;
+
 type Load =
   | { kind: 'loading' }
   | { kind: 'error'; message: string }
@@ -101,7 +103,9 @@ export default function DemandesPage() {
 
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
   const backToCard = useCallback(() => setView({ kind: 'card' }), []);
-  useBackBar(view.kind === 'refuse' ? { href: '/bureau/demandes', label: 'Retour', onClick: backToCard } : null);
+  // P2 (F7) — ouvert depuis « Plus », comme les onze autres : « < Plus ». Le
+  // refus, lui, revient à la demande.
+  useBackBar(view.kind === 'refuse' ? { href: '/bureau/demandes', label: 'Retour', onClick: backToCard } : BACK_TO_PLUS);
 
   if (load.kind === 'loading') return <Skeleton label="Chargement des demandes…" />;
   if (load.kind === 'error') {

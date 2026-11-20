@@ -6,7 +6,7 @@
 import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import AdhesionEnLignePage, { joinShareText } from '@/app/bureau/adhesion-en-ligne/page';
+import AdhesionEnLignePage from '@/app/bureau/adhesion-en-ligne/page';
 import DemandesPage, { refusalPreview } from '@/app/bureau/demandes/page';
 import { joinLines } from '@/app/bureau/membres/[id]/page';
 import AccueilPage from '@/app/bureau/page';
@@ -156,9 +156,11 @@ describe('F6 § 4 — « Demandes d’adhésion », une à la fois', () => {
     expect(card).toHaveTextContent('77 000 00 22');
     expect(card).toHaveTextContent('Thiès');
     expect(card).toHaveTextContent('b.kane@example.test');
-    // Les réponses : value_label affiché, une question sans réponse reste visible.
+    // Les réponses : value_label affiché, une question sans réponse reste visible,
+    // et rien ne s'écrit dessous (F7 : plus de « Pas de réponse »).
     expect(card).toHaveTextContent('Imagerie médicale');
-    expect(card).toHaveTextContent('Structure où vous exercezPas de réponse');
+    expect(card).toHaveTextContent('Structure où vous exercez');
+    expect(card).not.toHaveTextContent('Pas de réponse');
     await waitFor(() => expect(card).toHaveTextContent('Invitation deAminata Diop, membre n° 0001'));
     expect(within(card).getByRole('link', { name: 'Appeler' })).toHaveAttribute('href', 'tel:770000022');
     expect(within(card).getByRole('link', { name: /WhatsApp/ }).getAttribute('href')).toMatch(/^https:\/\/wa\.me\/221770000022\?text=/);
@@ -299,14 +301,28 @@ describe('F6 § 4 — la fiche : qui a décidé, l’invitation', () => {
 /* ─────────────────────────── L'adhésion en ligne ─────────────────────────── */
 
 describe('F6 § 5 — « L’adhésion en ligne »', () => {
-  const OPEN = settings({ features: { membership_card: true, membership_join: true }, admission_mode: 'bureau', short_name: 'ATSARS' });
+  /** §22.8 — l'invitation, composée par le serveur (S8). */
+  const INVITATION = {
+    text: 'Vous voulez adhérer à ATSARS ? Remplissez votre demande ici :\nhttps://demo-asso.adhera.africa/adherer',
+    url: 'https://demo-asso.adhera.africa/adherer',
+    whatsapp_url: 'https://wa.me/?text=Vous%20voulez%20adh%C3%A9rer%20%C3%A0%20ATSARS',
+  };
+  const OPEN = settings({
+    features: { membership_card: true, membership_join: true },
+    admission_mode: 'bureau',
+    short_name: 'ATSARS',
+    share: INVITATION,
+  });
+  const PROPOSED = CATEGORIES.map((c) => ({ ...c, is_public: c.mode !== 'exonere' }));
 
   it('le lien à partager, « Qui devient membre ? » et ses deux choix, le conseil', async () => {
+    fakeServer([{ match: 'membership/categories', body: PROPOSED }]);
     renderInBureau(<AdhesionEnLignePage />, { settings: OPEN });
     const link = await screen.findByTestId('join-link');
-    const share = within(link).getByRole('link', { name: 'Partager le lien sur WhatsApp' });
-    expect(new URL(share.getAttribute('href') as string).searchParams.get('text')).toContain(
-      'https://demo-asso.adhera.africa/adherer',
+    // §22.8 — le lien WhatsApp est celui du serveur, TEL QUEL : l'écran ne compose plus rien.
+    expect(within(link).getByRole('link', { name: 'Partager le lien sur WhatsApp' })).toHaveAttribute(
+      'href',
+      INVITATION.whatsapp_url,
     );
     expect(within(link).getByRole('link', { name: 'Voir la page, comme un visiteur la voit' })).toHaveAttribute('href', '/adherer');
     expect(screen.getByRole('radio', { name: /Le bureau examine chaque demande/ })).toBeChecked();
@@ -314,10 +330,52 @@ describe('F6 § 5 — « L’adhésion en ligne »', () => {
     expect(screen.getByRole('radio', { name: /Toute personne qui paie sa première cotisation/ })).not.toBeChecked();
   });
 
-  it('fonctionnalité éteinte : une phrase, et AUCUN lien à partager', () => {
-    renderInBureau(<AdhesionEnLignePage />, { settings: settings({ features: { membership_join: false } }) });
-    expect(screen.getByTestId('join-closed')).toHaveTextContent('L’adhésion en ligne n’est pas ouverte');
+  it('P3 (F7) — fonctionnalité éteinte : pourquoi, à qui écrire, et AUCUN lien à partager', () => {
+    const fetchMock = fakeServer([]);
+    renderInBureau(<AdhesionEnLignePage />, { settings: settings({ features: { membership_join: false }, share: null }) });
+    const closed = screen.getByTestId('join-closed');
+    expect(closed).toHaveTextContent(
+      'L’adhésion en ligne n’est pas encore ouverte pour votre association. Pour l’ouvrir, écrivez à Adhera.',
+    );
+    expect(within(closed).getByRole('link', { name: /WhatsApp/ })).toHaveAttribute('href', 'https://wa.me/221782414064');
+    expect(within(closed).getByRole('link', { name: 'contact@adhera.africa' })).toHaveAttribute(
+      'href',
+      'mailto:contact@adhera.africa',
+    );
     expect(screen.queryByRole('link', { name: /Partager le lien/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Copier le lien/ })).not.toBeInTheDocument();
+    // Éteinte : les types de membres ne sont même pas demandés.
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('P4 (F7) — aucun type proposé sur « Adhérer » : l’alerte, le lien vers les types, et PAS de lien à partager', async () => {
+    fakeServer([
+      {
+        match: 'membership/categories',
+        // Un type proposé mais désactivé ne compte pas ; un actif non proposé non plus.
+        body: [
+          { ...CATEGORIES[0], is_public: false },
+          { ...CATEGORIES[2], is_public: true, is_active: false },
+        ],
+      },
+    ]);
+    renderInBureau(<AdhesionEnLignePage />, { settings: OPEN });
+    const alert = await screen.findByTestId('join-no-category');
+    expect(alert).toHaveTextContent(
+      'Aucun type de membre n’est proposé sur la page « Adhérer » : personne ne peut adhérer en ligne.',
+    );
+    expect(within(alert).getByRole('link', { name: 'Ouvrir les types de membres' })).toHaveAttribute(
+      'href',
+      '/bureau/types-de-membres',
+    );
+    expect(screen.queryByTestId('join-link')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Partager le lien/ })).not.toBeInTheDocument();
+  });
+
+  it('P4 — la liste des types illisible : le lien reste proposé, rien n’est caché à tort', async () => {
+    fakeServer([{ match: 'membership/categories', status: 500, body: {} }]);
+    renderInBureau(<AdhesionEnLignePage />, { settings: OPEN });
+    expect(await screen.findByTestId('join-link')).toBeInTheDocument();
   });
 
   it('le mode s’enregistre au choix, sans bouton ; la réponse du serveur fait foi', async () => {
@@ -361,10 +419,12 @@ describe('F6 § 5 — « L’adhésion en ligne »', () => {
     await waitFor(() => expect(body(fetchMock, 'PUT', 3)).toEqual({ join_intro: null }));
   });
 
-  it('le message du bureau : le sigle et le nom, puis le lien', () => {
-    expect(joinShareText(OPEN, 'https://demo-asso.adhera.africa/adherer')).toBe(
-      'Vous voulez adhérer à ATSARS (Association Démo) ? Remplissez votre demande ici, en deux minutes :\nhttps://demo-asso.adhera.africa/adherer',
-    );
+  it('§22.8 — sans `share` servi, aucun bouton WhatsApp composé ici : la copie du lien reste', async () => {
+    fakeServer([{ match: 'membership/categories', body: PROPOSED }]);
+    renderInBureau(<AdhesionEnLignePage />, { settings: { ...OPEN, share: null } });
+    const link = await screen.findByTestId('join-link');
+    expect(within(link).queryByRole('link', { name: 'Partager le lien sur WhatsApp' })).not.toBeInTheDocument();
+    expect(within(link).getByRole('button', { name: /Copier le lien pour adhérer/ })).toBeInTheDocument();
   });
 });
 

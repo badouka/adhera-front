@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AlertIcon } from '@/components/Icons';
 import { getMe, logout } from '@/lib/bureau/api/auth';
-import { isSessionError } from '@/lib/bureau/api/core';
+import { isSessionError, onLicenceRefusal } from '@/lib/bureau/api/core';
 import { listPayments } from '@/lib/bureau/api/payments';
 import { getSettings } from '@/lib/bureau/api/settings';
 import { errorMessage } from '@/lib/bureau/messages';
@@ -18,6 +18,8 @@ import {
   type BureauSession,
 } from '@/lib/bureau/session';
 import type { Me, Settings } from '@/lib/bureau/types';
+import { BUREAU_LICENCE_TEXT, licenceCode, type LicenceCode } from '@/lib/licence';
+import { AdheraContact } from './AdheraContact';
 import {
   BureauContext,
   useBureau,
@@ -98,6 +100,11 @@ function GuardedFrame({
   const [toVerify, setToVerify] = useState<number | null>(null);
   const [countTick, setCountTick] = useState(0);
   const [back, setBack] = useState<BackLink | null>(null);
+  const [licence, setLicence] = useState<LicenceCode | null>(null);
+
+  // B11 (F7) — un refus de licence, reçu par N'IMPORTE QUEL écran, arrête
+  // l'espace entier : l'écran de la licence remplace la page.
+  useEffect(() => onLicenceRefusal(setLicence), []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -116,6 +123,11 @@ function GuardedFrame({
       } catch (error) {
         if (isAbort(error)) return;
         if (isSessionError(error)) return;
+        const code = licenceCode(error);
+        if (code) {
+          setLicence(code);
+          return;
+        }
         setState({
           kind: 'error',
           message: errorMessage(
@@ -190,6 +202,8 @@ function GuardedFrame({
     };
   }, [state, setSettings, modeFlag, markModeUnsupported, me, toVerify, refreshToVerify]);
 
+  if (licence) return <LicenceScreen code={licence} />;
+
   if (state.kind === 'error') {
     return (
       <div className="flex min-h-dvh flex-col items-center gap-4 bg-surface px-4 pt-16 text-center text-ink">
@@ -233,6 +247,25 @@ function GuardedFrame({
         </div>
       </div>
     </BureauContext.Provider>
+  );
+}
+
+/**
+ * B11 (F7) — la licence de l'association arrête l'espace : une phrase par code
+ * (décidée par Alioune, à la place du message servi), puis à qui écrire. Aucun
+ * « Réessayer » : rien ne changera avant que la licence le fasse.
+ */
+function LicenceScreen({ code }: { code: LicenceCode }) {
+  return (
+    <div className="flex min-h-dvh flex-col items-center gap-4 bg-surface px-4 pt-16 text-center text-ink" data-testid="licence">
+      <span className="flex size-16 items-center justify-center rounded-full bg-due-soft text-due">
+        <AlertIcon />
+      </span>
+      <h1 className="title m-0">Espace du bureau indisponible</h1>
+      <p className="m-0 max-w-[420px]">{BUREAU_LICENCE_TEXT[code]}</p>
+      <AdheraContact className="justify-center" />
+      <LogoutButton className="text-indigo" />
+    </div>
   );
 }
 

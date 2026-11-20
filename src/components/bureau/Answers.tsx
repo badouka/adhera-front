@@ -82,11 +82,12 @@ export function AnswersList({
             {answer.label}
             {answer.archived ? ' (question retirée)' : ''}
           </dt>
-          <dd className={`m-0 break-words ${answer.value_label ? '' : 'text-ink-muted'}`}>
+          {/* F7 — une question sans réponse reste listée, et RIEN ne s'écrit dessous. */}
+          <dd className="m-0 break-words">
             {answer.type === 'file' && answer.value_label ? (
               <FileAnswer answer={answer} />
             ) : (
-              answer.value_label?.trim() || 'Pas de réponse'
+              answer.value_label?.trim() ?? ''
             )}
           </dd>
         </div>

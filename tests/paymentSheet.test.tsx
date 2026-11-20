@@ -307,6 +307,19 @@ describe('les réponses du serveur', () => {
     return user;
   }
 
+  it('B11 (F7) — un 403 de licence : la phrase de l’association, jamais le message servi au bureau', async () => {
+    await submitWith(
+      fakeResponse(403, {
+        code: 'license_expired',
+        error_code: 'license_expired',
+        message: 'Votre licence a expiré. Renouvelez pour réactiver votre espace.',
+      }),
+    );
+
+    await screen.findByText('Ce service est momentanément indisponible. Contactez votre association.');
+    expect(screen.queryByText(/Renouvelez/)).not.toBeInTheDocument();
+  });
+
   it('422 errors.reference : le champ se déplie, avec le message de l’API tel quel', async () => {
     await submitWith(
       fakeResponse(422, {

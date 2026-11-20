@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { ApiError, declarePayment, fieldMessages } from '@/lib/api';
 import { useIdempotencyKey } from '@/lib/idempotency';
+import { licenceCode, MEMBER_UNAVAILABLE_TEXT } from '@/lib/licence';
 import { formatTypedAmount } from '@/lib/typedAmount';
 import {
   PAYMENT_METHODS,
@@ -222,6 +223,12 @@ export function PaymentSheet({
 
     if (error.status === 429) {
       setFormError('Trop de tentatives, réessayez dans une minute.');
+      return;
+    }
+
+    // B11 (F7) — la licence : le message servi parle au bureau, pas au membre.
+    if (licenceCode(error)) {
+      setFormError(MEMBER_UNAVAILABLE_TEXT);
       return;
     }
 

@@ -25,17 +25,19 @@ export function resolveMemberState(payload: MemberPayload): MemberState {
 
 /** Un échec de `GET /m/{token}` → l'écran correspondant. */
 export function screenForError(error: unknown): ScreenState {
-  if (!(error instanceof ApiError)) return { kind: 'E9', rateLimited: false };
+  if (!(error instanceof ApiError)) return { kind: 'E9', rateLimited: false, network: false };
 
   // Un jeton inconnu et un ancien membre rendent le même 404 : jamais de
   // « vous avez été radié ».
   if (error.status === 404) return { kind: 'E1' };
 
-  // 403 feature_disabled · tenant_inactive · trial_expired · license_expired
-  // 409 cotisation_mode_unsupported
+  // TOUT 403 (feature_disabled, tenant_inactive, trial_expired,
+  // license_expired, ou un code à venir) et 409 cotisation_mode_unsupported :
+  // le serveur a répondu, la page le dit (B11, F7).
   if (error.status === 403 || error.status === 409) return { kind: 'E8' };
 
-  if (error.status === 429) return { kind: 'E9', rateLimited: true };
+  if (error.status === 429) return { kind: 'E9', rateLimited: true, network: false };
 
-  return { kind: 'E9', rateLimited: false };
+  // « Vérifiez votre connexion » : seulement si AUCUNE réponse n'est arrivée.
+  return { kind: 'E9', rateLimited: false, network: error.status === 0 };
 }

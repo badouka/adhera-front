@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Loading, TechnicalError } from '@/components/Fallbacks';
+import { Loading, TechnicalError, Unavailable } from '@/components/Fallbacks';
 import { BrokenLinkIcon, CheckIcon } from '@/components/Icons';
 import { Shell } from '@/components/Shell';
 import { ApiError, fieldMessages } from '@/lib/api';
 import { formatDate } from '@/lib/dates';
+import { MEMBER_UNAVAILABLE_TEXT } from '@/lib/licence';
 import { MAX_FILE_BYTES, PHOTO_ACCEPT, TOO_LARGE } from '@/lib/files';
 import { useIdempotencyKey } from '@/lib/idempotency';
 import {
@@ -32,7 +33,9 @@ export const MAX_CHOICE_BUTTONS = 5;
 type Load =
   | { kind: 'loading' }
   | { kind: 'missing' }
-  | { kind: 'error'; rateLimited: boolean }
+  /** B11 (F7) — un 403 (licence échue…) : le serveur a répondu, ce n'est pas une panne. */
+  | { kind: 'unavailable' }
+  | { kind: 'error'; rateLimited: boolean; network: boolean }
   | { kind: 'ready'; form: JoinForm };
 
 type Sent = { firstName: string; phone: string; memberUrl: string | null; category: JoinCategory | null };
@@ -47,6 +50,22 @@ export function categoryPrice(category: JoinCategory): string {
   if (!category.amount_formatted) return 'montant libre';
   if (category.mode === 'minimum') return `au moins ${category.amount_formatted} par an`;
   return `${category.amount_formatted} par an`;
+}
+
+/**
+ * L'envoi a échoué sans être refusé champ par champ. « Vérifiez votre
+ * connexion » seulement si AUCUNE réponse n'est arrivée (B11, F7) ; un 403
+ * (licence échue…) dit que le service est indisponible.
+ */
+export function joinSendError(error: unknown): string {
+  if (error instanceof ApiError && error.status === 429) {
+    return 'Trop de demandes depuis ce téléphone. Réessayez dans une heure.';
+  }
+  if (error instanceof ApiError && error.status === 403) return MEMBER_UNAVAILABLE_TEXT;
+  if (error instanceof ApiError && error.status === 0) {
+    return 'Votre demande n’a pas pu être envoyée. Vérifiez votre connexion, puis réessayez : rien n’a été perdu.';
+  }
+  return 'Votre demande n’a pas pu être envoyée. Réessayez dans un instant : rien n’a été perdu.';
 }
 
 /** Une réponse vide n'est pas une réponse (§20.4) : elle ne part pas. */
@@ -164,7 +183,14 @@ export function JoinPage({ parrain }: { parrain: string | null }) {
       } catch (error) {
         if (error instanceof DOMException && error.name === 'AbortError') return;
         if (error instanceof ApiError && error.status === 404) setLoad({ kind: 'missing' });
-        else setLoad({ kind: 'error', rateLimited: error instanceof ApiError && error.status === 429 });
+        else if (error instanceof ApiError && error.status === 403) setLoad({ kind: 'unavailable' });
+        else {
+          setLoad({
+            kind: 'error',
+            rateLimited: error instanceof ApiError && error.status === 429,
+            network: error instanceof ApiError && error.status === 0,
+          });
+        }
       }
     })();
     return () => controller.abort();
@@ -184,10 +210,21 @@ export function JoinPage({ parrain }: { parrain: string | null }) {
       </Shell>
     );
   }
+  if (load.kind === 'unavailable') {
+    return (
+      <Shell>
+        <Unavailable />
+      </Shell>
+    );
+  }
   if (load.kind === 'error') {
     return (
       <Shell>
-        <TechnicalError rateLimited={load.rateLimited} onRetry={() => setAttempt((n) => n + 1)} />
+        <TechnicalError
+          rateLimited={load.rateLimited}
+          network={load.network}
+          onRetry={() => setAttempt((n) => n + 1)}
+        />
       </Shell>
     );
   }
@@ -399,11 +436,7 @@ function JoinFormView({
         if (Object.keys(placed).length > 0) setFocusTick((n) => n + 1);
         return;
       }
-      setFormError(
-        error instanceof ApiError && error.status === 429
-          ? 'Trop de demandes depuis ce téléphone. Réessayez dans une heure.'
-          : 'Votre demande n’a pas pu être envoyée. Vérifiez votre connexion, puis réessayez : rien n’a été perdu.',
-      );
+      setFormError(joinSendError(error));
     }
   }
 

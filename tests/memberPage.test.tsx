@@ -616,9 +616,9 @@ describe('E8 — indisponible', () => {
   ])('sur un %i %s', async (status, code) => {
     renderWith(fakeResponse(status, { code }));
 
-    await screen.findByText(
-      /Ce service n’est pas disponible actuellement\. Contactez votre association\./,
-    );
+    // B11 (F7) — la phrase décidée pour toute réponse 403 rendue par le serveur.
+    await screen.findByText('Ce service est momentanément indisponible. Contactez votre association.');
+    expect(screen.queryByText('Erreur technique')).not.toBeInTheDocument();
   });
 });
 
@@ -632,19 +632,22 @@ describe('E9 — erreur technique', () => {
     ).toBeInTheDocument();
   });
 
-  it('sur un 500', async () => {
+  it('sur un 500 : le serveur a répondu, la connexion du membre n’est pas en cause (B11, F7)', async () => {
     renderWith(fakeResponse(500, {}));
 
-    await screen.findByText('Erreur technique');
+    await screen.findByText('Service momentanément indisponible');
+    expect(screen.queryByText('Erreur technique')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Vérifiez votre connexion/)).not.toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: /Réessayer/ }),
     ).toBeInTheDocument();
   });
 
-  it('sur une panne réseau', async () => {
+  it('sur une panne réseau : « Erreur technique », la seule fois où elle se dit', async () => {
     renderWith(new TypeError('Failed to fetch'));
 
     await screen.findByText('Erreur technique');
+    expect(screen.getByText(/Vérifiez votre connexion, puis réessayez\./)).toBeInTheDocument();
   });
 
   it('le bouton Réessayer relance l’appel', async () => {

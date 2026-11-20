@@ -18,6 +18,7 @@
  */
 
 import { API_BASE, ApiError, type FieldErrors } from '../../api';
+import { licenceCode, type LicenceCode } from '../../licence';
 import {
   currentTenant,
   expireSession,
@@ -76,6 +77,27 @@ export function readRetryAfter(
   if (/^\d+$/.test(raw)) return Number(raw);
   const at = Date.parse(raw);
   return Number.isNaN(at) ? null : Math.max(0, Math.round((at - now) / 1000));
+}
+
+/**
+ * B11 (F7) — un refus de licence (`license_expired`, `trial_expired`,
+ * `tenant_inactive`) arrête TOUT l'espace, quel que soit l'écran qui l'a reçu :
+ * le cadre (`BureauFrame`) l'écoute et remplace la page par l'écran de la
+ * licence, au lieu de laisser chaque écran afficher son propre échec.
+ */
+type LicenceListener = (code: LicenceCode) => void;
+const licenceListeners = new Set<LicenceListener>();
+
+export function onLicenceRefusal(listener: LicenceListener): () => void {
+  licenceListeners.add(listener);
+  return () => {
+    licenceListeners.delete(listener);
+  };
+}
+
+function reportLicence(error: unknown): void {
+  const code = licenceCode(error);
+  if (code) for (const listener of licenceListeners) listener(code);
 }
 
 /** Codes posés par ce client lui-même, jamais par le serveur. */
@@ -245,7 +267,11 @@ export async function request<T>(
     throw new BureauApiError(401, SESSION_EXPIRED, 'Votre session a expiré');
   }
 
-  if (!response.ok) throw await toError(response);
+  if (!response.ok) {
+    const error = await toError(response);
+    reportLicence(error);
+    throw error;
+  }
 
   if (options.as === 'blob') return (await response.blob()) as T;
   if (options.as === 'file') {

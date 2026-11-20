@@ -77,8 +77,10 @@ describe('B11 — les types de membres et montants (rangés dans « Plus », F5)
     await user.click(screen.getByRole('button', { name: 'Ajouter ce type de membre' }));
 
     await screen.findByText(fullText('Forfait — 10 000 FCFA'));
+    // P4 (F7) — la case « proposé » n'a pas été touchée : elle ne part pas, le
+    // serveur garde son défaut.
     expect(JSON.parse(calls(fetchMock, 'POST')[0]?.init.body as string)).toEqual({
-      label: 'Jeune', mode: 'forfait', amount: 10000, sort_order: 0, is_public: true,
+      label: 'Jeune', mode: 'forfait', amount: 10000, sort_order: 0,
     });
   });
 });

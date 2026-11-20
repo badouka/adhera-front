@@ -2,7 +2,7 @@
 
 import { SignedPhoto } from '@/components/SignedPhoto';
 import { useCallback, useEffect, useState } from 'react';
-import { Loading, TechnicalError } from '@/components/Fallbacks';
+import { Loading, TechnicalError, Unavailable } from '@/components/Fallbacks';
 import { AlertIcon, CheckIcon } from '@/components/Icons';
 import { Shell } from '@/components/Shell';
 import { ApiError, fetchVerification } from '@/lib/api';
@@ -13,7 +13,9 @@ import type { Verification, VerificationStanding } from '@/lib/types';
 type Screen =
   | { kind: 'loading' }
   | { kind: 'not-found' }
-  | { kind: 'error'; rateLimited: boolean }
+  /** B11 (F7) — un 403 : le serveur a répondu (licence échue…). */
+  | { kind: 'unavailable' }
+  | { kind: 'error'; rateLimited: boolean; network: boolean }
   | { kind: 'ready'; value: Verification; asked: string | null };
 
 export const NOT_FOUND_TEXT =
@@ -28,7 +30,7 @@ function VerifiedBy() {
  * `/v/{code}` — la page qu'ouvre le QR de la carte ou de l'attestation (F4 § 2),
  * sur le téléphone d'un banquier, d'un employeur, d'un consulat. Sans compte.
  *
- * ⚠️ UN SEUL cas d'erreur : le 404 (§16.5). Un code inconnu, un candidat, un
+ * ⚠️ UN SEUL cas « introuvable » : le 404 (§16.5). Un code inconnu, un candidat, un
  * autre tenant et l'option éteinte rendent le même corps — l'écran n'en
  * distingue aucun. Un hôte qui ne désigne aucune association dit la même chose.
  */
@@ -56,9 +58,16 @@ export function VerifyPage({ code }: { code: string }) {
           setScreen({ kind: 'not-found' });
           return;
         }
+        // B11 (F7) — un 403 (licence échue…) est une réponse du serveur, pas une
+        // panne : jamais « Erreur technique » pour lui.
+        if (error instanceof ApiError && error.status === 403) {
+          setScreen({ kind: 'unavailable' });
+          return;
+        }
         setScreen({
           kind: 'error',
           rateLimited: error instanceof ApiError && error.status === 429,
+          network: error instanceof ApiError && error.status === 0,
         });
       }
     })();
@@ -94,10 +103,18 @@ export function VerifyPage({ code }: { code: string }) {
     );
   }
 
+  if (screen.kind === 'unavailable') {
+    return (
+      <Shell footer={<VerifiedBy />}>
+        <Unavailable />
+      </Shell>
+    );
+  }
+
   if (screen.kind === 'error') {
     return (
       <Shell footer={<VerifiedBy />}>
-        <TechnicalError rateLimited={screen.rateLimited} onRetry={retry} />
+        <TechnicalError rateLimited={screen.rateLimited} network={screen.network} onRetry={retry} />
       </Shell>
     );
   }
@@ -113,7 +130,8 @@ export function VerifyPage({ code }: { code: string }) {
       <MemberLines member={value.member} />
       {asked ? <AttestationLine attestation={value.attestation} /> : null}
       <p className="small m-0 text-ink-muted" data-testid="verify-checked-at">
-        Vérifié le {formatInstant(value.checked_at, { zoneName: true })}
+        {/* §23.7 — « 18 novembre 2026 à 10h30 (heure de Dakar) », composé par le serveur. */}
+        Vérifié le {value.checked_at_label?.trim() || formatInstant(value.checked_at, { zoneName: true })}
       </p>
     </Shell>
   );

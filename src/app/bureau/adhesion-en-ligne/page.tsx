@@ -1,17 +1,24 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
+import { AdheraContact } from '@/components/bureau/AdheraContact';
 import { useBackBar, useBureau } from '@/components/bureau/BureauContext';
-import { associationName } from '@/components/bureau/BureauFrame';
 import { CopyAction } from '@/components/bureau/CopyAction';
 import { ChatIcon } from '@/components/bureau/Icons';
 import { bigButtonClass, Button, Notice, Toast } from '@/components/bureau/ui';
 import { fieldMessages } from '@/lib/api';
+import { listCategories } from '@/lib/bureau/api/categories';
 import { isSessionError } from '@/lib/bureau/api/core';
 import { setAdmissionMode, updateJoinForm } from '@/lib/bureau/api/settings';
 import { errorMessage } from '@/lib/bureau/messages';
-import { hasMembershipJoin, type AdmissionMode, type EmailMode, type Settings } from '@/lib/bureau/types';
-import { whatsappLink } from '@/lib/whatsapp';
+import {
+  hasMembershipJoin,
+  type AdmissionMode,
+  type Category,
+  type EmailMode,
+  type Settings,
+} from '@/lib/bureau/types';
 
 /** §20.5 — la borne du mot d'accueil, celle du serveur (`join_intro`, 300). */
 export const INTRO_MAX = 300;
@@ -36,13 +43,16 @@ export function admissionHint(mode: AdmissionMode, settings: Settings): string {
   return `${mail}La personne paie une fois admise. C’est le réglage conseillé.`;
 }
 
-/** Le message du bureau dans ses groupes : le nom, le sigle s'il existe, et le lien. */
-export function joinShareText(settings: Settings, url: string): string {
-  const name = associationName(settings);
-  const sigle = settings.short_name?.trim();
-  const who = sigle && sigle !== name ? `${sigle} (${name})` : name;
-  return `Vous voulez adhérer à ${who || 'notre association'} ? Remplissez votre demande ici, en deux minutes :\n${url}`;
+/**
+ * P4 (F7) — les types proposés sur « Adhérer » : actifs ET cochés « proposé ».
+ * Sans aucun, la page publique n'a rien à offrir, et partager son lien serait
+ * envoyer les gens vers un formulaire qui ne peut pas aboutir.
+ */
+export function proposedCount(categories: Category[]): number {
+  return categories.filter((c) => c.is_active && c.is_public === true).length;
 }
+
+export const TYPES_PATH = '/bureau/types-de-membres';
 
 const CHOICE =
   'flex cursor-pointer items-start gap-3 rounded-[var(--radius-md)] border border-line-strong bg-surface-raised p-4 has-[:checked]:border-2 has-[:checked]:border-indigo has-[:checked]:bg-indigo-soft';
@@ -76,12 +86,29 @@ export default function AdhesionEnLignePage() {
   useEffect(() => setOrigin(window.location.origin), []);
 
   const open = hasMembershipJoin(settings);
+  // `null` : pas encore lu ; `'unknown'` : la liste n'a pas pu être lue, le lien reste proposé.
+  const [proposed, setProposed] = useState<number | null | 'unknown'>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const controller = new AbortController();
+    listCategories(controller.signal)
+      .then((categories) => setProposed(proposedCount(categories)))
+      .catch((cause) => {
+        if (cause instanceof DOMException && cause.name === 'AbortError') return;
+        if (!isSessionError(cause)) setProposed('unknown');
+      });
+    return () => controller.abort();
+  }, [open]);
   const mode = shown.mode ?? settings.admission_mode ?? 'bureau';
   const emailMode = shown.email ?? settings.join_email_mode ?? 'optional';
   const askRegion = shown.region ?? settings.join_ask_region ?? true;
   const photoMode = shown.photo ?? settings.join_photo_mode ?? 'optional';
   const savedIntro = settings.join_intro ?? '';
-  const joinUrl = origin ? `${origin}/adherer` : '';
+  // §22.8 — l'invitation est composée par le serveur (`settings.share`) : l'écran
+  // n'en écrit plus un mot. Son adresse fait foi ; l'origine n'est qu'un repli.
+  const share = settings.share ?? null;
+  const joinUrl = share?.url || (origin ? `${origin}/adherer` : '');
 
   async function save(run: () => Promise<Settings>, show: typeof shown) {
     if (busy) return;
@@ -124,24 +151,47 @@ export default function AdhesionEnLignePage() {
     <div className="mx-auto flex w-full max-w-[600px] flex-col gap-5">
       <h1 className="title m-0">L’adhésion en ligne</h1>
 
-      {open ? (
+      {!open ? (
+        // P3 (F7) — dire pourquoi, et à qui écrire.
+        <div data-testid="join-closed">
+          <Notice tone="due">
+            <span>
+              L’adhésion en ligne n’est pas encore ouverte pour votre association. Pour l’ouvrir,
+              écrivez à Adhera.
+            </span>
+            <AdheraContact />
+          </Notice>
+        </div>
+      ) : proposed === null ? (
+        <p className="small m-0 text-ink-muted">Chargement du lien pour adhérer…</p>
+      ) : proposed === 0 ? (
+        // P4 (F7) — personne ne peut adhérer : aucun lien à partager.
+        <div data-testid="join-no-category">
+          <Notice tone="late">
+            <span>
+              Aucun type de membre n’est proposé sur la page « Adhérer » : personne ne peut adhérer
+              en ligne.
+            </span>
+            <Link href={TYPES_PATH} className="self-start font-semibold">
+              Ouvrir les types de membres
+            </Link>
+          </Notice>
+        </div>
+      ) : (
         <section className="flex flex-col gap-3 rounded-[var(--radius-md)] border border-line bg-surface-raised p-4" data-testid="join-link">
           <h2 className="heading m-0">Le lien pour adhérer</h2>
           <p className="m-0">
             Partagez-le dans vos groupes WhatsApp : chacun peut demander à adhérer en deux minutes,
             depuis son téléphone.
           </p>
+          {share ? (
+            <a href={share.whatsapp_url} target="_blank" rel="noopener noreferrer" className={bigButtonClass('primary')}>
+              <ChatIcon size={22} />
+              Partager le lien sur WhatsApp
+            </a>
+          ) : null}
           {joinUrl ? (
             <>
-              <a
-                href={whatsappLink(joinShareText(settings, joinUrl))}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={bigButtonClass('primary')}
-              >
-                <ChatIcon size={22} />
-                Partager le lien sur WhatsApp
-              </a>
               <CopyAction value={joinUrl} label="Copier le lien pour adhérer" />
               <a href="/adherer" target="_blank" rel="noopener noreferrer" className="self-center p-[10px] text-[15px] font-semibold underline underline-offset-2">
                 Voir la page, comme un visiteur la voit
@@ -149,13 +199,6 @@ export default function AdhesionEnLignePage() {
             </>
           ) : null}
         </section>
-      ) : (
-        <div data-testid="join-closed">
-          <Notice tone="due">
-            L’adhésion en ligne n’est pas ouverte pour votre association : il n’y a pas encore de lien
-            à partager.
-          </Notice>
-        </div>
       )}
 
       {error ? <Notice tone="late">{error}</Notice> : null}
